@@ -21,6 +21,8 @@ const fileName = path.basename(filePath).toLowerCase();
 const lc = content.toLowerCase();
 
 const countMatches = (regex) => (content.match(regex) || []).length;
+const hasHeading = (heading) =>
+  new RegExp(`^##\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'im').test(content);
 
 const hasVariant = (field, variants) => {
   if (lc.includes(field)) return true;
@@ -127,6 +129,88 @@ const validateReviewerSummaryExists = () => {
 // Telemetry and context-manifest diagnostics are now written to summary.md,
 // not ai-work.md. No ai-work.md footer validation needed.
 
+const validateAiWorkDiagnosticsLocation = () => {
+  if (matched.name !== 'ai-work.md') {
+    return;
+  }
+
+  const forbiddenSections = ['telemetry', 'context-manifest'];
+  const present = forbiddenSections.filter(
+    (name) => countMatches(new RegExp(`<!--\\s*section:${name}\\s*-->`, 'gi')) > 0,
+  );
+
+  if (present.length > 0) {
+    console.error(
+      `[validate-artifact-chain] INVALID ai-work.md: diagnostic sections belong in summary.md, not ai-work.md: ${present.join(', ')}\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+};
+
+const validateRequiredHeadings = () => {
+  if (!matched.requiredHeadings) {
+    return;
+  }
+
+  const missing = matched.requiredHeadings.filter((heading) => !hasHeading(heading));
+  if (missing.length > 0) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: missing required headings: ${missing.join(', ')}\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+};
+
+const validateSummaryPlaceholderDrift = () => {
+  if (matched.name !== 'Subtask Summary') {
+    return;
+  }
+
+  const stalePhrases = [/skeleton summary/i, /reviewer fills/i];
+  if (stalePhrases.some((pattern) => pattern.test(content))) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: stale placeholder text remains in summary.md.\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+
+  const hasApprovedVerdict = /\*\*review_verdict\*\*:\s*approved\b/i.test(content);
+  const hasChangesRequestedStatus = /^##\s+Status[\s\S]*?changes requested/im.test(content);
+  if (hasApprovedVerdict && hasChangesRequestedStatus) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: conflicting status text ("changes requested") remains after approval.\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+};
+
+const validateAcceptanceSignalsTable = () => {
+  if (matched.name !== 'Subtask Summary') {
+    return;
+  }
+
+  if (!hasHeading('Acceptance Signals')) {
+    return;
+  }
+
+  const requiredColumns = ['Signal', 'State', 'Evidence', 'Notes'];
+  const tableHeaderPresent = requiredColumns.every((column) =>
+    new RegExp(`\\|\\s*${column}\\s*`, 'i').test(content),
+  );
+
+  if (!tableHeaderPresent) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: ## Acceptance Signals must include Signal, State, Evidence, and Notes columns.\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+};
+
 const validateSectionedDeliveryPlan = () => {
   validatePairedSectionMarkers('Delivery Plan');
 
@@ -182,6 +266,16 @@ const ARTIFACT_RULES = [
       fileName === 'summary.md' &&
       path.basename(path.dirname(path.dirname(filePath))) === 'tasks',
     required: ['task_id'],
+    requiredHeadings: [
+      'Metadata',
+      'Task Status',
+      'Changes by Phase',
+      'Open Gates',
+      'Pipeline',
+      'Detail',
+      'Totals',
+      'Context Breakdown',
+    ],
   },
   // Subtask-level summary: lives at tasks/<task_id>/[phase-X/]<subtask_id>/summary.md
   // Grandparent is the task folder, not "tasks". Written by the Reviewer — must have verdict.
@@ -191,6 +285,16 @@ const ARTIFACT_RULES = [
       fileName === 'summary.md' &&
       path.basename(path.dirname(path.dirname(filePath))) !== 'tasks',
     required: ['verdict'],
+    requiredHeadings: [
+      'Status',
+      'Acceptance Signals',
+      'Files Changed',
+      'Dispatch Bundles',
+      'Telemetry',
+      'Context Manifest',
+      'Notes',
+      'Open Gates',
+    ],
   },
   // Orchestration state: lives at tasks/<task_id>/orchestration-state.json
   // Written by Chief Orchestrator after each subtask completes.
@@ -223,7 +327,16 @@ if (matched.jsonValidation) {
     process.exit(1);
   }
 
-  const requiredFields = ['task_id', 'phase', 'completed_subtasks', 'pending_subtasks'];
+  const requiredFields = [
+    'task_id',
+    'mode',
+    'phase',
+    'completed_subtasks',
+    'pending_subtasks',
+    'blocked_gates',
+    'pending_user_actions',
+    'task_summary_path',
+  ];
   const missingFields = requiredFields.filter((f) => !(f in parsed));
   if (missingFields.length > 0) {
     console.error(
@@ -233,7 +346,16 @@ if (matched.jsonValidation) {
     process.exit(1);
   }
 
-  const validPhases = ['planning', 'execution', 'complete'];
+  const validModes = ['normal', 'degraded-inline'];
+  if (!validModes.includes(parsed.mode)) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: mode must be one of: ${validModes.join(', ')}; got "${parsed.mode}"\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+
+  const validPhases = ['planning', 'execution', 'blocked', 'complete'];
   if (!validPhases.includes(parsed.phase)) {
     console.error(
       `[validate-artifact-chain] INVALID ${matched.name}: phase must be one of: ${validPhases.join(', ')}; got "${parsed.phase}"\n` +
@@ -242,9 +364,41 @@ if (matched.jsonValidation) {
     process.exit(1);
   }
 
-  if (!Array.isArray(parsed.completed_subtasks) || !Array.isArray(parsed.pending_subtasks)) {
+  if (
+    !Array.isArray(parsed.completed_subtasks) ||
+    !Array.isArray(parsed.pending_subtasks) ||
+    !Array.isArray(parsed.blocked_gates) ||
+    !Array.isArray(parsed.pending_user_actions)
+  ) {
     console.error(
-      `[validate-artifact-chain] INVALID ${matched.name}: completed_subtasks and pending_subtasks must be arrays\n` +
+      `[validate-artifact-chain] INVALID ${matched.name}: completed_subtasks, pending_subtasks, blocked_gates, and pending_user_actions must be arrays\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+
+  if (
+    parsed.phase === 'complete' &&
+    (parsed.pending_subtasks.length > 0 ||
+      parsed.blocked_gates.length > 0 ||
+      parsed.pending_user_actions.length > 0)
+  ) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: phase "complete" requires empty pending_subtasks, blocked_gates, and pending_user_actions.\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+
+  if (
+    typeof parsed.current_focus === 'string' &&
+    /all\s+\d+\s+subtasks\s+pass/i.test(parsed.current_focus) &&
+    (parsed.pending_subtasks.length > 0 ||
+      parsed.blocked_gates.length > 0 ||
+      parsed.pending_user_actions.length > 0)
+  ) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: current_focus overstates completion while pending work or gates remain.\n` +
         `File: ${filePath}\n`,
     );
     process.exit(1);
@@ -269,6 +423,10 @@ if (missing.length > 0) {
 
 validateReviewerSummaryExists();
 validateOptionalSectionSchema();
+validateAiWorkDiagnosticsLocation();
+validateRequiredHeadings();
+validateSummaryPlaceholderDrift();
+validateAcceptanceSignalsTable();
 
 // Run delivery plan section validation whenever task-data.md contains a
 // delivery-plan block. plan_format: sectioned-v1 is mandatory in v1 — if the

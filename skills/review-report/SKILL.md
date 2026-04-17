@@ -17,7 +17,7 @@ Produce this report after reviewing an Implementation Report (and Integration Ch
 
 1. **First action**: The orchestrator creates `<subtask_id>/summary.md` skeleton alongside ai-work.md (with diagnostic section placeholders and earlier agents' telemetry/manifest already appended). Verify it exists before appending to `ai-work.md`.
 2. **Append** `### Cycle N` block to `<!-- section:review -->` in the subtask's `ai-work.md`.
-3. **Last action**: Finalize `summary.md` with actual verdict, files, your telemetry line, your context manifest subsection, and notes.
+3. **Last action**: Finalize `summary.md` with actual status fields, acceptance-signal evidence states, files, your telemetry line, your context manifest subsection, notes, and open gates.
 
 **Ultra-light path:** Append the compact `review-ultra` block inside `<!-- section:review -->` in `ai-work.md`. Still finalize `summary.md`.
 
@@ -30,11 +30,17 @@ Write to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md`:
 ```markdown
 # Subtask Summary — <subtask_id>
 
-## Verdict
-approved | approved-with-notes | needs-replan
+## Status
+- **workflow_state**: approved | blocked-on-user | pending-integration-check | needs-replan
+- **review_verdict**: approved | changes_requested | needs-replan
+- **cycle_count**: <N>
+- **updated_at**: <ISO 8601 UTC>
 
-## Cycles
-<N> review cycles
+## Acceptance Signals
+| Signal | State | Evidence | Notes |
+| ------ | ----- | -------- | ----- |
+| <acceptance signal from spec> | pass | executed | verified in simulator |
+| <acceptance signal from spec> | pass | inspected | verified by code inspection |
 
 ## Files Changed
 [list from impl-files-changed in section:implementation]
@@ -79,9 +85,12 @@ Totals: governance 2100 | artifact 1500 | source 0 | schema 0 | docs 0
 
 ## Notes
 [completion_summary text — 1–3 sentences describing what was delivered]
+
+## Open Gates
+- none
 ```
 
-The orchestrator creates this skeleton (with empty placeholders for Dispatch Bundles, Telemetry, Context Manifest) alongside the ai-work.md skeleton. Each agent appends its telemetry line and context manifest subsection. The orchestrator populates the Dispatch Bundles table after each agent dispatch. The Reviewer finalizes with Verdict, Cycles, Files Changed, and Notes.
+The orchestrator creates this skeleton (with empty placeholders for Dispatch Bundles, Telemetry, Context Manifest) alongside the ai-work.md skeleton. Each agent appends its telemetry line and context manifest subsection. The orchestrator populates the Dispatch Bundles table after each agent dispatch. The Reviewer finalizes the status fields, acceptance-signal table, Files Changed, Notes, and Open Gates.
 
 ### 2. Append inside `<!-- section:review -->`
 
@@ -131,6 +140,7 @@ Then write diagnostics to `<subtask_id>/summary.md`:
 
 - Append your telemetry line under `## Telemetry`
 - Append your `### reviewer` context manifest subsection under `## Context Manifest`
+- Replace any placeholder or skeleton text in `## Status`, `## Acceptance Signals`, `## Notes`, and `## Open Gates` rather than leaving stale draft content above the final result.
 
 ## Output Size Guidelines
 
@@ -148,5 +158,11 @@ These are soft targets to keep ai-work.md manageable — complex subtasks may ex
 - Every finding must carry a `root_cause_category`.
 - If `cycle_count` reaches the complexity-tied cap and findings remain, use `blocker-escalation-report` instead.
 - Do not write findings for issues outside the approved subtask scope.
-- When `verdict = approved`, `completion_summary` must be filled; write it into both `section:review-completion-summary` and `summary.md`.
+- When `review_verdict = approved`, `completion_summary` must be filled; write it into both `section:review-completion-summary` and `summary.md`.
 - `summary.md` is MANDATORY — write it even for ultra-light subtasks.
+- Every acceptance signal in `summary.md` MUST include both:
+  - `State`: `pass | fail | deferred | blocked | pending`
+  - `Evidence`: `executed | inspected | deferred | blocked | pending`
+- Runtime, auth-flow, network, device, simulator, and manual-QA behaviors may be `State: pass` only when `Evidence: executed`.
+- If review is clean but an external gate remains open, set `workflow_state` accordingly (`blocked-on-user` or `pending-integration-check`) instead of overstating the subtask as complete.
+- Do not leave stale text like "skeleton summary" or "reviewer fills this later" in the finalized `summary.md`.

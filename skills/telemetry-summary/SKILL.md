@@ -17,10 +17,11 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 
 1. After each subtask completes, read `## Telemetry` lines from `<subtask_id>/summary.md` — one line per agent, format: `<role> | <turns>/<budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET>`.
 2. Read `### <role>` subsections from `## Context Manifest` in `<subtask_id>/summary.md` to get per-agent bucket totals.
-3. Read `## Notes` from `<subtask_id>/summary.md` for the completion one-liner (used in Changes by Phase).
-4. Read `## Dispatch Bundles` from `<subtask_id>/summary.md` for bundle audit data.
-5. Append rows to the Detail table, update Context Breakdown, and recalculate Totals.
-6. At task completion, populate the Changes by Phase section — the existence of the finalized `ai-workflow-data/tasks/<task_id>/summary.md` marks the task complete.
+3. Read `## Status` and `## Open Gates` from `<subtask_id>/summary.md` to determine whether the subtask is fully closed, blocked on user action, or pending integration.
+4. Read `## Notes` from `<subtask_id>/summary.md` for the completion one-liner (used in Changes by Phase).
+5. Read `## Dispatch Bundles` from `<subtask_id>/summary.md` for bundle audit data.
+6. Append rows to the Detail table, update Context Breakdown, and recalculate Totals.
+7. At task completion, populate the Changes by Phase section and set task `workflow_state: complete`. The file may exist before completion; completion is determined by status, not by file presence alone.
 
 ## Output Template
 
@@ -33,6 +34,12 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 - **created_at**: <ISO 8601 UTC — when first subtask started>
 - **updated_at**: <ISO 8601 UTC — last update>
 
+## Task Status
+
+- **workflow_state**: active | blocked-on-user | pending-integration-check | complete
+- **open_gate_count**: <N>
+- **pending_user_action_count**: <N>
+
 ## Changes by Phase
 
 ### Phase A
@@ -40,6 +47,10 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 - <subtask_id>: <one-liner>
 
 <!-- repeat per phase -->
+
+## Open Gates
+
+- none
 
 ## Pipeline
 
@@ -81,3 +92,6 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 - **Creator**: only the chief-orchestrator creates or updates this file.
 - **Context Breakdown is mandatory**: every update must refresh per-agent bucket totals, task totals, and Repeat reads from `## Context Manifest` subsections in each subtask's `<subtask_id>/summary.md`.
 - **Repeat reads**: list any path appearing in at least 2 agents' manifests for the same task; write `none` when none exist yet.
+- **Task Status is mandatory**: derive it from subtask `workflow_state` values and open gates.
+- **Completion semantics**: the task is complete only when `workflow_state: complete`, `open_gate_count: 0`, and `pending_user_action_count: 0`.
+- **Do not overstate completion**: if any subtask is `blocked-on-user` or `pending-integration-check`, the task summary must remain `active` or the matching blocked state.

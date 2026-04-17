@@ -89,10 +89,31 @@ Run if:
 - request/response contracts changed
 - auth expectations changed
 - nullability/field shape may differ
+- the Delivery Plan marks `integration_gate: required`
 
 **On `verdict: NOT ok`:** The Integration Checker MUST include `fix_owner: fe | be | both` in the report with a one-sentence rationale identifying which side introduced the mismatch. The Orchestrator routes the fix to the identified executor(s). The Reviewer MUST NOT approve the subtask until a follow-up Integration Checker run returns `verdict: ok`. The Reviewer cannot substitute their own integration check for IC's verdict.
 
+**Mandatory gate rule:** If the subtask spec or project rule says the IC gate is required, the subtask's `workflow_state` remains `pending-integration-check` until the IC returns `verdict: ok`. A clean code review alone is insufficient to close that subtask.
+
 <!-- /section:integration-trigger -->
+
+<!-- section:acceptance-evidence -->
+
+## Acceptance Evidence States
+
+Every acceptance signal recorded in `<subtask_id>/summary.md` MUST carry:
+
+- `State`: `pass | fail | deferred | blocked | pending`
+- `Evidence`: `executed | inspected | deferred | blocked | pending`
+
+Rules:
+
+- Runtime, simulator, device, network, auth-flow, and manual-QA behaviors may be `State: pass` only when `Evidence: executed`.
+- Static structure, type-shape, and code-layout checks may be `State: pass` with `Evidence: inspected`.
+- If execution is not possible in the current environment, record `State: deferred` or `blocked` instead of promoting it to `pass`.
+- The Reviewer finalizes these values; stale placeholder rows are invalid.
+
+<!-- /section:acceptance-evidence -->
 
 <!-- section:context-hygiene -->
 

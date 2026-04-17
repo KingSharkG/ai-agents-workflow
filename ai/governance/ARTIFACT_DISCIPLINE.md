@@ -24,6 +24,8 @@ Every agent whose output is a structured artifact MUST work in this order, witho
 | Integration Checker | integration-check section | `ai-work.md` (FE subtask, or changed side) → append to `<!-- section:integration-check -->` |
 | Escalating agent | escalation section | `ai-work.md` → append to `<!-- section:escalation-N -->` (N assigned by orchestrator) |
 
+**Degraded-inline guard:** When `orchestration-state.json` says `mode: degraded-inline`, the Chief Orchestrator MAY write intake artifacts, blocker records, and structured pending-gate / user-action records only. It MUST NOT fabricate role-owned sections, dispatch bundles, or approval artifacts as if Lead / Executor / Reviewer / Integration Checker had run.
+
 **Append rule:** For agents appending to `ai-work.md`, the target section placeholder MUST already exist in the file. If the placeholder is absent, the agent MUST raise a Blocker Escalation rather than creating a new file. A partially-filled section is strictly better than no section.
 
 Returning without writing to the target path is a **protocol violation**, even if reasoning is complete. If you are about to return mid-investigation, `Edit` your current findings into the skeleton *first*, then return.
@@ -164,4 +166,54 @@ When a blocker is raised within a subtask, the orchestrator appends the followin
 
 Telemetry and context manifest data are written to `<subtask_id>/summary.md` (NOT to `ai-work.md`). The orchestrator creates the summary.md skeleton alongside the ai-work.md skeleton. Each agent appends its diagnostics to summary.md. See the `review-report` skill for the canonical summary.md template.
 
+`ai-work.md` MUST NOT contain `<!-- section:telemetry -->` or `<!-- section:context-manifest -->`. These diagnostics belong exclusively in `summary.md`; validation hooks reject them when written into `ai-work.md`.
+
 <!-- /section:ai-work-skeleton -->
+
+<!-- section:summary-skeleton -->
+
+## summary.md Skeleton Template
+
+The Chief Orchestrator MUST create `<subtask_id>/summary.md` alongside `ai-work.md` before any agent runs. The skeleton is later finalized by the Reviewer.
+
+```markdown
+# Subtask Summary — <subtask_id>
+
+## Status
+- **workflow_state**: in-progress | approved | blocked-on-user | pending-integration-check | needs-replan
+- **review_verdict**: pending | approved | changes_requested | needs-replan
+- **cycle_count**: 0
+- **updated_at**: <ISO 8601 UTC>
+
+## Acceptance Signals
+| Signal | State | Evidence | Notes |
+| ------ | ----- | -------- | ----- |
+| <signal text> | pending | pending | tbd |
+
+## Files Changed
+- none yet
+
+## Dispatch Bundles
+| Role | Token Ceiling | Sections Included |
+| ---- | ------------- | ----------------- |
+
+## Telemetry
+<!-- one line per agent -->
+
+## Context Manifest
+<!-- one ### <role> subsection per agent -->
+
+## Notes
+placeholder
+
+## Open Gates
+- none
+```
+
+Rules:
+
+- `workflow_state` is the subtask lifecycle state. It remains `blocked-on-user` or `pending-integration-check` until those gates are closed, even if `review_verdict: approved`.
+- `Acceptance Signals` must record both `State` (`pass | fail | deferred | blocked | pending`) and `Evidence` (`executed | inspected | deferred | blocked | pending`).
+- Placeholder text must be replaced on finalization; do not leave "skeleton" or "reviewer fills this later" text in the final file.
+
+<!-- /section:summary-skeleton -->

@@ -31,6 +31,20 @@ Agents read ONLY the dispatch bundle (plus their own stub for tool/model config)
 
 Violation of this protocol is treated as an orchestration defect.
 
+## Degraded Mode Protocol (MANDATORY)
+
+If agent dispatch is unavailable, blocked by the harness, or explicitly denied, the orchestrator MUST switch to `mode: degraded-inline` in `orchestration-state.json`.
+
+In `mode: degraded-inline`:
+
+1. Record the blocker and any required user action.
+2. Request explicit user waiver before continuing past intake / blocker documentation.
+3. Do NOT create dispatch bundles under `roles/`.
+4. Do NOT fabricate role-owned artifacts or claim that Lead / Executor / Reviewer / Integration Checker ran.
+5. Keep mandatory workflow gates open (`pending-integration-check`, `blocked-on-user`, etc.) until they are genuinely satisfied.
+
+Returning normal-looking workflow artifacts while dispatch is unavailable is an orchestration defect.
+
 ## Orchestrator State Protocol (MANDATORY)
 
 The orchestrator maintains state in `ai-workflow-data/tasks/<task_id>/orchestration-state.json` to prevent unbounded context accumulation across subtask dispatches.
@@ -49,12 +63,15 @@ The orchestrator maintains state in `ai-workflow-data/tasks/<task_id>/orchestrat
 ```json
 {
   "task_id": "TP-042",
+  "mode": "normal",
   "phase": "execution",
   "completed_subtasks": [
     { "subtask_id": "...", "verdict": "approved", "cycles": 1, "summary_path": "..." }
   ],
   "current_subtask": null,
   "pending_subtasks": ["..."],
+  "blocked_gates": [],
+  "pending_user_actions": [],
   "trigger_decisions": {
     "<subtask_id>": { "design_agent": "skipped|required", "lead": "required|direct-executor", "integration_checker": "skipped|required|conditional" }
   },
@@ -89,7 +106,7 @@ Reject any dispatch result that:
 
 | Stage | Required in ai-work.md |
 |-------|------------------------|
-| subtask-initialized | `section:spec` non-empty; `section:telemetry` stub present |
+| subtask-initialized | `section:spec` non-empty; sibling `summary.md` exists with `## Status`, `## Telemetry`, `## Context Manifest`, and `## Open Gates` headings |
 | after-design-agent | + `section:plan-addendum` non-empty (if triggered) |
 | after-lead | + `section:tep` non-empty |
 | after-executor | + `section:implementation` non-empty |
@@ -130,12 +147,12 @@ After accepting a subtask completion, read `<subtask_id>/summary.md` (written by
 
 ## Post-Approval Closure
 
-When the Reviewer returns approved (signalled by `summary.md` existing at `<subtask_id>/summary.md`):
+When the Reviewer returns a closed review outcome (signalled by `<subtask_id>/summary.md` containing final `## Status` fields):
 
-1. Read `<subtask_id>/summary.md` — pull `verdict`, `files-changed`, and `notes` from it.
+1. Read `<subtask_id>/summary.md` — pull `workflow_state`, `review_verdict`, `files changed`, `open gates`, and `notes` from it.
 2. Extend `ai-workflow-data/tasks/<task_id>/summary.md` with the subtask row using the `telemetry-summary` skill.
 3. Emit the task/subtask completion signal.
-4. For **task-level completion** (all subtasks done), finalize `ai-workflow-data/tasks/<task_id>/summary.md` with aggregate totals and `Changes by Phase` — the existence of this file marks the task complete.
+4. For **task-level completion** (all subtasks done and no pending gates / user actions remain), finalize `ai-workflow-data/tasks/<task_id>/summary.md` with aggregate totals and `Changes by Phase`, and set the task summary `workflow_state: complete`.
 5. Do NOT spawn a separate Summary Agent. This step replaces it.
 
 ## Outputs

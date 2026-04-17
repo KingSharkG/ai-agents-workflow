@@ -1,6 +1,6 @@
 # ai-agents-workflow — Claude Code Plugin
 
-Portable multi-agent governance layer. Packages the orchestration, lead/executor, delivery-PM, design, reviewer, integration-checker, and init roles as a single installable plugin, plus fifteen governance skills and three enforcement hooks.
+Portable multi-agent governance layer. Packages the orchestration, lead/executor, delivery-PM, design, reviewer, integration-checker, and init roles as a single installable plugin, plus fifteen governance skills and five hook scripts.
 
 ## Layout
 
@@ -9,7 +9,7 @@ Portable multi-agent governance layer. Packages the orchestration, lead/executor
 - `agents/` — eight subagent definitions (orchestrator, lead, executor, delivery-pm, design-agent, reviewer, integration-checker, init)
 - `skills/` — fifteen governance skills: base eleven (task-packet, technical-execution-packet, delivery-plan, implementation-report, review-report, integration-check, telemetry-summary, context-minimizer, plan-addendum, blocker-escalation-report, reversal-packet) plus four project-config skills (project-discovery, project-config-template, project-config-review, project-config-mutate)
 - `commands/` — five user-facing slash commands (`init`, `add`, `update`, `remove`, `task`) that namespace as `/ai-agents-workflow:<command>`; thin entry-points dispatching the `init` or `chief-orchestrator` subagent
-- `hooks/` — three hooks with `hooks/hooks.json`: `guard-subtask-skeleton` (blocking PreToolUse), `evaluate-triggers` (observation PreToolUse), `validate-artifact-chain` (PostToolUse)
+- `hooks/` — five Node.js hook scripts wired via `hooks/hooks.json`: `guard-subtask-skeleton` (blocking `Task` PreToolUse), `evaluate-triggers` (`Task` PreToolUse), `guard-agent-reads` (`Read` PreToolUse), `validate-artifact-chain` (`Write|Edit` PostToolUse), `validate-dispatch-bundle` (`Write|Edit` PostToolUse)
 - `ai/core/PROJECT_CONSTITUTION.md` — workflow rules, Definition of Done
 - `ai/governance/` — trigger rules, review checklist, artifact discipline, resolution policy (skills + plugins)
 - `ai/playbooks/ORCHESTRATION.md` — default flow, dispatch bundles, orchestrator state, token-saving rules
@@ -33,4 +33,4 @@ Run `/ai-agents-workflow:init` in a new consumer project (or natural language: "
 
 ## Installation
 
-See `README.md` for local-marketplace install and verification.
+See `README.md` for remote-marketplace install, local development install, and verification.

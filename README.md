@@ -1,6 +1,6 @@
 # ai-agents-workflow
 
-A Claude Code plugin that installs a portable multi-agent governance pipeline into any repo: chief-orchestrator, delivery-PM, lead, executor, design-agent, reviewer, integration-checker, init, plus fifteen governance skills and three enforcement hooks.
+A Claude Code plugin that installs a portable multi-agent governance pipeline into any repo: chief-orchestrator, delivery-PM, lead, executor, design-agent, reviewer, integration-checker, init, plus fifteen governance skills and five hook scripts.
 
 ## Install (remote marketplace, recommended)
 
@@ -28,7 +28,7 @@ You should see `ai-agents-workflow` listed as enabled. Pick up upstream edits wi
 If you have this repo cloned locally and want to iterate on the plugin itself:
 
 ```
-/plugin marketplace add /User/ai-agents-workflow
+/plugin marketplace add /absolute/path/to/ai-agents-workflow
 /plugin install ai-agents-workflow@ai-agents-workflow
 ```
 
@@ -65,7 +65,7 @@ Note: `source_ref` is not version-pinned. If a referenced MCP server or Claude b
 
 ## Target-repo expectations
 
-This plugin reads two files from the consumer repo's working directory, both under `ai-workflow-data/`:
+This plugin reads and writes files under `ai-workflow-data/` in the consumer repo. The main paths are:
 
 1. `ai-workflow-data/config/PROJECT_CONFIG.md` — per-project overlay. Sections used by the pipeline:
    - `<!-- section:domains -->`
@@ -77,6 +77,9 @@ This plugin reads two files from the consumer repo's working directory, both und
    - `<!-- section:cross-domain-rules -->` (read by delivery-pm)
    - `<!-- section:quality-gates -->` (read by reviewer and executor)
 2. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — per-subtask artifact. The `guard-subtask-skeleton` hook blocks any non-exempt Task dispatch if this file is missing.
+3. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` — per-subtask summary with diagnostics such as telemetry, context manifests, and dispatch-bundle audit details.
+4. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md` — dispatch bundles written before each agent handoff with pre-curated role context.
+5. `ai-workflow-data/tasks/<task_id>/orchestration-state.json` — orchestrator state persisted across subtasks.
 
 The `evaluate-triggers` hook reads the subtask's `ai-work.md` spec section for trigger keyword matching. It does NOT scan `.claude/plans/`.
 
@@ -86,7 +89,7 @@ Run `/ai-agents-workflow:init` in a fresh consumer repo (or use natural language
 
 - `agents/` — 8 subagent definitions (adds `init`)
 - `skills/` — 15 skills with SKILL.md each (adds `project-discovery`, `project-config-template`, `project-config-review`, `project-config-mutate`)
-- `hooks/` — 3 Node.js hook scripts plus `hooks.json`
+- `hooks/` — 5 Node.js hook scripts plus `hooks.json`
 - `commands/` — 5 user-facing slash commands (`init`, `add`, `update`, `remove`, `task`) namespaced as `/ai-agents-workflow:<command>`
 - `ai/core/`, `ai/governance/`, `ai/playbooks/`, `ai/agents/` — canonical governance docs
 
