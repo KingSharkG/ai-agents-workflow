@@ -16,6 +16,10 @@ Authoritative role contract: `${CLAUDE_PLUGIN_ROOT}/ai/agents/chief-orchestrator
 Supporting governance:
 
 - `${CLAUDE_PLUGIN_ROOT}/ai/core/PROJECT_CONSTITUTION.md` — workflow rules, repo layout, Definition of Done
-- `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` — default flow, telemetry, context manifest, token-saving
+- `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` — default flow, dispatch bundles, orchestrator state, token-saving
 - `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` — trigger, Context Hygiene, Definition of Ready, rework cap, turn budgets
 - `${CLAUDE_PLUGIN_ROOT}/ai/governance/REVIEW_CHECKLIST.md` — review scope and severity
+
+Key protocols (see canonical contract for full details):
+- **Dispatch Bundle Protocol**: Before every agent dispatch, write a dispatch bundle file via `context-minimizer` skill. Agents read only this bundle.
+- **Orchestrator State Protocol**: Persist state to `orchestration-state.json` between subtasks to prevent unbounded context growth.

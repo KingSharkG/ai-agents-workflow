@@ -9,7 +9,6 @@ Shape an approved subtask into an executor-ready Technical Execution Packet (TEP
 | Trigger                                             | Skill                                                                      |
 | --------------------------------------------------- | -------------------------------------------------------------------------- |
 | Creating a TEP from a Delivery Plan subtask         | `technical-execution-packet` — build the Technical Execution Packet        |
-| Preparing minimal context for executors             | `context-minimizer`                                                        |
 | Absorbing a Design Review Addendum into the TEP     | `plan-addendum` (consume) — read the addendum's body sections only         |
 | Evaluating risky or uncertain approaches before committing to a TEP | `superpowers:brainstorming`                          |
 | Missing context or unresolvable conflict blocks TEP | `blocker-escalation-report`                                                |
@@ -19,20 +18,22 @@ Shape an approved subtask into an executor-ready Technical Execution Packet (TEP
 - `context7` — library/framework/SDK documentation lookup.
 - `filesystem` — read-only exploration to verify `target_file` paths before emitting the TEP.
 
-Domain-specific skills and plugins are resolved from `PROJECT_CONFIG.md#<!-- section:<domain> -->` at runtime and MERGED with the base set. Anything outside `base_skills ∪ domain.skills` (or plugins) is forbidden for this subtask.
+Domain-specific skills and plugins are included in the dispatch bundle's Project Context section (pre-extracted from `PROJECT_CONFIG.md#<!-- section:<domain> -->`). The allowed set is `base_skills ∪ domain.skills` (or plugins). Anything outside this union is forbidden for this subtask.
 
-## Load Order
+## Dispatch Bundle Protocol
 
-Every invocation follows this six-step sequence before doing work:
+The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+- Role contract excerpts (mission, skill rituals, forbidden actions) from this file
+- Pre-extracted PROJECT_CONFIG.md sections (domain, baselines, role best-practices)
+- Governance excerpts within token ceilings
+- Artifact input (spec, design addendum body sections if present)
 
+**Startup sequence:**
 1. Harness reads the stub (`.claude/agents/lead.md`) — spins up with tools, model, permissionMode.
-2. Agent reads this canonical contract — internalizes mission, base skills, base plugins, base best practices, skill invocation rituals, forbidden actions.
-3. Agent reads `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:project-best-practices -->` — universal project conventions.
-4. Agent reads `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` — domain-specific skills, plugins, baseline anchors, validation_rules, forbidden_actions.
-5. Agent reads `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:agent-best-practices -->` (the `lead:` block) — project-specific overlay for this role.
-6. Agent performs the work and appends to `<!-- section:tep -->` in the subtask's `ai-work.md`.
+2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/lead.md`).
+3. Agent performs the work and appends to `<!-- section:tep -->` in the subtask's `ai-work.md`.
 
-Read only the sections named above. Do not read full files when a section anchor is available.
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
 
 ## Base Best Practices
 
@@ -46,12 +47,11 @@ Read only the sections named above. Do not read full files when a section anchor
 
 ## Skill Invocation Rituals
 
-1. At subtask start, read the subtask's `<!-- section:spec -->` and any existing `<!-- section:plan-addendum -->`.
-2. Invoke `context-minimizer` to pull only the relevant excerpts from baselines, constitution, and requirements — one or two anchored sections per source, not whole files.
-3. Invoke `technical-execution-packet` when emitting the `<!-- section:tep -->` block.
-4. When absorbing a Design Review Addendum, invoke `plan-addendum` (consume side) to read only its body sections.
-5. Invoke `blocker-escalation-report` if the 2-turn budget is exceeded or a design conflict cannot be resolved within the 2-round design cap.
-6. For any skill listed in `PROJECT_CONFIG.md#<domain>.skills`, invoke it when its own `description` field matches the current step. Guard rail: verify the skill is in `base_skills ∪ domain.skills` before invocation — if not, do not invoke.
+1. At subtask start, read the dispatch bundle — it contains `<!-- section:spec -->` and any existing design addendum body sections.
+2. Invoke `technical-execution-packet` when emitting the `<!-- section:tep -->` block.
+3. When absorbing a Design Review Addendum, invoke `plan-addendum` (consume side) to process the body sections included in the bundle.
+4. Invoke `blocker-escalation-report` if the 2-turn budget is exceeded or a design conflict cannot be resolved within the 2-round design cap.
+5. For any domain skill listed in the dispatch bundle's Project Context section, invoke it when its own `description` field matches the current step. Guard rail: verify the skill is in `base_skills ∪ domain.skills` before invocation — if not, do not invoke.
 
 ## Produce-Artifact-First Rule
 
@@ -59,7 +59,7 @@ Protocol: `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!--
 
 Target path: append to `<!-- section:tep -->` in the subtask's `ai-work.md`. The placeholder MUST already exist — if absent, raise a Blocker Escalation.
 
-TEP required sections (inside `<!-- section:tep -->`): `tep-metadata`, `tep-goal`, `tep-target-files`, `tep-context-bundle`, `tep-implementation-steps`, `tep-risks`, `tep-acceptance-signals`, `tep-recommended-tests`, plus append one subsection to `<!-- section:context-manifest -->` and one line to `<!-- section:telemetry -->`. When a `Domain Handoff Note` was present in the Delivery Plan, `tep-metadata` MUST include `domain_rules_acknowledged: true`; if the Lead's interpretation differs, flag as a blocker instead.
+TEP required sections (inside `<!-- section:tep -->`): `tep-metadata`, `tep-goal`, `tep-target-files`, `tep-context-bundle`, `tep-implementation-steps`, `tep-risks`, `tep-acceptance-signals`, `tep-recommended-tests`. When a `Domain Handoff Note` was present in the Delivery Plan, `tep-metadata` MUST include `domain_rules_acknowledged: true`; if the Lead's interpretation differs, flag as a blocker instead. Write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
 
 ## Decision-Fork Upward Route
 
@@ -118,5 +118,5 @@ Do not silently modify design constraints without this escalation path.
 - Plan respects the baselines referenced by `PROJECT_CONFIG.md#<domain>.baselines`.
 - Design Review Addendum is absorbed into a single executor-facing TEP when present.
 - Risks are explicit.
-- Telemetry line appended to `<!-- section:telemetry -->`.
-- Context manifest subsection appended to `<!-- section:context-manifest -->`.
+- Telemetry line written to `<subtask_id>/summary.md`.
+- Context manifest subsection written to `<subtask_id>/summary.md`.

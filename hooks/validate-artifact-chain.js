@@ -124,61 +124,8 @@ const validateReviewerSummaryExists = () => {
   }
 };
 
-const validateCommonArtifactFooters = () => {
-  // Only ai-work.md uses the generic `context-manifest` / `telemetry` section
-  // names validated here. task-data.md uses prefixed names (task-context-manifest,
-  // delivery-context-manifest, etc.) so it is excluded from this check.
-  if (matched.name !== 'ai-work.md') {
-    return;
-  }
-
-  // Extract section content so we can check format without false-firing on
-  // empty skeletons (skeleton sections are valid but contain no payload yet).
-  const telemetryContent =
-    content.match(/<!--\s*section:telemetry\s*-->([\s\S]*?)<!--\s*\/section:telemetry\s*-->/i)?.[1] || '';
-  const contextContent =
-    content.match(/<!--\s*section:context-manifest\s*-->([\s\S]*?)<!--\s*\/section:context-manifest\s*-->/i)?.[1] || '';
-
-  // Skip content-format checks when the skeleton is still empty
-  if (!telemetryContent.trim() && !contextContent.trim()) {
-    return;
-  }
-
-  const missing = [];
-
-  // Validate telemetry payload format when telemetry section has content
-  if (telemetryContent.trim()) {
-    const hasCompactTelemetry =
-      /\d+\s*\/\s*\d+\s*turns\s*\|\s*tokens:\s*~?[^\n|]+\s*\/\s*~?[^\n|]+\s*\|\s*skills:\s*(low|medium|high)\s*\|\s*plugins:\s*(low|medium|high)\s*\|\s*(ok|over_budget)/i.test(
-        telemetryContent,
-      );
-    const hasExpandedTelemetry =
-      /turns_used/.test(telemetryContent) && /tokens_in_estimate/.test(telemetryContent);
-
-    if (!hasCompactTelemetry && !hasExpandedTelemetry) {
-      missing.push('canonical telemetry payload in section:telemetry');
-    }
-  }
-
-  // Validate context manifest has a totals line when it has content
-  if (contextContent.trim()) {
-    const lcc = contextContent.toLowerCase();
-    const hasManifestTotals =
-      lcc.includes('totals:') || lcc.includes('bucket totals:') || lcc.includes('totals line of zeros');
-
-    if (!hasManifestTotals) {
-      missing.push('totals line in section:context-manifest');
-    }
-  }
-
-  if (missing.length > 0) {
-    console.error(
-      `[validate-artifact-chain] INVALID ${matched.name}: missing required content: ${missing.join(', ')}\n` +
-        `File: ${filePath}\n`,
-    );
-    process.exit(1);
-  }
-};
+// Telemetry and context-manifest diagnostics are now written to summary.md,
+// not ai-work.md. No ai-work.md footer validation needed.
 
 const validateSectionedDeliveryPlan = () => {
   validatePairedSectionMarkers('Delivery Plan');
@@ -218,7 +165,7 @@ const ARTIFACT_RULES = [
     name: 'ai-work.md',
     detect: () => fileName === 'ai-work.md',
     required: [],
-    requiredSections: ['spec', 'implementation', 'review', 'context-manifest', 'telemetry'],
+    requiredSections: ['spec', 'implementation', 'review'],
   },
   {
     name: 'task-data.md',
@@ -268,7 +215,6 @@ if (missing.length > 0) {
 }
 
 validateReviewerSummaryExists();
-validateCommonArtifactFooters();
 validateOptionalSectionSchema();
 
 // Run delivery plan section validation whenever task-data.md contains a

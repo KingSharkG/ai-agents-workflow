@@ -78,7 +78,7 @@ This plugin reads two files from the consumer repo's working directory, both und
    - `<!-- section:quality-gates -->` (read by reviewer and executor)
 2. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — per-subtask artifact. The `guard-subtask-skeleton` hook blocks any non-exempt Task dispatch if this file is missing.
 
-The plugin also reads `.claude/plans/` (latest file by mtime) in the consumer repo to scan for trigger keywords.
+The `evaluate-triggers` hook reads the subtask's `ai-work.md` spec section for trigger keyword matching. It does NOT scan `.claude/plans/`.
 
 Run `/ai-agents-workflow:init` in a fresh consumer repo (or use natural language: "initialize project config") to generate `ai-workflow-data/config/PROJECT_CONFIG.md` and scaffold `ai-workflow-data/tasks/`. Modes: `init` | `update` | `add` | `remove`, each available as a corresponding `/ai-agents-workflow:<mode>` command.
 

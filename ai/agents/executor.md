@@ -21,20 +21,22 @@ Implement an approved subtask in the real repository per the TEP. Emit an Implem
 
 - `context7` — library/framework/SDK documentation lookup.
 
-Domain-specific skills and plugins are resolved from `PROJECT_CONFIG.md#<!-- section:<domain> -->` at runtime and MERGED with the base set. Anything outside `base_skills ∪ domain.skills` (or plugins) is forbidden for this subtask.
+Domain-specific skills and plugins are included in the dispatch bundle's Project Context section (pre-extracted from `PROJECT_CONFIG.md#<!-- section:<domain> -->`). The allowed set is `base_skills ∪ domain.skills` (or plugins). Anything outside this union is forbidden for this subtask.
 
-## Load Order
+## Dispatch Bundle Protocol
 
-Every invocation follows this six-step sequence before doing work:
+The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+- Role contract excerpts (mission, skill rituals, forbidden actions) from this file
+- Pre-extracted PROJECT_CONFIG.md sections (domain, baselines, role best-practices)
+- Governance excerpts within token ceilings (DoD section)
+- Artifact input (TEP or spec for lightweight path; on rework: latest review findings only)
 
+**Startup sequence:**
 1. Harness reads the stub (`.claude/agents/executor.md`) — spins up with tools, model, permissionMode.
-2. Agent reads this canonical contract — internalizes mission, base skills, base plugins, base best practices, skill invocation rituals, forbidden actions.
-3. Agent reads `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:project-best-practices -->` — universal project conventions.
-4. Agent reads `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` — domain-specific skills, plugins, baseline anchors, validation_rules, forbidden_actions. Hold baseline content as persistent subtask context.
-5. Agent reads `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:agent-best-practices -->` (the `executor:` block) — project-specific overlay for this role.
-6. Agent performs the work and appends to `<!-- section:implementation -->` in the subtask's `ai-work.md`.
+2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/executor.md`). Hold baseline content from the bundle as persistent subtask context.
+3. Agent performs the work and appends to `<!-- section:implementation -->` in the subtask's `ai-work.md`.
 
-Read only the sections named above. Do not read full files when a section anchor is available.
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
 
 ## Base Best Practices
 
@@ -47,7 +49,7 @@ Read only the sections named above. Do not read full files when a section anchor
 
 ## Skill Invocation Rituals
 
-1. On startup, read the baseline anchors listed in `PROJECT_CONFIG.md#<domain>.baselines` and hold their content as persistent subtask context.
+1. On startup, read the dispatch bundle and hold the baseline content from its Project Context section as persistent subtask context.
 2. Invoke `superpowers:executing-plans` when stepping through the approved TEP.
 3. Invoke `superpowers:test-driven-development` before writing tests — write the failing test first.
 4. Invoke `superpowers:systematic-debugging` on any unexpected failure. Never patch blindly.
@@ -56,7 +58,7 @@ Read only the sections named above. Do not read full files when a section anchor
 7. Invoke `code-simplifier` / `simplify` on the diff before emitting `<!-- section:implementation -->`.
 8. Invoke `implementation-report` at handoff.
 9. Invoke `blocker-escalation-report` per the Decision-Fork Rule below.
-10. For any skill listed in `PROJECT_CONFIG.md#<domain>.skills`, invoke it when its own `description` field matches the current step. Guard rail: verify the skill is in `base_skills ∪ domain.skills` before invocation — if not, do not invoke.
+10. For any domain skill listed in the dispatch bundle's Project Context section, invoke it when its own `description` field matches the current step. Guard rail: verify the skill is in `base_skills ∪ domain.skills` before invocation — if not, do not invoke.
 
 ## Produce-Artifact-First Rule
 
@@ -64,7 +66,7 @@ Protocol: `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!--
 
 Target path: append to `<!-- section:implementation -->` in the subtask's `ai-work.md`. The placeholder MUST already exist — if absent, raise a Blocker Escalation.
 
-Implementation required sections (inside `<!-- section:implementation -->`): `impl-metadata`, `impl-summary`, `impl-files-changed`, `impl-tests-run`, `impl-dynamic-skills`, `impl-unresolved-issues`, `impl-project-state`, plus append one subsection to `<!-- section:context-manifest -->` and one line to `<!-- section:telemetry -->`.
+Implementation required sections (inside `<!-- section:implementation -->`): `impl-metadata`, `impl-summary`, `impl-files-changed`, `impl-tests-run`, `impl-dynamic-skills`, `impl-unresolved-issues`, `impl-project-state`. Write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
 
 **Ultra-light path:** When the subtask qualifies for the ultra-light tier, append the compact `impl-ultra` block inside `<!-- section:implementation -->` in `ai-work.md`. Do NOT append to `task-data.md`.
 
@@ -131,5 +133,5 @@ Rationale: the TEP is produced with cheap, fast assumptions. Resolving mismatche
 - tests pass
 - implementation respects the baselines referenced by `PROJECT_CONFIG.md#<domain>.baselines`
 - migrations and contracts are explicit (where the domain's validation rules require)
-- telemetry line appended to `<!-- section:telemetry -->`
-- context manifest subsection appended to `<!-- section:context-manifest -->`
+- telemetry line written to `<subtask_id>/summary.md`
+- context manifest subsection written to `<subtask_id>/summary.md`

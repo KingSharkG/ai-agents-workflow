@@ -1,85 +1,154 @@
 ---
 name: context-minimizer
-description: Produce a minimum context bundle for a given artifact type and target agent role. Eliminates manual context curation by the chief-orchestrator and enforces the token-efficiency policy.
+description: Build and write a dispatch bundle file for a target agent role before every delegation. Replaces the six-step load order with a single pre-curated file that the agent reads on startup.
 ---
 
-# Context Minimizer
+# Context Minimizer — Dispatch Bundle Producer
 
-Assemble the minimum context bundle before every agent delegation. Never send raw governance files — extract only the relevant excerpts.
+Before every agent delegation the orchestrator MUST invoke this skill to produce a **dispatch bundle** — a single markdown file that contains everything the target agent needs. The agent reads this file instead of independently loading governance files, canonical contracts, and PROJECT_CONFIG.md sections.
 
-Invoke with: **artifact type** (e.g. `task-packet`, `delivery-plan`, `tep`, `implementation-report`, `review-report`) and **target agent**.
+## Dispatch Bundle Protocol
+
+1. Determine the target agent role and subtask context (domain, complexity, rework cycle if any).
+2. Assemble the bundle content per the role-specific rules below.
+3. Verify the assembled governance/context excerpts stay within the token ceiling for the target role.
+4. Write the bundle file to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md`.
+5. Pass the bundle file path to the agent in the dispatch prompt.
+
+If the assembled context exceeds the ceiling, re-excerpt until it fits — never silently exceed. Over-ceiling dispatch is an orchestration defect.
+
+## Bundle Format
+
+```markdown
+# Dispatch Bundle — <role> for <subtask_id>
+
+## Role Contract
+[mission, relevant skill rituals, forbidden actions — excerpted from canonical contract at ${CLAUDE_PLUGIN_ROOT}/ai/agents/<role>.md]
+
+## Project Context
+[relevant domain section + baseline + role best-practices — pre-extracted from ai-workflow-data/config/PROJECT_CONFIG.md]
+
+## Governance
+[only sections relevant to this role, within token ceiling — excerpted from governance files]
+
+## Artifact Input
+[specific ai-work.md sections this role needs — spec, tep, review-findings, etc.]
+```
+
+The agent reads ONLY this bundle (plus its own stub for tool/model config). It does NOT independently read canonical contracts, PROJECT_CONFIG.md, or governance files.
+
+---
 
 ## Context Bundle by Role
 
 ### delivery-pm
 
-**Include:**
+**Role Contract excerpt from** `ai/agents/delivery-pm.md`:
+- Mission, decomposition rules, domain tagging rules
 
+**Project Context from** `PROJECT_CONFIG.md`:
+- `<!-- section:domains -->` — declared_domains, detection_rules, decomposition_rule, escalation_rule
+- `<!-- section:cross-domain-rules -->` — ordering rules
+
+**Governance:**
+- `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` — full (short, always relevant for routing recommendations)
+
+**Artifact Input:**
 - `section:task-packet` from `task-data.md` (full)
-- `ai-workflow-data/config/PROJECT_CONFIG.md` — `<!-- section:domains -->` and `<!-- section:cross-domain-rules -->` for decomposition
-- `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` — full (short, always relevant)
 
-**Exclude:** ai-workflow-data/config/PROJECT_CONFIG.md baseline sections, REVIEW_CHECKLIST, all agent contracts
+**Exclude:** PROJECT_CONFIG.md baseline sections, REVIEW_CHECKLIST, all other agent contracts
 
 ---
 
 ### lead (TEP creation + validation)
 
-**Include:**
+**Role Contract excerpt from** `ai/agents/lead.md`:
+- Mission, TEP readiness criteria, context_bundle production rules, menu guard rail, forbidden actions, blocker escalation rules
 
+**Project Context from** `PROJECT_CONFIG.md`:
+- `<!-- section:<domain> -->` block (skills, plugins, baseline anchors, validation_rules, forbidden_actions)
+- Referenced baseline anchors (`<!-- section:<domain>-baseline -->` plus `<!-- section:auth-baseline -->` / `<!-- section:api-baseline -->` when the subtask touches auth or a REST contract)
+- `<!-- section:project-best-practices -->`
+- `lead:` sub-block of `<!-- section:agent-best-practices -->`
+
+**Governance:**
+- None required in bundle (Lead does not need TRIGGER_RULES or REVIEW_CHECKLIST)
+
+**Artifact Input:**
 - `section:spec` from `ai-work.md` (already extracted by orchestrator from `task-data.md`). Never send the full task-data.md.
-- When a design addendum exists for the subtask (only for domains listed in `PROJECT_CONFIG.md#domains.design_hook_domains`), include only the body sections from `section:plan-addendum` in `ai-work.md`:
+- When a design addendum exists (only for domains in `design_hook_domains`), include only body sections from `section:plan-addendum`:
   `design-findings`, `design-constraints`, `design-open-questions`, `domain-invariants`, `domain-role-checks`, `domain-status-checks`, `domain-clarifications`.
-- `ai-workflow-data/config/PROJECT_CONFIG.md` — the relevant `<!-- section:<domain> -->` block only (skills, plugins, baselines anchors, validation_rules, forbidden_actions), plus `<!-- section:project-best-practices -->` and the `lead:` sub-block of `<!-- section:agent-best-practices -->`
-- `ai-workflow-data/config/PROJECT_CONFIG.md` — only the anchors referenced from the domain section above (the domain baseline plus `<!-- section:auth-baseline -->` / `<!-- section:api-baseline -->` when the subtask touches auth or a REST contract)
 
-**Exclude:** addendum metadata/footer sections, REVIEW_CHECKLIST, all other Delivery Plan subtasks, `delivery-routing`, `delivery-context-manifest`, `delivery-telemetry` by default, other agents' contracts
+**Exclude:** addendum metadata/footer, REVIEW_CHECKLIST, other Delivery Plan subtasks, `delivery-routing`, `delivery-context-manifest`, `delivery-telemetry`, other agents' contracts
 
 ---
 
 ### executor
 
-**Include:**
+**Role Contract excerpt from** `ai/agents/executor.md`:
+- Mission, skill invocation rituals (executing-plans, TDD, systematic-debugging, verification-before-completion, receiving-code-review, code-simplifier, implementation-report, blocker-escalation), decision-fork rule, menu guard rail, forbidden actions
 
-- `section:tep` from `ai-work.md` (current subtask only)
-- `ai-workflow-data/config/PROJECT_CONFIG.md` — the relevant `<!-- section:<domain> -->` block (for baselines anchors, validation_rules, forbidden_actions), plus `<!-- section:project-best-practices -->` and the `executor:` sub-block of `<!-- section:agent-best-practices -->`
-- `ai-workflow-data/config/PROJECT_CONFIG.md` — only the anchors referenced from the domain section above
+**Project Context from** `PROJECT_CONFIG.md`:
+- `<!-- section:<domain> -->` block (for baseline anchors, validation_rules, forbidden_actions)
+- Referenced baseline anchors
+- `<!-- section:project-best-practices -->`
+- `executor:` sub-block of `<!-- section:agent-best-practices -->`
+
+**Governance:**
 - `${CLAUDE_PLUGIN_ROOT}/ai/core/PROJECT_CONSTITUTION.md` — Definition of Done section only
-- On focused rework cycles, include only `<!-- section:review-findings -->` from the last `### Cycle N` in `section:review` in `ai-work.md`, not the full section.
+
+**Artifact Input:**
+- `section:tep` from `ai-work.md` (current subtask only)
+- On focused rework cycles: only `<!-- section:review-findings -->` from the last `### Cycle N` in `section:review`, not the full section.
 
 **Exclude:** TRIGGER_RULES, other subtask TEPs
 
 **Lightweight path (`complexity: low`, no TEP):**
+- Include `section:spec` from `ai-work.md` instead of TEP.
+- Do not include `delivery-routing`, `delivery-context-manifest`, or `delivery-telemetry`.
 
-- Include `section:spec` from `ai-work.md` (the orchestrator already extracted the matching `delivery-subtask-*` block from `task-data.md` when creating the skeleton).
-- Do not include `delivery-routing`, `delivery-context-manifest`, or `delivery-telemetry` unless the specific dispatch truly needs them.
+**Rework bundle (cycle N > 1):**
+- Include only: current diff or changed files, latest `review-findings` from last `### Cycle N`, latest `impl-summary` and `impl-tests-run`, relevant acceptance slice from `spec`.
+- For High findings routed through Lead: include only the impacted TEP slice and latest finding payload, not the full prior package.
+- Do NOT include: full implementation section, full review history, full baseline, full checklist.
 
 ---
 
 ### design-agent (FE subtasks only)
 
-**Include:**
+**Role Contract excerpt from** `ai/agents/design-agent.md`:
+- Mission, design addendum output rules, domain interaction rules
 
+**Project Context from** `PROJECT_CONFIG.md`:
+- FE section only (`<!-- section:fe-baseline -->`)
+
+**Governance:**
+- None required in bundle
+
+**Artifact Input:**
 - `section:spec` from `ai-work.md` for the active FE subtask
-- `ai-workflow-data/config/PROJECT_CONFIG.md` — FE section only (`<!-- section:fe-baseline -->`)
 - Relevant FE context excerpt from the touched area (screen contract, navigation rule, type surface, or repo map) when the subtask depends on existing app behavior
 - `section:tep` from `ai-work.md` only when revising an already-shaped FE subtask after blocker or rework feedback
 
 **Exclude:** BE baseline, REVIEW_CHECKLIST, other agents' contracts
 
-> Design Agent emits a Design Review Addendum for the Lead to merge; it does not produce executor-facing plans.
-> Domain validation is absorbed by the Leads (no separate Domain Agent) — see `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:domain-validation-note -->`.
-
 ---
 
 ### integration-checker
 
-**Include:**
+**Role Contract excerpt from** `ai/agents/integration-checker.md`:
+- Mission, comparison protocol, verdict rules, fix_owner assignment rules
 
-- Changed-side `section:implementation` section extracts from `ai-work.md` for the current cycle — prefer `impl-files-changed`, `impl-tests-run`, `impl-unresolved-issues`; include the full section only when specific sub-sections are unavailable.
-- The latest approved artifact or current live contract surface from the untouched side when only one side changed
-- `ai-workflow-data/config/PROJECT_CONFIG.md` — `<!-- section:api-baseline -->` and `<!-- section:auth-baseline -->` only
-- Relevant changed FE/BE contract excerpts from source or diff when possible; do not rely on the report alone.
+**Project Context from** `PROJECT_CONFIG.md`:
+- `<!-- section:api-baseline -->` and `<!-- section:auth-baseline -->` only
+
+**Governance:**
+- None required in bundle
+
+**Artifact Input:**
+- Changed-side `section:implementation` extracts from `ai-work.md` — prefer `impl-files-changed`, `impl-tests-run`, `impl-unresolved-issues`; include full section only when sub-sections are unavailable.
+- Latest approved artifact or current live contract surface from the untouched side when only one side changed
+- Relevant changed FE/BE contract excerpts from source or diff when possible
 
 **Exclude:** TRIGGER_RULES
 
@@ -87,191 +156,166 @@ Invoke with: **artifact type** (e.g. `task-packet`, `delivery-plan`, `tep`, `imp
 
 ### reviewer
 
-**Include:**
+**Role Contract excerpt from** `ai/agents/reviewer.md`:
+- Mission, review cycle protocol, severity definitions, verdict rules, summary.md writing rules
 
+**Project Context from** `PROJECT_CONFIG.md`:
+- Relevant layer section only (domain validation_rules)
+
+**Governance:**
+- `${CLAUDE_PLUGIN_ROOT}/ai/governance/REVIEW_CHECKLIST.md` — always: `<!-- section:core-review -->`, `<!-- section:severity -->`, `<!-- section:rework-policy -->`; add `<!-- section:domain-review -->` for domain subtasks; add `<!-- section:integration-review -->` when paired cross-domain subtask changed both sides or Integration Check Report included
+- `${CLAUDE_PLUGIN_ROOT}/ai/core/PROJECT_CONSTITUTION.md` — `<!-- section:definition-of-done -->` section only
+
+**Artifact Input:**
 - `section:implementation` from `ai-work.md` (current cycle)
 - Changed files or diff for the current cycle
 - `section:spec` from `ai-work.md` for the active subtask
-- `${CLAUDE_PLUGIN_ROOT}/ai/governance/REVIEW_CHECKLIST.md` — always: `core-review`, `severity`, `rework-policy`; add `domain-review` for any domain subtask; add `integration-review` when a paired cross-domain subtask changed both sides or an Integration Check Report is included for this cycle
-- `ai-workflow-data/config/PROJECT_CONFIG.md` — relevant layer section only
-- `${CLAUDE_PLUGIN_ROOT}/ai/core/PROJECT_CONSTITUTION.md` — `definition-of-done` section only
 - Integration Check Report (if available for this cycle)
 
-**Exclude:** TRIGGER_RULES, all agent contracts
+**Exclude:** TRIGGER_RULES, all other agent contracts
+
+**Re-review bundle (rework cycle N > 1):**
+- Include only: updated `<!-- section:implementation -->` (current cycle), changed files or diff (current cycle), `<!-- section:spec -->` acceptance signals.
+- Do NOT include: full prior review cycles, full TEP, full baseline.
 
 ---
 
 ### orchestrator (post-approval summary)
 
-**Include:**
+No dispatch bundle needed — the orchestrator reads artifacts directly. For post-approval:
 
+**Include:**
 - `section:review` sections `review-verdict` and `review-completion-summary` from `ai-work.md` (approved cycle only)
-- `<subtask_id>/summary.md` — Reviewer writes this; orchestrator reads it when extending the task-level summary
+- `<subtask_id>/summary.md` (written by Reviewer)
 - `${CLAUDE_PLUGIN_ROOT}/ai/core/PROJECT_CONSTITUTION.md` — Definition of Done section only
 
-**Exclude:** ai-workflow-data/config/PROJECT_CONFIG.md baseline sections, TRIGGER_RULES
-
-> Note: Summary is now handled by the orchestrator directly, not a separate agent.
+**Exclude:** PROJECT_CONFIG.md baseline sections, TRIGGER_RULES
 
 ---
 
-## Output format
-
-```markdown
-## Context Bundle — [Target Agent] receiving [Artifact Type]
-
-### Included
-
-- [file or section]: [one-line reason]
-
-### Explicitly Excluded
-
-- [file]: [reason]
-
-### Current Artifact
-
-[paste or reference]
-```
-
-## Rules
-
-- Never include a full governance file when a section suffices.
-- Never include all subtask TEPs when only one subtask is being worked.
-- For sectioned Delivery Plans, default to `delivery-subtask-*` only. Add `delivery-routing`, `delivery-context-manifest`, or `delivery-telemetry` only when they materially change the target agent's work.
-- If in doubt, exclude and note it — the agent can request more context via `blocker-escalation-report`.
-
 ## Token Ceilings per Role
 
-These caps apply to curated governance/context tokens only (excluding the agent's own instructions and the current artifact content).
+These caps apply to curated governance/context tokens in the bundle (excluding the agent stub's own content and target source files the agent reads during work).
 
-| Target Role                      | Max Governance Tokens | Rationale                                                                    |
-| -------------------------------- | --------------------- | ---------------------------------------------------------------------------- |
-| executor                         | 1 500                 | Only needs TEP + one baseline section + DoD                                  |
-| reviewer                         | 2 400                 | Needs implementation report + active scope excerpt + review checklist + one baseline section + DoD |
-| lead (TEP creation)              | 1 800                 | One subtask excerpt + one baseline section + tech stack                      |
-| delivery-pm                      | 2 000                 | Task packet + domains/cross-domain rules + trigger rules                     |
-| design-agent                     | 1 500                 | Delivery subtask + FE baseline section + small target-context excerpt        |
-| integration-checker              | 1 200                 | Changed-side implementation report + untouched-side contract surface + API/Auth sections |
+| Target Role          | Max Governance Tokens | Rationale |
+| -------------------- | --------------------- | --------- |
+| executor             | 1 500                 | TEP + one baseline section + DoD |
+| reviewer             | 2 400                 | Implementation report + scope excerpt + review checklist + one baseline + DoD |
+| lead (TEP creation)  | 1 800                 | One subtask excerpt + one baseline section + tech stack |
+| delivery-pm          | 2 000                 | Task packet + domains/cross-domain rules + trigger rules |
+| design-agent         | 1 500                 | Delivery subtask + FE baseline + small context excerpt |
+| integration-checker  | 1 200                 | Changed-side implementation + untouched-side contract + API/Auth sections |
 
-If the assembled context exceeds the ceiling, the orchestrator must re-excerpt before dispatching. Over-ceiling dispatch is an orchestration defect.
+---
 
-## Section Extraction
+## Section Extraction Rules
 
-Use `<!-- section:TAG -->` markers in governance and core files to extract precise sections:
+Use `<!-- section:TAG -->` markers in governance and core files to extract precise sections.
 
 ### Delivery Plans
 
-Extract from `task-data.md` → `<!-- section:delivery-plan -->`, then within it:
-
+Extract from `task-data.md` → `<!-- section:delivery-plan -->`:
 - Metadata only → `<!-- section:delivery-metadata -->`
-- Phase overview / grouping → `<!-- section:delivery-phase-<phase-slug> -->`
-- Lead or lightweight executor dispatch → `<!-- section:delivery-subtask-<normalized-subtask-id> -->`
-- Orchestrator routing only → `<!-- section:delivery-routing -->`
-- Diagnostics only → `<!-- section:delivery-context-manifest -->`, `<!-- section:delivery-telemetry -->`
+- Phase overview �� `<!-- section:delivery-phase-<phase-slug> -->`
+- Single subtask → `<!-- section:delivery-subtask-<normalized-subtask-id> -->`
+- Routing only → `<!-- section:delivery-routing -->`
 
 ### Task Packet
 
-Extract from `task-data.md` → `<!-- section:task-packet -->`, then within it:
-
+Extract from `task-data.md` → `<!-- section:task-packet -->`:
 - Metadata / title → `<!-- section:task-metadata -->`
-- Requirements excerpt → `<!-- section:task-requirements-excerpt -->`
-- Scope estimate → `<!-- section:task-scope-estimate -->`
-- Audit context only → `<!-- section:task-business-goal -->`, `<!-- section:task-known-blockers -->`, `<!-- section:task-assumptions -->`
+- Requirements → `<!-- section:task-requirements-excerpt -->`
+- Scope → `<!-- section:task-scope-estimate -->`
+- Audit context → `<!-- section:task-business-goal -->`, `<!-- section:task-known-blockers -->`, `<!-- section:task-assumptions -->`
 
 ### Technical Execution Packet
 
-Extract from `section:tep` in `ai-work.md`, then within it:
-
-- Metadata / traceability → `<!-- section:tep-metadata -->`
+Extract from `section:tep` in `ai-work.md`:
+- Metadata → `<!-- section:tep-metadata -->`
 - Goal → `<!-- section:tep-goal -->`
-- Scope / target files → `<!-- section:tep-target-files -->`, `<!-- section:tep-non-goals -->`
-- Contract / context for executors → `<!-- section:tep-expected-contract -->`, `<!-- section:tep-context-bundle -->`
+- Scope → `<!-- section:tep-target-files -->`, `<!-- section:tep-non-goals -->`
+- Contract/context → `<!-- section:tep-expected-contract -->`, `<!-- section:tep-context-bundle -->`
 - Execution guidance → `<!-- section:tep-implementation-steps -->`, `<!-- section:tep-risks -->`, `<!-- section:tep-acceptance-signals -->`, `<!-- section:tep-recommended-tests -->`
 
 ### Implementation Report
 
-Extract from `section:implementation` in `ai-work.md`, then within it:
-
+Extract from `section:implementation` in `ai-work.md`:
 - Metadata → `<!-- section:impl-metadata -->`
 - Change summary → `<!-- section:impl-summary -->`, `<!-- section:impl-files-changed -->`
 - Validation evidence → `<!-- section:impl-tests-run -->`
-- Audit/supporting context → `<!-- section:impl-dynamic-skills -->`, `<!-- section:impl-plugins-used -->`, `<!-- section:impl-unresolved-issues -->`, `<!-- section:impl-project-state -->`
+- Audit → `<!-- section:impl-dynamic-skills -->`, `<!-- section:impl-plugins-used -->`, `<!-- section:impl-unresolved-issues -->`, `<!-- section:impl-project-state -->`
 
 ### Review Report
 
-Extract from `section:review` in `ai-work.md`. Multi-cycle: the section contains `### Cycle N` subsections — latest cycle first. Within a cycle:
-
+Extract from `section:review` in `ai-work.md` (multi-cycle: `### Cycle N` subsections, latest first):
 - Metadata → `<!-- section:review-metadata -->`
-- Rework input for executors → `<!-- section:review-findings -->`
-- Orchestrator closure → `<!-- section:review-verdict -->`, `<!-- section:review-completion-summary -->`
+- Rework input → `<!-- section:review-findings -->`
+- Closure → `<!-- section:review-verdict -->`, `<!-- section:review-completion-summary -->`
 
-**Latest review cycle rule:** For executor rework, extract only the last `### Cycle N` subsection within `<!-- section:review -->`. Do not send previous cycles.
+**Latest review cycle rule:** For executor rework, extract only the last `### Cycle N` subsection. Do not send previous cycles.
 
 ### Integration Check Report
 
-Remains a **standalone file** (references two subtasks simultaneously): `ai-workflow-data/tasks/<task_id>/integration-check-<cycle>.md`.
-
+Standalone file: `ai-workflow-data/tasks/<task_id>/integration-check-<cycle>.md`
 - Metadata → `<!-- section:integration-metadata -->`
-- Compared surfaces → `<!-- section:integration-fe-surface -->`, `<!-- section:integration-be-surface -->`
-- Result / actions → `<!-- section:integration-verdict -->`, `<!-- section:integration-findings -->`, `<!-- section:integration-recommended-fixes -->`
+- Surfaces → `<!-- section:integration-fe-surface -->`, `<!-- section:integration-be-surface -->`
+- Result → `<!-- section:integration-verdict -->`, `<!-- section:integration-findings -->`, `<!-- section:integration-recommended-fixes -->`
 
 ### Design / Domain Addenda
 
-Extract from `section:plan-addendum` in `ai-work.md`, then within it:
-
+Extract from `section:plan-addendum` in `ai-work.md`:
 - Design body → `<!-- section:design-findings -->`, `<!-- section:design-constraints -->`, `<!-- section:design-open-questions -->`
 - Domain body → `<!-- section:domain-invariants -->`, `<!-- section:domain-role-checks -->`, `<!-- section:domain-status-checks -->`, `<!-- section:domain-clarifications -->`
 
 ### Blocker Escalation Report
 
-Extract from `section:escalation-N` in `ai-work.md` (N is orchestrator-assigned, incrementing per escalation event), then within it:
-
+Extract from `section:escalation-N` in `ai-work.md`:
 - Metadata → `<!-- section:blocker-metadata -->`
-- Blocker decision payload → `<!-- section:blocker-type -->`, `<!-- section:blocker-what-is-blocked -->`, `<!-- section:blocker-what-was-tried -->`, `<!-- section:blocker-required-input -->`, `<!-- section:blocker-suggested-rerouting -->`
+- Payload → `<!-- section:blocker-type -->`, `<!-- section:blocker-what-is-blocked -->`, `<!-- section:blocker-what-was-tried -->`, `<!-- section:blocker-required-input -->`, `<!-- section:blocker-suggested-rerouting -->`
 
-### Subtask Summary
+### Baseline sections in `PROJECT_CONFIG.md`
 
-No section markers — read `<subtask_id>/summary.md` directly (written by Reviewer). Contains: Verdict, Cycles, Files Changed, Telemetry, Notes (completion one-liner).
-
-### Baseline sections in `ai-workflow-data/config/PROJECT_CONFIG.md`
-
-- FE executor/lead → extract `<!-- section:fe-baseline -->`
-- BE executor/lead → extract `<!-- section:be-baseline -->`
-- Integration checker → extract `<!-- section:api-baseline -->`
-- Auth-related tasks → also extract `<!-- section:auth-baseline -->`
-- Reviewer → extract the layer-relevant section only
+- FE executor/lead → `<!-- section:fe-baseline -->`
+- BE executor/lead → `<!-- section:be-baseline -->`
+- Integration checker → `<!-- section:api-baseline -->`
+- Auth-related → also `<!-- section:auth-baseline -->`
+- Reviewer → layer-relevant section only
 
 ### REVIEW_CHECKLIST.md
 
-- Always include: `<!-- section:core-review -->`, `<!-- section:severity -->`, `<!-- section:rework-policy -->`
-- Any domain subtask → also include `<!-- section:domain-review -->`
-- Paired cross-domain subtask (e.g. FE+BE), or any cycle with an Integration Check Report → include `<!-- section:domain-review -->`, `<!-- section:integration-review -->`
+- Always: `<!-- section:core-review -->`, `<!-- section:severity -->`, `<!-- section:rework-policy -->`
+- Domain subtask → also `<!-- section:domain-review -->`
+- Paired cross-domain / IC report → also `<!-- section:integration-review -->`
 
 ### RESOLUTION_POLICY.md
 
-- Always include: `<!-- section:global-skills -->`
-- Reviewer → also include `<!-- section:reviewer-skills -->`
-- Agents checking plugin availability → `<!-- section:registry -->` only
-- Adding/deprecating plugins → also include `<!-- section:intake -->`, `<!-- section:deprecation -->`
+- Always: `<!-- section:global-skills -->`
+- Reviewer → also `<!-- section:reviewer-skills -->`
+- Plugin availability → `<!-- section:registry -->` only
 - Budget enforcement → `<!-- section:plugin-budget -->`, `<!-- section:skill-budget -->`
-- Domain-fixed skills are not in this file — pull them from `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `skills`.
 
 ### PROJECT_CONSTITUTION.md
 
-- Executors/Reviewer → extract `<!-- section:definition-of-done -->`
-- Stack, auth, and API baselines are not in the constitution — pull them from `ai-workflow-data/config/PROJECT_CONFIG.md` instead (`<!-- section:<domain> -->`, `<!-- section:auth-baseline -->`, `<!-- section:api-baseline -->`).
-
-Topic-key conventions match the baseline sections in `ai-workflow-data/config/PROJECT_CONFIG.md` (`fe-baseline`, `be-baseline`, `auth-baseline`, `api-baseline`). When a role needs "relevant requirements only," pick by topic key from `PROJECT_CONFIG`.
+- Executors/Reviewer → `<!-- section:definition-of-done -->`
 
 ### TRIGGER_RULES.md
 
-- Orchestrator (full routing) → all trigger sections
-- FE dispatch decisions → `<!-- section:fe-triggers -->`, `<!-- section:design-agent-trigger -->`, `<!-- section:domain-validation-note -->`
-- BE dispatch decisions → `<!-- section:be-triggers -->`
-- Executor dispatch gate → `<!-- section:definition-of-ready -->`
-- Budget enforcement → `<!-- section:turn-budgets -->`, `<!-- section:telemetry-gate -->`
+- Delivery PM (full routing) → all trigger sections
+- FE dispatch → `<!-- section:fe-triggers -->`, `<!-- section:design-agent-trigger -->`, `<!-- section:domain-validation-note -->`
+- BE dispatch → `<!-- section:be-triggers -->`
+- Executor gate → `<!-- section:definition-of-ready -->`
+- Budget → `<!-- section:turn-budgets -->`, `<!-- section:telemetry-gate -->`
 
 ### ORCHESTRATION.md
 
 - Default workflow → `<!-- section:default-flow -->`
-- Escalation rules → `<!-- section:escalation -->`
+- Escalation → `<!-- section:escalation -->`
+
+## Rules
+
+- Never include a full governance file when a section suffices.
+- Never include all subtask TEPs when only one subtask is being worked.
+- For sectioned Delivery Plans, default to `delivery-subtask-*` only.
+- If in doubt, exclude and note it — the agent can request more context via `blocker-escalation-report`.
+- The bundle file path convention is `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md`.
+- Bundle files are retained after agent completion. Their key data (role, token ceiling used, sections included) is summarized into `<subtask_id>/summary.md` by the orchestrator. Bundle files may then be deleted.

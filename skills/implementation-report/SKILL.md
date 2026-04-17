@@ -9,7 +9,7 @@ Produce this report immediately after completing a subtask. Record everything th
 
 ## Output Target
 
-**Append** to `<!-- section:implementation -->` in the subtask's `ai-work.md`. The section placeholder MUST already exist — if absent, raise a Blocker Escalation Report. Also append one `### <role>` subsection to `<!-- section:context-manifest -->` and one line to `<!-- section:telemetry -->`.
+**Append** to `<!-- section:implementation -->` in the subtask's `ai-work.md`. The section placeholder MUST already exist — if absent, raise a Blocker Escalation Report. Also write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
 
 **Ultra-light path:** When the subtask qualifies for the ultra-light tier, append the compact `impl-ultra` block inside `<!-- section:implementation -->` instead of the full template below. Do NOT append to `task-data.md`.
 
@@ -68,21 +68,10 @@ yes | no
 <!-- /section:impl-project-state -->
 ```
 
-Then append to `<!-- section:context-manifest -->`:
+Then write diagnostics to `<subtask_id>/summary.md`:
 
-```markdown
-### executor
-| path | bucket | bytes |
-| ---- | ------ | ----- |
-| ... | ... | ... |
-Totals: governance 0 | artifact 0 | source 0 | schema 0 | docs 0
-```
-
-Then append to `<!-- section:telemetry -->`:
-
-```
-executor | <turns_used>/<turns_budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET>
-```
+- Append your telemetry line under `## Telemetry`
+- Append your `### executor` context manifest subsection under `## Context Manifest`
 
 ## Rules
 - `impl-files-changed` must list every file that was modified, created, or deleted.

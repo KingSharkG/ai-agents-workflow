@@ -15,11 +15,12 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 
 ## Collection Protocol
 
-1. After each subtask completes, read `<!-- section:telemetry -->` lines from the subtask's `ai-work.md` — one line per agent, format: `<role> | <turns>/<budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET>`.
-2. Read `### <role>` subsections from `<!-- section:context-manifest -->` in `ai-work.md` to get per-agent bucket totals.
-3. Read `<subtask_id>/summary.md` for the completion one-liner (used in Changes by Phase).
-4. Append rows to the Detail table, update Context Breakdown, and recalculate Totals.
-5. At task completion, populate the Changes by Phase section — the existence of the finalized `ai-workflow-data/tasks/<task_id>/summary.md` marks the task complete.
+1. After each subtask completes, read `## Telemetry` lines from `<subtask_id>/summary.md` — one line per agent, format: `<role> | <turns>/<budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET>`.
+2. Read `### <role>` subsections from `## Context Manifest` in `<subtask_id>/summary.md` to get per-agent bucket totals.
+3. Read `## Notes` from `<subtask_id>/summary.md` for the completion one-liner (used in Changes by Phase).
+4. Read `## Dispatch Bundles` from `<subtask_id>/summary.md` for bundle audit data.
+5. Append rows to the Detail table, update Context Breakdown, and recalculate Totals.
+6. At task completion, populate the Changes by Phase section — the existence of the finalized `ai-workflow-data/tasks/<task_id>/summary.md` marks the task complete.
 
 ## Output Template
 
@@ -78,5 +79,5 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 - **Skills / Plugins columns**: copy the cost buckets from the telemetry line exactly.
 - **Rework cycles**: count only reviewer→executor rework loops, not normal pipeline progression.
 - **Creator**: only the chief-orchestrator creates or updates this file.
-- **Context Breakdown is mandatory**: every update must refresh per-agent bucket totals, task totals, and Repeat reads from `<!-- section:context-manifest -->` subsections in each subtask's `ai-work.md`.
+- **Context Breakdown is mandatory**: every update must refresh per-agent bucket totals, task totals, and Repeat reads from `## Context Manifest` subsections in each subtask's `<subtask_id>/summary.md`.
 - **Repeat reads**: list any path appearing in at least 2 agents' manifests for the same task; write `none` when none exist yet.

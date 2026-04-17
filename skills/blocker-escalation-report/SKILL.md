@@ -19,7 +19,7 @@ Use this skill to produce a **Blocker Escalation Report**. This is the structure
 
 ## Output Target
 
-**Append** to `<!-- section:escalation-N -->` in the subtask's `ai-work.md`. The orchestrator assigns N (incrementing per escalation event within the subtask) and writes the placeholder before this skill runs. Also append one `### <role>` subsection to `<!-- section:context-manifest -->` and one line to `<!-- section:telemetry -->`.
+**Append** to `<!-- section:escalation-N -->` in the subtask's `ai-work.md`. The orchestrator assigns N (incrementing per escalation event within the subtask) and writes the placeholder before this skill runs. Also write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
 
 ## Output Format
 
@@ -68,20 +68,10 @@ Append inside `<!-- section:escalation-N -->`:
 <!-- /section:blocker-suggested-rerouting -->
 ```
 
-Then append to `<!-- section:context-manifest -->`:
+Then write diagnostics to `<subtask_id>/summary.md`:
 
-```markdown
-### <blocked-agent>
-| path | bucket | bytes |
-| ---- | ------ | ----- |
-Totals: governance 0 | artifact 0 | source 0 | schema 0 | docs 0
-```
-
-Then append to `<!-- section:telemetry -->`:
-
-```
-<blocked-agent> | <turns_used>/<turns_budget> turns | tokens: ~<in>/~<out> | skills: low | plugins: low | escalated
-```
+- Append your telemetry line under `## Telemetry` (with status: `escalated`)
+- Append your `### <blocked-agent>` context manifest subsection under `## Context Manifest`
 
 ## Rules
 

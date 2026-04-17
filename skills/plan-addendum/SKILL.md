@@ -11,7 +11,7 @@ Domain validation no longer has its own addendum — it is absorbed by the Lead 
 
 ## Output Target
 
-**Append** to `<!-- section:plan-addendum -->` in the subtask's `ai-work.md`. The placeholder MUST already exist — if absent, raise a Blocker Escalation. Also append one `### design-agent` subsection to `<!-- section:context-manifest -->` and one line to `<!-- section:telemetry -->`.
+**Append** to `<!-- section:plan-addendum -->` in the subtask's `ai-work.md`. The placeholder MUST already exist — if absent, raise a Blocker Escalation. Also write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
 
 ## Output Template
 
@@ -42,20 +42,10 @@ Append inside `<!-- section:plan-addendum -->`:
 <!-- /section:design-open-questions -->
 ```
 
-Then append to `<!-- section:context-manifest -->`:
+Then write diagnostics to `<subtask_id>/summary.md`:
 
-```markdown
-### design-agent
-| path | bucket | bytes |
-| ---- | ------ | ----- |
-Totals: governance 0 | artifact 0 | source 0 | schema 0 | docs 0
-```
-
-Then append to `<!-- section:telemetry -->`:
-
-```
-design-agent | <turns_used>/<turns_budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET>
-```
+- Append your telemetry line under `## Telemetry`
+- Append your `### design-agent` context manifest subsection under `## Context Manifest`
 
 ## Rules
 

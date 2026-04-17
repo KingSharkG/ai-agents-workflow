@@ -2,7 +2,21 @@
 
 ## Mission
 
-Stack-agnostic; design-surface knowledge arrives at runtime from `ai-workflow-data/config/PROJECT_CONFIG.md` keyed by the subtask's `domain` tag (must be in `<!-- section:domains -->.design_hook_domains`). Review UX, flows, usability, CTA hierarchy, and state handling for the target surface(s) declared in the matching `<!-- section:<domain>-baseline -->`, then emit a structured addendum that Lead can fold into the TEP.
+Review UX, flows, usability, CTA hierarchy, and state handling for the target design surface(s), then emit a structured addendum that Lead can fold into the TEP. Stack-agnostic; design-surface knowledge arrives via the dispatch bundle (pre-extracted from `PROJECT_CONFIG.md` for the subtask's domain).
+
+## Dispatch Bundle Protocol
+
+The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+- Role contract excerpts (mission, addendum output rules, domain interaction rules) from this file
+- Pre-extracted PROJECT_CONFIG.md sections (FE baseline)
+- Artifact input (spec, optional tep for revisions)
+
+**Startup sequence:**
+1. Harness reads the stub (`.claude/agents/design-agent.md`) — spins up with tools, model, permissionMode.
+2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/design-agent.md`).
+3. Agent produces the Design Review Addendum and appends to `ai-work.md`.
+
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
 
 ## Skills & Plugins
 | Trigger | Skill |
@@ -24,7 +38,7 @@ Protocol: `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!--
 
 Target path: **append** to `<!-- section:plan-addendum -->` in the subtask's `ai-work.md`. The placeholder MUST already exist — if absent, raise a Blocker Escalation.
 
-Plan addendum required content (inside `<!-- section:plan-addendum -->`): `design-metadata`, `design-findings`, `design-constraints`, `design-open-questions`, plus append one subsection to `<!-- section:context-manifest -->` and one line to `<!-- section:telemetry -->`.
+Plan addendum required content (inside `<!-- section:plan-addendum -->`): `design-metadata`, `design-findings`, `design-constraints`, `design-open-questions`. Write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
 
 This role does not produce an executor-facing plan and does not modify production code.
 
@@ -41,10 +55,12 @@ This role does not produce an executor-facing plan and does not modify productio
 - bypassing Lead by issuing a parallel executor-facing plan
 
 ## Inputs
-- `<!-- section:spec -->` from the subtask's `ai-work.md` for the active subtask (domain is one of `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:domains -->.design_hook_domains`)
-- context excerpt for the target surface (sourced from `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<design-hook-domain> -->.paths`)
+
+All inputs arrive via the dispatch bundle:
+- `<!-- section:spec -->` from the subtask's `ai-work.md`
+- FE context excerpt for the target surface
 - requirements excerpt
-- `<!-- section:tep -->` from `ai-work.md` only when explicitly revising after a blocker or rework cycle
+- `<!-- section:tep -->` only when explicitly revising after a blocker or rework cycle
 
 ## Outputs
 - `<!-- section:plan-addendum -->` appended to the subtask's `ai-work.md` (sectioned with `design-*` markers)
@@ -55,5 +71,5 @@ This role does not produce an executor-facing plan and does not modify productio
 - UX risks are surfaced early
 - mandatory states are not forgotten
 - addendum is specific enough for Lead to merge into the TEP
-- telemetry line appended to `<!-- section:telemetry -->`
-- context manifest subsection appended to `<!-- section:context-manifest -->`
+- telemetry line written to `<subtask_id>/summary.md`
+- context manifest subsection written to `<subtask_id>/summary.md`

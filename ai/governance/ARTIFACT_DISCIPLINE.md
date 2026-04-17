@@ -8,7 +8,7 @@ Every agent whose output is a structured artifact MUST work in this order, witho
 
 1. **First action**: `Write` the artifact skeleton at the target path with all required sections as placeholders. Empty tables and `TBD` values are acceptable; the file must exist before any other work begins.
 2. **Then** iterate: read inputs, map the codebase or plan, make decisions, and `Edit` the skeleton in place as findings land. The artifact grows from skeleton to final deliverable progressively.
-3. **Last action before returning**: populate `<!-- section:context-manifest -->` (final bytes + bucket totals) and append a line to `<!-- section:telemetry -->` (actual turns + token estimate).
+3. **Last action before returning**: write diagnostics (telemetry line + context manifest) to `<subtask_id>/summary.md` (the orchestrator creates the summary.md skeleton alongside ai-work.md).
 
 **Target paths under the new task structure:**
 
@@ -88,7 +88,7 @@ For tasks with ≥3 ultra-light subtasks, the Orchestrator MUST append an `<!-- 
 - Ultra-light does **not** apply if the single-file diff touches auth, migrations, contract types, or shared utilities with multiple callers.
 - Rework cap remains 1 cycle (consistent with `complexity: low` — see `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:rework-cap -->`).
 - The orchestrator records the ultra-light outcome in `ai-workflow-data/tasks/<task_id>/summary.md` as a `ul:` prefix row rather than a full agent row.
-- The `<!-- section:telemetry -->` in `ai-work.md` is still required — the executor and reviewer each append one line.
+- Telemetry lines are still required — the executor and reviewer each write their telemetry to `<subtask_id>/summary.md`.
 
 <!-- /section:ultra-light-tier -->
 
@@ -126,16 +126,9 @@ The Chief Orchestrator MUST write the `ai-work.md` skeleton before dispatching a
 <!-- section:integration-check -->
 <!-- placeholder: populated by integration-checker if triggered (integration-* markers) -->
 <!-- /section:integration-check -->
-
-<!-- section:context-manifest -->
-<!-- each agent appends one ### <role> subsection with their manifest table -->
-<!-- /section:context-manifest -->
-
-<!-- section:telemetry -->
-<!-- each agent appends one line:
-     <role> | <turns_used>/<turns_budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET> -->
-<!-- /section:telemetry -->
 ```
+
+Diagnostic data (telemetry, context manifest) is written to `<subtask_id>/summary.md`, NOT to `ai-work.md`. The orchestrator creates the summary.md skeleton alongside ai-work.md.
 
 ### Ultra-light skeleton (complexity: low, no Lead trigger)
 
@@ -153,15 +146,9 @@ The Chief Orchestrator MUST write the `ai-work.md` skeleton before dispatching a
 <!-- section:review -->
 <!-- placeholder: populated by reviewer (compact review-ultra format) -->
 <!-- /section:review -->
-
-<!-- section:context-manifest -->
-<!-- each agent appends one ### <role> subsection -->
-<!-- /section:context-manifest -->
-
-<!-- section:telemetry -->
-<!-- each agent appends one line -->
-<!-- /section:telemetry -->
 ```
+
+Diagnostic data (telemetry, context manifest) is written to `<subtask_id>/summary.md`, NOT to `ai-work.md`.
 
 ### Escalation section (appended by orchestrator on demand)
 
@@ -173,37 +160,8 @@ When a blocker is raised within a subtask, the orchestrator appends the followin
 <!-- /section:escalation-N -->
 ```
 
-### context-manifest subsection format
+### Diagnostic data location
 
-Each agent appends a named subsection so the orchestrator can scan per-agent costs without reading the whole file:
-
-```markdown
-<!-- section:context-manifest -->
-### lead
-| path | bucket | bytes |
-| ---- | ------ | ----- |
-| ai-workflow-data/config/PROJECT_CONFIG.md                | governance | 1240 |
-
-Totals: governance 1240 | artifact 0 | source 0 | schema 0 | docs 0
-
-### executor
-| path | bucket | bytes |
-| ---- | ------ | ----- |
-
-Totals: governance 0 | artifact 0 | source 0 | schema 0 | docs 0
-<!-- /section:context-manifest -->
-```
-
-### telemetry section format
-
-Each agent appends one line in pipeline order:
-
-```markdown
-<!-- section:telemetry -->
-lead | 3/4 turns | tokens: ~2400/~800 | skills: low | plugins: low | ok
-executor | 5/6 turns | tokens: ~1800/~1200 | skills: medium | plugins: low | ok
-reviewer | 2/3 turns | tokens: ~1600/~600 | skills: low | plugins: low | ok
-<!-- /section:telemetry -->
-```
+Telemetry and context manifest data are written to `<subtask_id>/summary.md` (NOT to `ai-work.md`). The orchestrator creates the summary.md skeleton alongside the ai-work.md skeleton. Each agent appends its diagnostics to summary.md. See the `review-report` skill for the canonical summary.md template.
 
 <!-- /section:ai-work-skeleton -->

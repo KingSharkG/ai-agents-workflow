@@ -8,18 +8,25 @@
  * This is non-blocking — it never exits non-zero.
  *
  * Called with the target agent name as argv[2].
+ * Optionally receives the artifact path as argv[3] (ai-work.md spec section).
  *
  * Path resolution (plugin install):
  *   PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT (set by harness when the
  *                 plugin is loaded); falls back to __dirname/.. for dev runs
  *                 inside the plugin repo itself.
  *   CWD         = process.cwd(); this is the consumer repo where
- *                 ai-workflow-data/config/PROJECT_CONFIG.md and .claude/plans live.
+ *                 ai-workflow-data/config/PROJECT_CONFIG.md lives.
  *
  * Keyword sources (unioned per agent):
  *   1. ${PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md → <!-- section:trigger-keywords --> (base; stack-agnostic)
  *   2. ${CWD}/ai-workflow-data/config/PROJECT_CONFIG.md → <!-- section:extra-trigger-keywords --> (optional project overlay)
  * If the governance base is missing or malformed, the hook exits 0 with no hint.
+ *
+ * Artifact text source:
+ *   Reads the subtask's ai-work.md <!-- section:spec --> content (passed via
+ *   argv[3] or ARTIFACT_PATH env var). Falls back to empty if unavailable.
+ *   NOTE: .claude/plans/ is NOT scanned — it was unreliable (matched the
+ *   orchestrator's own plan, not the task artifact).
  */
 
 const fs = require('fs');
@@ -33,7 +40,7 @@ const CWD = process.cwd();
 
 const GOVERNANCE_PATH = path.join(PLUGIN_ROOT, 'ai', 'governance', 'TRIGGER_RULES.md');
 const PROJECT_CONFIG_PATH = path.join(CWD, 'ai-workflow-data', 'config', 'PROJECT_CONFIG.md');
-const PLANS_DIR = path.join(CWD, '.claude', 'plans');
+const ARTIFACT_PATH = process.argv[3] || process.env.ARTIFACT_PATH || '';
 
 // --- YAML-ish parser: reads a single fenced ```yaml block inside a given section marker. ---
 
@@ -95,19 +102,17 @@ for (const agent of allAgents) {
 
 if (Object.keys(TRIGGER_RULES).length === 0) process.exit(0);
 
-// --- Read current plan/artifact context (from consumer repo's .claude/plans) ---
+// --- Read artifact text from subtask's ai-work.md spec section ---
 
 let artifactText = '';
-try {
-  const files = fs
-    .readdirSync(PLANS_DIR)
-    .filter(f => f.endsWith('.md') || f.endsWith('.json'))
-    .map(f => ({ name: f, mtime: fs.statSync(path.join(PLANS_DIR, f)).mtimeMs }))
-    .sort((a, b) => b.mtime - a.mtime);
-  if (files.length > 0) {
-    artifactText = fs.readFileSync(path.join(PLANS_DIR, files[0].name), 'utf8').toLowerCase();
-  }
-} catch (_) {}
+if (ARTIFACT_PATH) {
+  try {
+    const raw = fs.readFileSync(ARTIFACT_PATH, 'utf8');
+    // Extract <!-- section:spec --> content if present, otherwise use full file
+    const specMatch = raw.match(/<!--\s*section:spec\s*-->([\s\S]*?)<!--\s*\/section:spec\s*-->/i);
+    artifactText = (specMatch ? specMatch[1] : raw).toLowerCase();
+  } catch (_) {}
+}
 
 // --- Skip assessment if dispatching to a non-conditional agent ---
 

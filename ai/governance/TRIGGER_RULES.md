@@ -141,16 +141,21 @@ The executor MUST still append to `<!-- section:implementation -->` in `ai-work.
 
 ## Telemetry Gate
 
-Every agent appending to `ai-work.md` MUST also append to `<!-- section:telemetry -->` (one line) and `<!-- section:context-manifest -->` (one `### <role>` subsection) in the same file. **Exception:** ultra-light `impl-ultra` / `review-ultra` compact blocks (see `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:ultra-light-tier -->`) still require telemetry lines in `ai-work.md`.
+Every agent MUST write diagnostics to `<subtask_id>/summary.md`:
+- One telemetry line under `## Telemetry`
+- One `### <role>` subsection under `## Context Manifest`
 
-For `task-data.md` (task-packet and delivery-plan sections), the agent appends telemetry inside `<!-- section:task-telemetry -->` and `<!-- section:delivery-telemetry -->` respectively (same section-per-agent pattern, embedded in the relevant top-level section).
+The orchestrator creates the summary.md skeleton (with diagnostic section placeholders) alongside the ai-work.md skeleton. Diagnostics are NOT written to ai-work.md.
 
-Authoritative format: `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:telemetry -->` and `<!-- section:context-manifest -->`. Do not restate the format here.
+**Exception:** ultra-light `impl-ultra` / `review-ultra` compact blocks still require telemetry lines in summary.md.
+
+For `task-data.md` (task-packet and delivery-plan sections), the agent appends telemetry inside `<!-- section:task-telemetry -->` and `<!-- section:delivery-telemetry -->` respectively.
+
+Authoritative format: `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:telemetry -->` and `<!-- section:context-manifest -->`.
 
 Policy:
 
-- `ai-work.md` missing `<!-- section:telemetry -->` or `<!-- section:context-manifest -->` → skeleton is invalid; orchestrator rejects and rewrites the skeleton.
-- Agent appends missing after its turn → route back to the agent.
+- `<subtask_id>/summary.md` missing after agent's turn → orchestrator routes back to the agent.
 - `OVER_BUDGET` is a **soft blocker**: Delivery PM re-scopes before another cycle; it is NOT a reason to retry with a larger budget silently.
 
 <!-- /section:telemetry-gate -->

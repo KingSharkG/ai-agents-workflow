@@ -16,7 +16,7 @@ A TEP is dispatchable only when all are true:
 
 ## Output Target
 
-**Append** to `<!-- section:tep -->` in the subtask's `ai-work.md`. The section placeholder MUST already exist — if absent, raise a Blocker Escalation Report. Also append one `### <role>` subsection to `<!-- section:context-manifest -->` and one line to `<!-- section:telemetry -->`.
+**Append** to `<!-- section:tep -->` in the subtask's `ai-work.md`. The section placeholder MUST already exist — if absent, raise a Blocker Escalation Report. Also write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
 
 ## Output Template
 
@@ -95,21 +95,10 @@ yarn test --filter <module>
 <!-- /section:tep-recommended-skills -->
 ```
 
-Then append to `<!-- section:context-manifest -->`:
+Then write diagnostics to `<subtask_id>/summary.md`:
 
-```markdown
-### lead
-| path | bucket | bytes |
-| ---- | ------ | ----- |
-| ... | ... | ... |
-Totals: governance 0 | artifact 0 | source 0 | schema 0 | docs 0
-```
-
-Then append to `<!-- section:telemetry -->`:
-
-```
-lead | <turns_used>/<turns_budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET>
-```
+- Append your telemetry line under `## Telemetry`
+- Append your `### lead` context manifest subsection under `## Context Manifest`
 
 ## Length Budget
 

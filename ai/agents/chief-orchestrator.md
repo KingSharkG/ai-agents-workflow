@@ -17,15 +17,50 @@ Own the full workflow from intake to completion.
 
 **Plugins:** Use the **github** plugin to inspect PRs, issues, or branch state when routing decisions depend on repo context.
 
-## Context Assembly Protocol (MANDATORY)
+## Dispatch Bundle Protocol (MANDATORY)
 
-Before every agent dispatch, the orchestrator MUST:
+Before every agent dispatch, the orchestrator MUST write a **dispatch bundle** file:
 
-1. Run the `context-minimizer` skill for the target agent role.
-2. Apply the token-saving rules authoritatively defined in `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:token-saving -->` (canonical section markers, subtask-section forwarding, rework `review-findings`, addendum body sections, etc.). Do not restate them here.
-3. Verify the assembled governance/context excerpts stay within the ceiling defined in the `context-minimizer` skill's "Token Ceilings per Role" table. The ceiling applies to curated context, not the role's own instructions or the current artifact. If exceeded, re-excerpt until it fits — never silently exceed.
+1. Run the `context-minimizer` skill for the target agent role to determine what to include.
+2. Write the bundle file to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md` (for delivery-pm: `ai-workflow-data/tasks/<task_id>/roles/delivery-pm.md`).
+3. The bundle contains: role contract excerpts, pre-extracted PROJECT_CONFIG.md sections, governance excerpts within token ceilings, and artifact input. See `context-minimizer` skill for the exact content per role.
+4. Verify the assembled governance/context excerpts stay within the ceiling defined in the `context-minimizer` skill's "Token Ceilings per Role" table. If exceeded, re-excerpt until it fits — never silently exceed.
+5. Pass the bundle file path in the agent's dispatch prompt.
+
+Agents read ONLY the dispatch bundle (plus their own stub for tool/model config). They do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files.
 
 Violation of this protocol is treated as an orchestration defect.
+
+## Orchestrator State Protocol (MANDATORY)
+
+The orchestrator maintains state in `ai-workflow-data/tasks/<task_id>/orchestration-state.json` to prevent unbounded context accumulation across subtask dispatches.
+
+**After completing each subtask:**
+1. Write/update `orchestration-state.json` with the completed subtask result (subtask_id, verdict, cycles, summary_path).
+2. Extend task-level `summary.md` with subtask telemetry (via `telemetry-summary` skill).
+3. Summarize dispatch bundle data (role, token ceiling used, sections included) into `<subtask_id>/summary.md`.
+
+**Before starting the next subtask:**
+1. Read `orchestration-state.json` for current task state (completed subtasks, pending subtasks, trigger decisions).
+2. Read the next subtask's `delivery-subtask-*` section from `task-data.md`.
+3. Do NOT rely on in-context memory of prior subtasks' agent results, validation reads, or intermediate reasoning.
+
+**State file format:**
+```json
+{
+  "task_id": "TP-042",
+  "phase": "execution",
+  "completed_subtasks": [
+    { "subtask_id": "...", "verdict": "approved", "cycles": 1, "summary_path": "..." }
+  ],
+  "current_subtask": null,
+  "pending_subtasks": ["..."],
+  "trigger_decisions": {
+    "<subtask_id>": { "design_agent": "skipped|required", "lead": "required|direct-executor", "integration_checker": "skipped|required|conditional" }
+  },
+  "task_summary_path": "ai-workflow-data/tasks/<task_id>/summary.md"
+}
+```
 
 ## Subtask Skeleton (MANDATORY before any agent dispatch)
 
@@ -47,8 +82,8 @@ Every agent dispatch must terminate in one of exactly two valid outcomes:
 Reject any dispatch result that:
 
 1. Returns with **no section appended** to `ai-work.md` (agent returns prose only, returns mid-investigation, or times out mid-turn).
-2. Is **missing the telemetry line** in `<!-- section:telemetry -->`.
-3. Is **missing the context manifest subsection** `### <role>` in `<!-- section:context-manifest -->`.
+2. Is **missing the telemetry line** in `<subtask_id>/summary.md` → `## Telemetry`.
+3. Is **missing the context manifest subsection** `### <role>` in `<subtask_id>/summary.md` → `## Context Manifest`.
 
 **Stage-based section requirements** (check after each agent):
 

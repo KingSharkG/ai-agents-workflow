@@ -19,19 +19,34 @@ Perform code and architecture review using the full checklist.
 
 **Plugins:** **github** plugin to fetch PR diff, comments, and CI check status directly.
 
+## Dispatch Bundle Protocol
+
+The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+- Role contract excerpts (mission, review protocol, severity definitions, verdict rules) from this file
+- Pre-extracted PROJECT_CONFIG.md sections (domain validation_rules)
+- Governance excerpts (review checklist, DoD)
+- Artifact input (implementation, spec, diff, integration check report if available)
+
+**Startup sequence:**
+1. Harness reads the stub (`.claude/agents/reviewer.md`) — spins up with tools, model, permissionMode.
+2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/reviewer.md`).
+3. Agent performs the review and writes both `ai-work.md` review section and `summary.md`.
+
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
+
 ## Produce-Artifact-First Rule (MANDATORY)
 
 Protocol: `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:produce-artifact-first -->`.
 
 **Two outputs per approved subtask (both MANDATORY):**
 
-1. **First action**: Write the `<subtask_id>/summary.md` skeleton (verdict TBD, files TBD). This file must exist before appending to `ai-work.md`.
-2. **Then**: Append `### Cycle N` block to `<!-- section:review -->` in the subtask's `ai-work.md`. Append one subsection to `<!-- section:context-manifest -->` and one line to `<!-- section:telemetry -->`.
-3. **Last action**: Finalize `summary.md` with actual verdict, files, telemetry aggregate, and notes.
+1. **First action**: The orchestrator creates `<subtask_id>/summary.md` skeleton alongside ai-work.md. Verify it exists before appending to `ai-work.md`.
+2. **Then**: Append `### Cycle N` block to `<!-- section:review -->` in the subtask's `ai-work.md`.
+3. **Last action**: Finalize `summary.md` with actual verdict, files, telemetry, context manifest, dispatch bundle data, and notes.
 
 Review section required content (inside `<!-- section:review -->` `### Cycle N`): `review-metadata`, `review-verdict`, `review-findings` (severity-tagged), `review-summary`, `review-completion-summary`.
 
-**Ultra-light path:** Append the compact `review-ultra` block inside `<!-- section:review -->` in `ai-work.md`. Still write `summary.md`.
+**Ultra-light path:** Append the compact `review-ultra` block inside `<!-- section:review -->` in `ai-work.md`. Still finalize `summary.md`.
 
 ## Allowed Actions
 
@@ -51,13 +66,14 @@ Review section required content (inside `<!-- section:review -->` `### Cycle N`)
 
 ## Inputs
 
+All inputs arrive via the dispatch bundle:
 - `<!-- section:implementation -->` from the subtask's `ai-work.md` (current cycle)
 - changed files or diff for the current cycle (mandatory — review may not rely on the implementation section alone)
 - `<!-- section:spec -->` from `ai-work.md` for scope, acceptance signals, and out-of-scope checks
 - relevant requirement excerpt when the subtask changes contract, auth, or user-visible business behavior
-- `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:quality-gates -->` — the authoritative commands the Executor's `impl-tests-run` must match (`test`, `lint`, `typecheck`, `build`). A change that skips a gate without justification is a finding.
+- quality-gates commands (`test`, `lint`, `typecheck`, `build`) — the Executor's `impl-tests-run` must match these. A change that skips a gate without justification is a finding.
 - Integration Check Report if available
-- review checklist excerpt
+- review checklist excerpts (core-review, severity, rework-policy, domain-review, integration-review as applicable)
 - relevant baseline excerpt
 - for rework cycles: only the previous `### Cycle N` subsection within `<!-- section:review -->`
 
@@ -79,6 +95,4 @@ When `status: approved`: include a `review-completion-summary` (1-3 sentences) d
 - severity is justified
 - review is evidence-based
 - changed code or diff was inspected directly before approval
-- `summary.md` written for the subtask
-- telemetry line appended to `<!-- section:telemetry -->`
-- context manifest subsection appended to `<!-- section:context-manifest -->`
+- `summary.md` finalized for the subtask (verdict, files, telemetry, context manifest, dispatch bundles, notes)

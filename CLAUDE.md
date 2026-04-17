@@ -12,7 +12,7 @@ Portable multi-agent governance layer. Packages the orchestration, lead/executor
 - `hooks/` — three hooks with `hooks/hooks.json`: `guard-subtask-skeleton` (blocking PreToolUse), `evaluate-triggers` (observation PreToolUse), `validate-artifact-chain` (PostToolUse)
 - `ai/core/PROJECT_CONSTITUTION.md` — workflow rules, Definition of Done
 - `ai/governance/` — trigger rules, review checklist, artifact discipline, resolution policy (skills + plugins)
-- `ai/playbooks/ORCHESTRATION.md` — default flow, telemetry, context manifest, token-saving rules
+- `ai/playbooks/ORCHESTRATION.md` — default flow, dispatch bundles, orchestrator state, token-saving rules
 - `ai/agents/` — canonical stack-agnostic role contracts (source of truth for `agents/` stubs)
 
 ## Paths inside this plugin
@@ -21,12 +21,13 @@ Agent stubs, role contracts, and skills reference plugin-internal docs via `${CL
 
 ## Consumer-repo expectations
 
-The plugin reads two files from the consumer repo (NOT from the plugin), both under `ai-workflow-data/`:
+The plugin reads files from the consumer repo (NOT from the plugin), under `ai-workflow-data/`:
 
 - `ai-workflow-data/config/PROJECT_CONFIG.md` — per-project overlay: domains, baselines, cross-domain rules, quality gates, per-domain skills/plugins, `<!-- section:extra-trigger-keywords -->`. Generated and maintained by the `init` agent.
 - `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — per-subtask artifact. Must exist before dispatching any non-exempt agent, or the `guard-subtask-skeleton` hook blocks the Task call.
-
-Consumer repos should also keep a `.claude/plans/` directory so `evaluate-triggers` can scan the active plan for trigger keywords.
+- `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` — per-subtask summary with diagnostics (telemetry, context manifest, dispatch bundle audit). Created by orchestrator alongside ai-work.md, finalized by Reviewer.
+- `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md` — dispatch bundles written by orchestrator before each agent dispatch. Contain pre-curated role context (contract excerpts, config, governance, artifact input).
+- `ai-workflow-data/tasks/<task_id>/orchestration-state.json` — orchestrator state persistence between subtasks.
 
 Run `/ai-agents-workflow:init` in a new consumer project (or natural language: "initialize project config") to generate `ai-workflow-data/config/PROJECT_CONFIG.md` and scaffold `ai-workflow-data/tasks/`. The full slash-command surface (`init` | `add` | `update` | `remove` | `task`) is documented in `README.md` → **Usage**.
 

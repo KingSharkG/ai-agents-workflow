@@ -15,9 +15,24 @@ Convert requirements into ordered, non-conflicting delivery subtasks.
 
 - `context7` — look up library/framework/SDK constraints when writing subtask DoDs and acceptance signals, so they reference real API shapes rather than assumed ones.
 
+## Dispatch Bundle Protocol
+
+The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+- Role contract excerpts (mission, decomposition rules, domain tagging rules) from this file
+- Pre-extracted PROJECT_CONFIG.md sections (domains, cross-domain rules)
+- Governance excerpts (trigger rules)
+- Artifact input (task packet)
+
+**Startup sequence:**
+1. Harness reads the stub (`.claude/agents/delivery-pm.md`) — spins up with tools, model, permissionMode.
+2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/roles/delivery-pm.md`).
+3. Agent produces the Delivery Plan and appends to `task-data.md`.
+
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
+
 ## Domain Tagging & Handoff Note
 
-Every subtask in the Delivery Plan MUST carry a `domain` field sourced from `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:domains -->` → `declared_domains`. Assign it by applying `detection_rules` (fe_signals, be_signals) to the subtask scope. If signals match more than one declared domain, apply the `decomposition_rule` (split into paired single-domain subtasks). If signals match an undeclared domain, apply the `escalation_rule` (emit `blocker-escalation-report`, do not guess).
+Every subtask in the Delivery Plan MUST carry a `domain` field sourced from the dispatch bundle's Project Context section (`declared_domains`). Assign it by applying `detection_rules` (fe_signals, be_signals) to the subtask scope. If signals match more than one declared domain, apply the `decomposition_rule` (split into paired single-domain subtasks). If signals match an undeclared domain, apply the `escalation_rule` (emit `blocker-escalation-report`, do not guess).
 
 When the Delivery Plan covers paired single-domain subtasks that share cross-cutting rules (business statuses, lifecycle transitions, role/permission gates), Delivery PM MUST include a `## Domain Handoff Note` section in the Delivery Plan:
 
@@ -59,8 +74,10 @@ Delivery Plan required sections (inside `<!-- section:delivery-plan -->`): `deli
 
 ## Inputs
 
-- Task Packet
-- relevant `ai-workflow-data/config/PROJECT_CONFIG.md` excerpts: `<!-- section:domains -->` (detection_rules, decomposition_rule, escalation_rule), `<!-- section:cross-domain-rules -->` (cross-cutting ordering and compatibility rules applied during decomposition), and any referenced baselines
+All inputs arrive via the dispatch bundle:
+- Task Packet (full)
+- PROJECT_CONFIG.md excerpts: domains (detection_rules, decomposition_rule, escalation_rule), cross-domain-rules (ordering and compatibility rules), and any referenced baselines
+- TRIGGER_RULES.md (for routing recommendations)
 
 ## Outputs
 
@@ -73,5 +90,5 @@ Delivery Plan required sections (inside `<!-- section:delivery-plan -->`): `deli
 - blockers are explicit
 - all new Delivery Plans use `plan_format: sectioned-v1` and per-subtask section markers
 - DoD exists for each subtask
-- telemetry footer included in Delivery Plan
-- context manifest footer included in Delivery Plan (see `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → Context Manifest)
+- telemetry footer included in Delivery Plan (`<!-- section:delivery-telemetry -->`)
+- context manifest footer included in Delivery Plan (`<!-- section:delivery-context-manifest -->`)

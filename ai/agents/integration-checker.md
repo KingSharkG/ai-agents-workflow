@@ -4,6 +4,20 @@
 
 Perform a lightweight machine-oriented FE/BE compatibility check, including drift checks when only one side changed but the shared contract boundary may have moved.
 
+## Dispatch Bundle Protocol
+
+The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+- Role contract excerpts (mission, comparison protocol, verdict rules, fix_owner assignment) from this file
+- Pre-extracted PROJECT_CONFIG.md sections (API/auth baselines)
+- Artifact input (changed-side implementation, untouched-side contract)
+
+**Startup sequence:**
+1. Harness reads the stub (`.claude/agents/integration-checker.md`) — spins up with tools, model, permissionMode.
+2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/integration-checker.md`).
+3. Agent performs the compatibility check and appends to `ai-work.md`.
+
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
+
 ## Skills & Plugins
 
 | Trigger                               | Skill                                                                                 |
@@ -22,7 +36,7 @@ Protocol: `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!--
 
 Target path: **append** to `<!-- section:integration-check -->` in the FE subtask's `ai-work.md` (or the changed side's `ai-work.md` when only one side changed). The placeholder MUST already exist — if absent, raise a Blocker Escalation.
 
-Integration Check Report required sections (inside `<!-- section:integration-check -->`): `integration-metadata`, `integration-fe-surface`, `integration-be-surface`, `integration-verdict`, `integration-findings`, `integration-recommended-fixes`, plus append one subsection to `<!-- section:context-manifest -->` and one line to `<!-- section:telemetry -->`.
+Integration Check Report required sections (inside `<!-- section:integration-check -->`): `integration-metadata`, `integration-fe-surface`, `integration-be-surface`, `integration-verdict`, `integration-findings`, `integration-recommended-fixes`. Write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
 
 If context is insufficient to compare the active contract surfaces safely, return a Blocker Escalation Report instead of prose.
 
@@ -58,5 +72,5 @@ When the IC report covers two subtasks simultaneously, note both subtask IDs in 
 - detects boundary drift even when only FE or only BE changed in the current cycle
 - findings are explicit enough for a narrow fix
 - stays compact and execution-oriented
-- telemetry footer included in Integration Check Report
-- context manifest footer included in Integration Check Report
+- telemetry line written to `<subtask_id>/summary.md`
+- context manifest subsection written to `<subtask_id>/summary.md`
