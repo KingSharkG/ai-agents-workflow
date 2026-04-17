@@ -1,0 +1,12 @@
+{
+  "name": "ai-agents-workflow",
+  "owner": { "name": "KingSharkG" },
+  "plugins": [
+    {
+      "name": "ai-agents-workflow",
+      "source": { "source": "github", "repo": "KingSharkG/ai-agents-workflow" },
+      "description": "Multi-agent governance layer",
+      "version": "1.0.1"
+    }
+  ]
+}
