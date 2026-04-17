@@ -6,7 +6,7 @@
 
 1. Chief Orchestrator receives the task.
 2. Create `task-data.md` at `ai-workflow-data/tasks/<task_id>/task-data.md` using the `task-packet` skill. The task-packet content lives inside `<!-- section:task-packet -->`.
-3. Delivery PM appends the Delivery Plan section to `task-data.md` using the `delivery-plan` skill. The delivery-plan content lives inside `<!-- section:delivery-plan -->` (with nested `<!-- section:delivery-subtask-* -->` IDs unchanged).
+3. Delivery PM appends the Delivery Plan section to `task-data.md` using the `delivery-plan` skill. The delivery-plan content lives inside `<!-- section:delivery-plan -->` (with nested `<!-- section:delivery-subtask-* -->` IDs unchanged). After the Delivery PM completes, the orchestrator populates `subtask_offsets` in `orchestration-state.json` with the line range of each `<!-- section:delivery-subtask-<id> -->` block — this enables targeted reads later (see Orchestrator State Management).
 4. Before dispatching any agent for a subtask, the Chief Orchestrator MUST write both:
    - The `ai-work.md` skeleton at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` using the template from `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:ai-work-skeleton -->`. The `<!-- section:spec -->` is populated by copying the exact content of the matching `<!-- section:delivery-subtask-<id> -->` from `task-data.md`.
    - The `summary.md` skeleton at `<subtask_id>/summary.md` with placeholder sections for Verdict, Cycles, Files Changed, Dispatch Bundles, Telemetry, Context Manifest, and Notes. Each agent appends its diagnostics here; the Reviewer finalizes it.
@@ -63,7 +63,7 @@ The orchestrator persists its state to `ai-workflow-data/tasks/<task_id>/orchest
 
 **Before starting the next subtask:**
 1. Read `orchestration-state.json` for current task state.
-2. Read the next subtask's `delivery-subtask-*` section from `task-data.md`.
+2. Read the next subtask's spec using targeted reading: use the `subtask_offsets` entry in `orchestration-state.json` to call `Read(task-data.md, offset=start_line, limit=end_line-start_line)`. Do NOT read the full `task-data.md` — it grows with every subtask and can exceed 40 KB.
 3. Do NOT rely on in-context memory of prior subtasks' results or reasoning.
 
 **State file schema:**
@@ -79,9 +79,14 @@ The orchestrator persists its state to `ai-workflow-data/tasks/<task_id>/orchest
   "trigger_decisions": {
     "<subtask_id>": { "design_agent": "skipped|required", "lead": "required|direct-executor", "integration_checker": "skipped|required|conditional" }
   },
+  "subtask_offsets": {
+    "<subtask_id>": { "start_line": 157, "end_line": 195 }
+  },
   "task_summary_path": "ai-workflow-data/tasks/<task_id>/summary.md"
 }
 ```
+
+**`subtask_offsets`** maps each subtask ID to the line range of its `<!-- section:delivery-subtask-<id> -->` block in `task-data.md`. Populated by the Delivery PM after writing the plan (or by the orchestrator after the Delivery PM completes). This enables targeted `Read(file, offset, limit)` calls instead of loading the full file on every turn.
 
 <!-- /section:orchestrator-state -->
 
@@ -111,6 +116,7 @@ The orchestrator persists its state to `ai-workflow-data/tasks/<task_id>/orchest
 - For Integration Checker, prefer `impl-files-changed`, `impl-tests-run`, and direct contract excerpts from `<!-- section:implementation -->`
 - `delivery-routing`, `delivery-context-manifest`, and `delivery-telemetry` are orchestrator-facing sections and should not be included in dispatch bundles
 - Follow the single-fact-per-artifact rule — reference earlier sections by name instead of repeating content
+- Orchestrator MUST use `subtask_offsets` from `orchestration-state.json` for targeted reads of `task-data.md` — never load the full file after the planning phase
 
 ### Delta-review protocol (rework cycles)
 

@@ -73,6 +73,15 @@ Then write diagnostics to `<subtask_id>/summary.md`:
 - Append your telemetry line under `## Telemetry`
 - Append your `### executor` context manifest subsection under `## Context Manifest`
 
+## Output Size Guidelines
+
+These are soft targets — complex subtasks may exceed them, but typical reports should stay within these bounds to keep ai-work.md manageable across multiple cycles:
+
+- `impl-summary`: ≤4 sentences
+- `impl-files-changed`: ≤20 rows. For large diffs, group related files (e.g., "5 translation files updated with identical structure") instead of listing each individually.
+- `impl-tests-run`: ≤15 lines including command and output. Truncate passing test output to the summary line; include full output only for failures.
+- `impl-dynamic-skills` / `impl-plugins-used`: 1 line each unless >3 items used.
+
 ## Rules
 - `impl-files-changed` must list every file that was modified, created, or deleted.
 - `impl-tests-run` must include the actual command — not just "tests passed".

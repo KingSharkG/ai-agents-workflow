@@ -132,6 +132,15 @@ Then write diagnostics to `<subtask_id>/summary.md`:
 - Append your telemetry line under `## Telemetry`
 - Append your `### reviewer` context manifest subsection under `## Context Manifest`
 
+## Output Size Guidelines
+
+These are soft targets to keep ai-work.md manageable — complex subtasks may exceed them:
+
+- **Findings per cycle:** ≤10 items. If more issues exist, group related ones (e.g., "3 instances of missing error handling" as a single finding with multiple locations).
+- **Per finding:** ≤5 lines for `description` + `rework_direction` combined. Quote specific code/field names, not entire blocks.
+- **Completion summary:** ≤3 sentences.
+- **Review summary:** ≤3 sentences.
+
 ## Rules
 - `verdict` must be `approved` only when zero high/medium findings remain.
 - `cycle_count` must be read from the previous `### Cycle N` subsection — do not reset or invent it.

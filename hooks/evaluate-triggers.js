@@ -83,12 +83,60 @@ function parseKeywordSection(filePath, sectionName) {
   return rules;
 }
 
+// --- mtime-based disk cache for parsed keyword rules ---
+// Hooks run as separate processes so in-memory caching won't persist.
+// Instead, cache parsed results to a temp JSON file keyed by source file mtime.
+
+const CACHE_PATH = path.join(CWD, 'ai-workflow-data', 'config', '.trigger-keywords-cache.json');
+
+function getFileMtime(filePath) {
+  try {
+    return fs.statSync(filePath).mtimeMs;
+  } catch (_) {
+    return 0;
+  }
+}
+
+function loadCachedRules() {
+  try {
+    return JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8'));
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveCachedRules(cache) {
+  try {
+    fs.writeFileSync(CACHE_PATH, JSON.stringify(cache), 'utf8');
+  } catch (_) {
+    // Non-critical — parsing will just repeat next time
+  }
+}
+
+function getCachedOrParse(filePath, sectionName, cacheKey, cache) {
+  const currentMtime = getFileMtime(filePath);
+  if (
+    cache &&
+    cache[cacheKey] &&
+    cache[cacheKey].mtime === currentMtime &&
+    currentMtime > 0
+  ) {
+    return cache[cacheKey].rules;
+  }
+  const rules = parseKeywordSection(filePath, sectionName);
+  if (!cache) cache = {};
+  cache[cacheKey] = { mtime: currentMtime, rules };
+  return rules;
+}
+
 // --- Union base (governance) + optional overlay (project config) per agent. ---
 
-const baseRules = parseKeywordSection(GOVERNANCE_PATH, 'trigger-keywords');
+const cache = loadCachedRules() || {};
+const baseRules = getCachedOrParse(GOVERNANCE_PATH, 'trigger-keywords', 'base', cache);
 if (!baseRules || Object.keys(baseRules).length === 0) process.exit(0);
 
-const extraRules = parseKeywordSection(PROJECT_CONFIG_PATH, 'extra-trigger-keywords') || {};
+const extraRules = getCachedOrParse(PROJECT_CONFIG_PATH, 'extra-trigger-keywords', 'extra', cache) || {};
+saveCachedRules(cache);
 
 const TRIGGER_RULES = {};
 const allAgents = new Set([...Object.keys(baseRules), ...Object.keys(extraRules)]);

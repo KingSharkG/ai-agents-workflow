@@ -90,7 +90,7 @@ The agent reads ONLY this bundle (plus its own stub for tool/model config). It d
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:<domain> -->` block (for baseline anchors, validation_rules, forbidden_actions)
-- Referenced baseline anchors
+- Referenced baseline anchors — **skip if the TEP's `<!-- section:tep-context-bundle -->` already contains the same baseline content** (Lead embeds baselines in the TEP context_bundle for medium/hard subtasks; re-including them wastes ~300-500 tokens)
 - `<!-- section:project-best-practices -->`
 - `executor:` sub-block of `<!-- section:agent-best-practices -->`
 
@@ -177,6 +177,7 @@ The agent reads ONLY this bundle (plus its own stub for tool/model config). It d
 **Re-review bundle (rework cycle N > 1):**
 - Include only: updated `<!-- section:implementation -->` (current cycle), changed files or diff (current cycle), `<!-- section:spec -->` acceptance signals.
 - Do NOT include: full prior review cycles, full TEP, full baseline.
+- **Governance reduction:** Each reviewer dispatch is a new agent instance with no memory of prior cycles. However, if the re-review is for Medium/Low findings only (no scope change), include a condensed governance reminder instead of full sections: include only `<!-- section:severity -->` and `<!-- section:rework-policy -->` (skip `core-review`, `domain-review`, `integration-review`). Add a one-liner: `Review protocol: same as Cycle 1 — focus on whether findings from Cycle N-1 are resolved.` This saves ~800-1,200 tokens per rework cycle. For High findings or scope changes, include full governance as in Cycle 1.
 
 ---
 
