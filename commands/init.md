@@ -6,7 +6,7 @@ allowed-tools: Task
 
 Dispatch the `init` subagent to bootstrap the consumer repo's project configuration.
 
-Use the Task tool with `subagent_type: init` and pass this prompt to the agent:
+Use the Task tool with `subagent_type: ai-agents-workflow:init` and pass this prompt to the agent:
 
 ```
 init $ARGUMENTS

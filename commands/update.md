@@ -6,7 +6,7 @@ allowed-tools: Task
 
 Dispatch the `init` subagent in `update` mode.
 
-Use the Task tool with `subagent_type: init` and prompt:
+Use the Task tool with `subagent_type: ai-agents-workflow:init` and prompt:
 
 ```
 update

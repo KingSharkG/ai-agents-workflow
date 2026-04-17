@@ -12,7 +12,7 @@ If `$ARGUMENTS` is empty, first use `AskUserQuestion` to collect:
 - `value` — the entry to add
 - optional `--domain <d>` — when the target-type is domain-scoped
 
-Then dispatch via the Task tool with `subagent_type: init` and prompt:
+Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:init` and prompt:
 
 ```
 add $ARGUMENTS
