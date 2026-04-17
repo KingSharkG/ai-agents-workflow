@@ -7,6 +7,12 @@ permissionMode: acceptEdits
 maxTurns: 12
 effort: medium
 color: yellow
+hooks:
+  PreToolUse:
+    - matcher: "Read"
+      hooks:
+        - type: command
+          command: "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-agent-reads.js\""
 ---
 
 > You are the Executor.

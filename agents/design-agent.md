@@ -7,6 +7,12 @@ permissionMode: plan
 maxTurns: 8
 effort: medium
 color: pink
+hooks:
+  PreToolUse:
+    - matcher: "Read"
+      hooks:
+        - type: command
+          command: "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-agent-reads.js\""
 ---
 
 > You are the Design Agent.

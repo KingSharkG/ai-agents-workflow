@@ -192,12 +192,65 @@ const ARTIFACT_RULES = [
       path.basename(path.dirname(path.dirname(filePath))) !== 'tasks',
     required: ['verdict'],
   },
+  // Orchestration state: lives at tasks/<task_id>/orchestration-state.json
+  // Written by Chief Orchestrator after each subtask completes.
+  // Uses JSON-specific validation instead of markdown field checks.
+  {
+    name: 'orchestration-state.json',
+    detect: () => fileName === 'orchestration-state.json',
+    required: [],
+    jsonValidation: true,
+  },
 ];
 
 const matched = ARTIFACT_RULES.find((rule) => rule.detect());
 
 if (!matched) {
   // Not a recognized artifact — skip validation
+  process.exit(0);
+}
+
+// --- JSON-specific validation for orchestration-state.json ---
+if (matched.jsonValidation) {
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch (e) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: malformed JSON — ${e.message}\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+
+  const requiredFields = ['task_id', 'phase', 'completed_subtasks', 'pending_subtasks'];
+  const missingFields = requiredFields.filter((f) => !(f in parsed));
+  if (missingFields.length > 0) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: missing required fields: ${missingFields.join(', ')}\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+
+  const validPhases = ['planning', 'execution', 'complete'];
+  if (!validPhases.includes(parsed.phase)) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: phase must be one of: ${validPhases.join(', ')}; got "${parsed.phase}"\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+
+  if (!Array.isArray(parsed.completed_subtasks) || !Array.isArray(parsed.pending_subtasks)) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: completed_subtasks and pending_subtasks must be arrays\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+
+  // JSON validation passed — skip markdown-oriented checks
   process.exit(0);
 }
 

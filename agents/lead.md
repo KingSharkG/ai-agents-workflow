@@ -7,6 +7,12 @@ permissionMode: plan
 maxTurns: 10
 effort: medium
 color: green
+hooks:
+  PreToolUse:
+    - matcher: "Read"
+      hooks:
+        - type: command
+          command: "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-agent-reads.js\""
 ---
 
 > You are the Lead.

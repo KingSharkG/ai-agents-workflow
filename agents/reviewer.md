@@ -7,6 +7,12 @@ permissionMode: default
 maxTurns: 10
 effort: high
 color: red
+hooks:
+  PreToolUse:
+    - matcher: "Read"
+      hooks:
+        - type: command
+          command: "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-agent-reads.js\""
 ---
 
 > You are the Reviewer.

@@ -7,6 +7,12 @@ permissionMode: plan
 maxTurns: 6
 effort: low
 color: cyan
+hooks:
+  PreToolUse:
+    - matcher: "Read"
+      hooks:
+        - type: command
+          command: "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-agent-reads.js\""
 ---
 
 > You are the Integration Checker.
