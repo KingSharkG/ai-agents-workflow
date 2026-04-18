@@ -40,7 +40,7 @@ Protocol: `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!--
 
 **Two outputs per approved subtask (both MANDATORY):**
 
-1. **First action**: The orchestrator creates `<subtask_id>/summary.md` skeleton alongside ai-work.md. Verify it exists before appending to `ai-work.md`.
+1. **First action**: Verify that `<subtask_id>/summary.md` exists (the orchestrator creates this skeleton alongside ai-work.md before any agent dispatch — see ORCHESTRATION.md Step 6). If missing, raise a Blocker Escalation.
 2. **Then**: Append `### Cycle N` block to `<!-- section:review -->` in the subtask's `ai-work.md`.
 3. **Last action**: Finalize `summary.md` with actual verdict, files, telemetry, context manifest, dispatch bundle data, and notes.
 

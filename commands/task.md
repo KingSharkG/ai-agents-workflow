@@ -12,6 +12,7 @@ Pre-flight: if `ai-workflow-data/config/PROJECT_CONFIG.md` does not exist in the
 
 Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:chief-orchestrator`, passing the task description verbatim as a new task. The orchestrator will:
 
-1. Produce a Task Packet via the `task-packet` skill at `ai-workflow-data/tasks/<task_id>/task-data.md`.
-2. Hand off to Delivery PM, Lead, Executor, Reviewer, and Integration Checker per `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:default-flow -->`.
-3. Finalize `ai-workflow-data/tasks/<task_id>/summary.md` when all subtasks complete.
+1. **Classify the request** (Step 0) into one of: `direct-answer`, `plan-only`, `execution-simple`, or `execution-full`. For questions and explanations, the orchestrator answers directly without creating artifacts. For plan-only requests, it stops after the delivery plan is approved. See `${CLAUDE_PLUGIN_ROOT}/ai/agents/chief-orchestrator.md` → Intake Classification Protocol.
+2. For execution paths: produce a Task Packet via the `task-packet` skill at `ai-workflow-data/tasks/<task_id>/task-data.md`.
+3. Hand off to Delivery PM, Lead, Executor, Reviewer, and Integration Checker per `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:default-flow -->`.
+4. Finalize `ai-workflow-data/tasks/<task_id>/summary.md` when all subtasks complete.

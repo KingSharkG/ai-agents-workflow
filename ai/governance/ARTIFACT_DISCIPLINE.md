@@ -85,6 +85,10 @@ For tasks with ≥3 ultra-light subtasks, the Orchestrator MUST append an `<!-- 
 <!-- /ultra-light-index -->
 ```
 
+### Ultra-light eligibility timing
+
+The orchestrator evaluates ultra-light eligibility at **skeleton creation time** (Step 6 of the default flow), not during Delivery PM planning. The Delivery PM may flag `complexity: low` but does not determine ultra-light status — that requires the orchestrator to also verify no Lead/Design Agent trigger fired and no endpoint/schema/auth change is involved. The ultra-light index (for ≥3 ultra-light subtasks) is appended to the delivery-plan section after all subtasks are complete, during the P4 gate.
+
 ### Constraints
 
 - Ultra-light does **not** apply if the single-file diff touches auth, migrations, contract types, or shared utilities with multiple callers.
@@ -241,3 +245,60 @@ When the Reviewer finalizes `<subtask_id>/summary.md`, ALL of the following fiel
 The `validate-summary-telemetry` hook provides non-blocking warnings when telemetry or context manifest is missing at verdict time. The orchestrator's artifact gate (chief-orchestrator step 13) enforces the full schema.
 
 <!-- /section:summary-minimum-schema -->
+
+<!-- section:verdict-taxonomy -->
+
+## Verdict Taxonomy
+
+Verdicts are used in three contexts with distinct allowed values. Agents and hooks MUST use these exact values — no synonyms, no casing variants.
+
+### Review Verdict (`review_verdict` in summary.md)
+
+| Value | Meaning |
+|-------|---------|
+| `pending` | Review has not started (skeleton default) |
+| `approved` | Implementation meets acceptance criteria; no unresolved high/medium findings |
+| `changes_requested` | Rework required; findings listed in `review-findings` |
+| `needs-replan` | Rework cap exhausted with unresolved high/medium findings; subtask returns to Delivery PM |
+
+### Integration Verdict (`verdict` in `<!-- section:integration-check -->`)
+
+| Value | Meaning |
+|-------|---------|
+| `ok` | FE/BE contract surfaces are compatible; no mismatches found |
+| `not-ok` | Mismatches found; `fix_owner` (fe / be / both) identifies who must fix |
+
+### Orchestration Verdict (`completed_subtasks[].verdict` in orchestration-state.json)
+
+| Value | Meaning |
+|-------|---------|
+| `approved` | Reviewer approved; subtask is done |
+| `needs-replan` | Subtask could not be completed within rework cap; Delivery PM must re-scope |
+
+### Workflow State (`workflow_state` in summary.md)
+
+| Value | Meaning |
+|-------|---------|
+| `in-progress` | Subtask is actively being worked on |
+| `approved` | Subtask completed and approved |
+| `blocked-on-user` | Waiting for external user action |
+| `pending-integration-check` | IC gate required but IC has not returned `verdict: ok` yet |
+| `needs-replan` | Rework cap exhausted; awaiting Delivery PM re-scope |
+
+<!-- /section:verdict-taxonomy -->
+
+<!-- section:escalation-routing -->
+
+## Escalation Routing Table
+
+When an agent raises a Blocker Escalation Report, the `route_to` field directs the orchestrator where to send it. All agents use the same routing options:
+
+| route_to | Meaning | When to use |
+|----------|---------|-------------|
+| `lead` | Route back to Lead for re-validation or approach revision | TEP-defined logic is infeasible, design conflict discovered, target files missing |
+| `delivery-pm` | Route to Delivery PM for re-scoping | Rework cap exhausted, requirements ambiguous, subtask needs decomposition |
+| `user` | Surface to user for decision | Missing credentials, external dependency unavailable, policy question |
+
+The orchestrator reads `route_to` and dispatches accordingly. If `route_to: user`, the orchestrator presents the blocker via `AskUserQuestion` and pauses until resolved.
+
+<!-- /section:escalation-routing -->

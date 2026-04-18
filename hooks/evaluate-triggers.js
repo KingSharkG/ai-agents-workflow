@@ -32,7 +32,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const targetAgent = process.argv[2] || '';
+// Strip plugin namespace prefix if present (e.g., "ai-agents-workflow:executor" → "executor").
+const rawTargetAgent = process.argv[2] || '';
+const targetAgent = rawTargetAgent.includes(':')
+  ? rawTargetAgent.split(':').pop()
+  : rawTargetAgent;
 
 const PLUGIN_ROOT =
   process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..');

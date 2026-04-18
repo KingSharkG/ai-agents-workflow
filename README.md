@@ -51,12 +51,25 @@ Five namespaced slash commands cover the plugin's surface:
 | `/ai-agents-workflow:add <target-type> <value> [--domain <d>]`    | Add a config entry                                    |
 | `/ai-agents-workflow:update`                                      | Refresh CLI-owned sections of the config              |
 | `/ai-agents-workflow:remove <target-type> <value> [--domain <d>]` | Remove a config entry                                 |
-| `/ai-agents-workflow:task <description>`                          | Kick off a new task through the chief-orchestrator    |
+| `/ai-agents-workflow:task <description>`                          | Classify and route a task (see Intake Classification) |
 | `/ai-agents-workflow:continue [task_id]`                          | Resume an interrupted or in-progress task             |
 
 Valid `<target-type>` values for `:add` / `:remove`: `domain`, `skill`, `plugin`, `baseline`, `validation-rule`, `forbidden-action`, `best-practice`, `cross-domain-rule`.
 
 Natural-language invocations (e.g., "initialize project config") still work — the slash commands are a typed shortcut, not a replacement.
+
+### Intake Classification
+
+The `/ai-agents-workflow:task` command classifies each request before deciding how much of the pipeline to run:
+
+| Classification | When | What happens |
+|----------------|------|-------------|
+| `direct-answer` | Question, explanation, advice, summary | Orchestrator answers inline — no artifacts, no agents |
+| `plan-only` | User explicitly wants only a plan or proposal | Creates Task Packet + Delivery Plan, stops after approval. Resume later with `/continue` |
+| `execution-simple` | Small, low-risk code change (single-file, no schema/API/auth change) | Runs the workflow with lightweight/ultra-light paths preferred |
+| `execution-full` | Everything else (default) | Runs the full orchestration pipeline |
+
+If the request is ambiguous, the orchestrator asks one clarifying question before proceeding. See `ai/agents/chief-orchestrator.md` → Intake Classification Protocol for the full heuristics.
 
 ## External sources
 

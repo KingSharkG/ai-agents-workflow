@@ -24,7 +24,12 @@ const path = require('path');
 const PLUGIN_ROOT =
   process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..');
 
-const subagentType = process.env.CLAUDE_TOOL_INPUT_SUBAGENT_TYPE || '';
+// Strip plugin namespace prefix if present (e.g., "ai-agents-workflow:executor" → "executor").
+// The Claude Code plugin system provides namespaced types but all role comparisons use bare names.
+const rawSubagentType = process.env.CLAUDE_TOOL_INPUT_SUBAGENT_TYPE || '';
+const subagentType = rawSubagentType.includes(':')
+  ? rawSubagentType.split(':').pop()
+  : rawSubagentType;
 const prompt = process.env.CLAUDE_TOOL_INPUT_PROMPT || '';
 
 // chief-orchestrator is exempt from all checks
@@ -35,10 +40,15 @@ if (!subagentType || subagentType === 'chief-orchestrator') {
 // --- Gap 4: Governance file existence ---
 // Role-to-governance mapping derived from context-minimizer skill.
 // Only roles whose bundles include governance excerpts are listed.
+// Role-to-governance mapping derived from context-minimizer skill.
+// All roles that receive governance excerpts in their dispatch bundles are listed.
 const ROLE_GOVERNANCE_FILES = {
   executor: ['ai/core/PROJECT_CONSTITUTION.md'],
   reviewer: ['ai/core/PROJECT_CONSTITUTION.md', 'ai/governance/REVIEW_CHECKLIST.md'],
   'delivery-pm': ['ai/governance/TRIGGER_RULES.md'],
+  lead: ['ai/core/PROJECT_CONSTITUTION.md', 'ai/governance/TRIGGER_RULES.md'],
+  'design-agent': ['ai/core/PROJECT_CONSTITUTION.md'],
+  'integration-checker': ['ai/core/PROJECT_CONSTITUTION.md'],
 };
 
 const governanceFiles = ROLE_GOVERNANCE_FILES[subagentType] || [];

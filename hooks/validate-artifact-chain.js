@@ -286,6 +286,63 @@ const validatePendingUserActionsSection = () => {
   }
 };
 
+const validateICVerdictBeforeApproval = () => {
+  // When a subtask summary is approved, verify that any populated
+  // integration-check section in the sibling ai-work.md contains verdict: ok.
+  // This enforces the mandatory IC gate from TRIGGER_RULES.md.
+  if (matched.name !== 'Subtask Summary') {
+    return;
+  }
+
+  const reviewVerdict = getStatusFieldValue('review_verdict');
+  if (reviewVerdict !== 'approved') {
+    return;
+  }
+
+  const workflowState = getStatusFieldValue('workflow_state');
+  if (workflowState === 'pending-integration-check') {
+    // Explicitly marked as pending IC — allow the write but the subtask
+    // won't advance until IC returns ok and workflow_state changes.
+    return;
+  }
+
+  const dir = path.dirname(filePath);
+  const aiWorkPath = path.join(dir, 'ai-work.md');
+
+  if (!fs.existsSync(aiWorkPath)) {
+    return;
+  }
+
+  const aiWorkContent = fs.readFileSync(aiWorkPath, 'utf8');
+
+  // Check if integration-check section exists and has content beyond placeholder
+  const icSectionMatch = aiWorkContent.match(
+    /<!--\s*section:integration-check\s*-->([\s\S]*?)<!--\s*\/section:integration-check\s*-->/i,
+  );
+
+  if (!icSectionMatch) {
+    return; // No IC section at all — IC was not triggered
+  }
+
+  const icContent = icSectionMatch[1].trim();
+
+  // If the section is just a placeholder comment, IC was not triggered
+  if (!icContent || /^<!--\s*placeholder/i.test(icContent)) {
+    return;
+  }
+
+  // IC section has content — verify it contains verdict: ok
+  if (!/verdict:\s*ok/i.test(icContent)) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: review_verdict=approved but ` +
+        `integration-check section does not contain "verdict: ok".\n` +
+        `The IC gate must be satisfied before a subtask can be approved.\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+};
+
 const validateSectionedDeliveryPlan = () => {
   validatePairedSectionMarkers('Delivery Plan');
 
@@ -431,7 +488,7 @@ if (matched.jsonValidation) {
     process.exit(1);
   }
 
-  const validPhases = ['planning', 'execution', 'blocked', 'complete'];
+  const validPhases = ['planning', 'planned', 'execution', 'blocked', 'complete'];
   if (!validPhases.includes(parsed.phase)) {
     console.error(
       `[validate-artifact-chain] INVALID ${matched.name}: phase must be one of: ${validPhases.join(', ')}; got "${parsed.phase}"\n` +
@@ -504,6 +561,7 @@ validateRequiredHeadings();
 validateSummaryPlaceholderDrift();
 validateAcceptanceSignalsTable();
 validatePendingUserActionsSection();
+validateICVerdictBeforeApproval();
 
 // Run delivery plan section validation whenever task-data.md contains a
 // delivery-plan block. plan_format: sectioned-v1 is mandatory in v1 — if the

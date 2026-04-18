@@ -30,7 +30,7 @@ Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or go
 
 ## Base Plugins
 
-- `context7` — look up UI library and design system docs (Radix, shadcn, MUI, etc.) when validating component constraints against the `<!-- section:<domain>-baseline -->`.
+- `context7` — look up UI library and design system docs (Radix, shadcn, MUI, etc.) when validating component constraints against the `<!-- section:<domain>-baseline -->`. Use `context7:resolve-library-id` to find the library, then `context7:query-docs` to fetch relevant API docs before asserting that a component pattern is valid or invalid.
 
 ## Produce-Artifact-First Rule (MANDATORY)
 

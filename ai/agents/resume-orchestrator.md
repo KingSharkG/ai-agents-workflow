@@ -15,7 +15,7 @@ Discover resumable workflow tasks, reconstruct execution context, present a resu
 ### Step 1 — Scan for resumable tasks
 
 1. Glob `ai-workflow-data/tasks/*/orchestration-state.json`.
-2. For each state file, read only `phase` and `task_id`. A task is **in-progress** when `phase != "complete"`.
+2. For each state file, read only `phase` and `task_id`. A task is **in-progress** when `phase` is not `"complete"` and not `"answered"`. Tasks with `phase: "planned"` are resumable (user approved a plan but did not execute).
 3. For the **recommended task** (multiple in-progress): compare `orchestration-state.json` mtimes via `Bash`. Use `stat -f %m` on macOS or `stat -c %Y` on Linux. If `stat` fails (e.g., busybox), fall back to `ls -l` ISO timestamp comparison. Most recently modified = recommended.
 
 ### Step 2 — Select task
@@ -59,10 +59,12 @@ Chief-orchestrator detects the `resume` keyword and enters the resume entry poin
 | `phase` | `current_subtask` | `pending_subtasks` | Resume Point | Code |
 |---|---|---|---|---|
 | `planning` | `null` | any | Re-dispatch delivery-pm | `REPLAN` |
+| `planned` | `null` | any | Plan approved but not executed; ask user to choose execution path | `EXECUTE_PLAN` |
 | `execution` | non-null | any | Subtask interrupted; inspect ai-work.md sections | `RESUME_SUBTASK` |
 | `execution` | `null` | non-empty | Between subtasks; start next pending | `NEXT_SUBTASK` |
 | `execution` | `null` | empty | All subtasks dequeued but phase not marked complete; re-run task-completion check | `VERIFY_COMPLETE` |
 | `blocked` | any | any | Surface gates + user actions; ask how to proceed | `BLOCKED` |
+| `answered` | any | any | Direct-answer task; nothing to resume | `DONE` |
 | `complete` | any | any | Task done; show summary | `DONE` |
 
 ### Interrupted subtask stage detection (`RESUME_SUBTASK`)

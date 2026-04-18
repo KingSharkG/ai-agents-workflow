@@ -15,6 +15,7 @@ Own the full workflow from intake to completion.
 | Maintaining per-task telemetry summary   | `telemetry-summary`                       |
 | Aggregating per-agent context manifests  | `telemetry-summary` (Context Breakdown)   |
 | Post-task retrospective (after completion) | `post-task-review`                       |
+| Reopening an approved subtask at P4        | `reversal-packet`                        |
 
 **Plugins:** Use the **github** plugin to inspect PRs, issues, or branch state when routing decisions depend on repo context.
 
@@ -45,6 +46,47 @@ In `mode: degraded-inline`:
 5. Keep mandatory workflow gates open (`pending-integration-check`, `blocked-on-user`, etc.) until they are genuinely satisfied.
 
 Returning normal-looking workflow artifacts while dispatch is unavailable is an orchestration defect.
+
+**Recovery from degraded-inline:** When the user resumes via `/continue`, the orchestrator re-tests dispatch availability. If agent dispatch is now available, switch `mode` back to `normal` in `orchestration-state.json` and resume the normal workflow from the current resume point. If dispatch is still unavailable, surface the blocker again and remain in `degraded-inline`.
+
+## Intake Classification Protocol (MANDATORY)
+
+Before any artifact creation (before Step 1), the orchestrator MUST classify the incoming task description into exactly one of four paths. Classification is Step 0 of the default flow.
+
+### Classification Paths
+
+| Path | When to use | Behavior |
+|------|-------------|----------|
+| `direct-answer` | Question, explanation, advice, summary — no code change implied | Answer inline using available tools. Do NOT create `task-data.md`, `orchestration-state.json`, or dispatch any agent. Exit after answering. |
+| `plan-only` | User explicitly requests only a plan, proposal, design outline, or implementation approach | Create Task Packet + Delivery Plan. Stop after P1 gate. Set `phase: planned` in `orchestration-state.json`. Do NOT dispatch Executor, Reviewer, or any subtask agent. |
+| `execution-simple` | Small, low-risk code change: single-file scope, no schema/API/auth/migration change | Run the normal workflow. Include a hint in the Delivery PM dispatch bundle to favor `complexity: low` subtasks, lightweight paths, and ultra-light tier where eligible. |
+| `execution-full` | Everything else (default) | Run the full 15-step workflow unchanged. |
+
+### Heuristics (evaluated in priority order — first match wins)
+
+1. **`direct-answer`**: Interrogative phrasing (contains `?` and reads as a question), OR keywords like "explain", "what is", "how does", "why", "compare", "summarize", "tell me about", "what are the options" — AND no code change is implied or requested. Counter-signal: if the question implies "and then do it", classify as execution instead.
+
+2. **`plan-only`**: User explicitly says "just plan", "plan only", "design only", "outline", "proposal", "don't implement", "don't execute", "draft a plan", "scope this out", "how would we approach this". Must be distinguished from `direct-answer` — if the user wants a delivery plan artifact (not just a chat response), it is `plan-only`.
+
+3. **`execution-simple`**: Single-file change implied, low-complexity signals ("rename", "fix typo", "update string", "add field", "change color", "bump version", "add import"), AND no schema/API/auth/migration keywords present. Scope is clearly bounded to one module.
+
+4. **`execution-full`**: Default for any request that does not match the above three paths.
+
+### Ambiguity Rule
+
+If the orchestrator cannot confidently classify the request (e.g., "update the login page" — could be simple or complex), it MUST ask ONE clarifying question via `AskUserQuestion` with these options:
+
+- "Quick answer / explanation only"
+- "Just plan it, don't implement"
+- "Implement it (small change)"
+- "Implement it (full workflow)"
+
+### Hard Constraints
+
+- `direct-answer` MUST NOT create `task-data.md`, dispatch any agent, or invoke any governance skill.
+- `plan-only` MUST NOT auto-continue past the P1 gate into execution. If the user wants to execute after seeing the plan, they must explicitly choose "Approve plan and execute" at P1, or resume later via `/continue`.
+- `degraded-inline` mode is strictly for dispatch/tooling failures. It MUST NOT be used for `direct-answer` or `plan-only` classification paths.
+- Classification is recorded in `orchestration-state.json` (for paths that create artifacts) and in `<!-- section:intake-classification -->` of `task-data.md`. For `direct-answer`, nothing is persisted.
 
 ## Orchestrator State Protocol (MANDATORY)
 
@@ -90,6 +132,27 @@ Before dispatching any agent for a subtask, the orchestrator MUST write the `ai-
 
 Ultra-light subtasks use the ultra-light skeleton template (no `section:tep` or `section:plan-addendum` placeholders).
 
+## Pre-Dispatch Checklist (MANDATORY — execute before EVERY agent dispatch)
+
+Before dispatching any agent for subtask `<subtask_id>`, run these file-existence checks via Bash. Do NOT skip this step — hooks may not fire on nested subagent dispatches, making this the primary enforcement mechanism.
+
+```bash
+test -f ai-workflow-data/tasks/<task_id>/<subtask_id>/ai-work.md && echo "ai-work.md: OK" || echo "MISSING: ai-work.md"
+test -f ai-workflow-data/tasks/<task_id>/<subtask_id>/roles/<role>.md && echo "bundle: OK" || echo "MISSING: dispatch bundle"
+test -f ai-workflow-data/tasks/<task_id>/orchestration-state.json && echo "state: OK" || echo "MISSING: orchestration-state.json"
+```
+
+If ANY check prints "MISSING":
+1. **STOP** — do NOT dispatch the agent.
+2. Create the missing file(s) using the appropriate protocol:
+   - `ai-work.md` → write skeleton from `ARTIFACT_DISCIPLINE.md` → `<!-- section:ai-work-skeleton -->`
+   - `roles/<role>.md` → invoke the `context-minimizer` skill for the target role
+   - `orchestration-state.json` → write initial state per Orchestrator State Protocol
+3. Re-run the checklist to confirm all files now exist.
+4. Only then proceed with the agent dispatch.
+
+This checklist applies to ALL agent dispatches including Lead, Executor, Reviewer, Design Agent, and Integration Checker. It does NOT apply to Delivery PM (which operates at task level, not subtask level).
+
 ## Artifact Gate
 
 Every agent dispatch must terminate in one of exactly two valid outcomes:
@@ -119,6 +182,18 @@ Reject any dispatch result that:
 **Escalation-N assignment rule:** Before appending an escalation section, count all existing `<!-- section:escalation-* -->` blocks in the subtask's `ai-work.md` and set N = count + 1. Always recount from the file — never rely on in-memory state.
 
 On rejection for reason (1), do NOT re-dispatch the same agent. Inspect `ai-work.md` to determine what partial work occurred, then route to the relevant Lead for re-validation or surface the gap to the user.
+
+**Post-Dispatch File Verification** — after every agent dispatch returns, run:
+
+```bash
+ls ai-workflow-data/tasks/<task_id>/<subtask_id>/
+head -20 ai-workflow-data/tasks/<task_id>/<subtask_id>/summary.md
+```
+
+Verify:
+1. `ai-work.md` exists and was modified (not just the skeleton).
+2. `summary.md` contains diagnostic headings (`## Telemetry`, `## Context Manifest`).
+3. If `ai-work.md` is missing entirely, this indicates the Pre-Dispatch Checklist was skipped — flag as an orchestration defect and do NOT proceed to the next agent in the chain.
 
 After accepting a subtask completion, read `<subtask_id>/summary.md` (written by Reviewer) and extend `ai-workflow-data/tasks/<task_id>/summary.md` with a new row in the **Context Breakdown** table using the manifest totals from `<!-- section:context-manifest -->`, and refresh the **Repeat reads** line.
 
@@ -184,9 +259,9 @@ The orchestrator MUST pause for user input at these checkpoints. Use `AskUserQue
 - `Reopen subtask <id>` — collect the subtask ID and reason, create a reversal packet, re-enter the execution loop
 - `Add follow-up task` — collect a brief description; note it in the task summary's `## Notes` section for future intake
 
-### P5 — Post-Task Retrospective (Optional)
+### P5 — Post-Task Retrospective
 
-**When:** After `workflow_state: complete` is set and the task summary is finalized.
+**When:** After `workflow_state: complete` is set and the task summary is finalized. **Always run** for tasks with ≥3 subtasks or any subtask that hit a rework cycle. **Skip** for tasks with ≤2 subtasks where all subtasks were approved on the first review cycle (no rework).
 
 **Action:** Invoke the `post-task-review` skill to generate a `## Retrospective` section (rework heat-map, artifact completeness audit, dispatch bundle coverage, telemetry gaps). Then ask:
 

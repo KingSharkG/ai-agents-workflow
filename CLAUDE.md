@@ -12,7 +12,7 @@ Portable multi-agent governance layer. Packages the orchestration, lead/executor
 - `hooks/` — five Node.js hook scripts wired via `hooks/hooks.json`: `guard-subtask-skeleton` (blocking `Task` PreToolUse), `evaluate-triggers` (`Task` PreToolUse), `guard-agent-reads` (`Read` PreToolUse), `validate-artifact-chain` (`Write|Edit` PostToolUse), `validate-dispatch-bundle` (`Write|Edit` PostToolUse)
 - `ai/core/PROJECT_CONSTITUTION.md` — workflow rules, Definition of Done
 - `ai/governance/` — trigger rules, review checklist, artifact discipline, resolution policy (skills + plugins)
-- `ai/playbooks/ORCHESTRATION.md` — default flow, dispatch bundles, orchestrator state, token-saving rules
+- `ai/playbooks/ORCHESTRATION.md` — default flow (Step 0 intake classification through Step 15 completion), dispatch bundles, orchestrator state, token-saving rules
 - `ai/agents/` — canonical stack-agnostic role contracts (source of truth for `agents/` stubs)
 
 ## Paths inside this plugin
@@ -30,6 +30,10 @@ The plugin reads files from the consumer repo (NOT from the plugin), under `ai-w
 - `ai-workflow-data/tasks/<task_id>/orchestration-state.json` — orchestrator state persistence between subtasks.
 
 Run `/ai-agents-workflow:init` in a new consumer project (or natural language: "initialize project config") to generate `ai-workflow-data/config/PROJECT_CONFIG.md` and scaffold `ai-workflow-data/tasks/`. The full slash-command surface (`init` | `add` | `update` | `remove` | `task` | `continue`) is documented in `README.md` → **Usage**.
+
+## Intake Classification
+
+The `/ai-agents-workflow:task` command classifies requests into four paths (`direct-answer`, `plan-only`, `execution-simple`, `execution-full`) at Step 0 before entering the pipeline. Questions get direct answers with no artifacts; plan-only requests stop after delivery plan approval (resumable via `/continue`); simple tasks prefer lightweight execution paths; everything else runs the full pipeline. See `ai/agents/chief-orchestrator.md` → Intake Classification Protocol.
 
 ## Installation
 

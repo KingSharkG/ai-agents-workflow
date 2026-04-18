@@ -18,7 +18,7 @@ Skip (symmetric to Lead skip rules for FE subtasks) if:
 - CRUD form with no new CTAs, flows, or state variants
 - single-file style or copy change
 
-When skipping, Delivery PM MUST include a one-line justification in the subtask (`design_skip_reason: ...`).
+When skipping, Delivery PM MUST include a one-line justification in the `<!-- section:delivery-subtask-<id> -->` block of `task-data.md` (`design_skip_reason: ...`).
 
 <!-- /section:design-agent-trigger -->
 
@@ -93,7 +93,9 @@ Run if:
 
 **On `verdict: NOT ok`:** The Integration Checker MUST include `fix_owner: fe | be | both` in the report with a one-sentence rationale identifying which side introduced the mismatch. The Orchestrator routes the fix to the identified executor(s). The Reviewer MUST NOT approve the subtask until a follow-up Integration Checker run returns `verdict: ok`. The Reviewer cannot substitute their own integration check for IC's verdict.
 
-**Mandatory gate rule:** If the subtask spec or project rule says the IC gate is required, the subtask's `workflow_state` remains `pending-integration-check` until the IC returns `verdict: ok`. A clean code review alone is insufficient to close that subtask.
+**Mandatory gate rule:** If the subtask spec or project rule says the IC gate is required, the subtask's `workflow_state` remains `pending-integration-check` until the IC returns `verdict: ok`. A clean code review alone is insufficient to close that subtask. The `validate-artifact-chain` hook enforces this: a subtask summary with `review_verdict: approved` will be rejected if the sibling `ai-work.md` has a populated integration-check section without `verdict: ok`.
+
+**Contract-only mode (P2 gate):** When dispatched via the P2 phase boundary checkpoint, IC runs in "contract-only" mode: it compares only the contract surfaces (API types, request/response shapes, auth expectations) established during the completed phase against the consumer expectations in the next phase. It does NOT inspect implementation details, test coverage, or code quality. The dispatch bundle omits `impl-files-changed` and `impl-tests-run` sections. The IC report is written to a dedicated `ai-work.md` in a temporary `phase-boundary-check/` directory, not to any subtask's `ai-work.md`.
 
 <!-- /section:integration-trigger -->
 
@@ -219,7 +221,7 @@ Maximum review/rework cycles per subtask are tied to complexity:
 | medium     | 2          |
 | hard       | 3          |
 
-Exceeding the cap does **not** trigger another executor turn. The subtask auto-downgrades to `status: needs-replan` and is routed to Delivery PM (via Blocker Escalation Report) for scope / approach revision.
+Exceeding the cap does **not** trigger another executor turn. The subtask auto-downgrades to `status: needs-replan` and is routed to Delivery PM (via Blocker Escalation Report) for scope / approach revision. The orchestrator tracks the cycle count by counting `### Cycle N` headings in `<!-- section:review -->` of `ai-work.md` before each rework dispatch — never rely on in-memory state for the count.
 
 <!-- /section:rework-cap -->
 
