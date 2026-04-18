@@ -52,6 +52,7 @@ Five namespaced slash commands cover the plugin's surface:
 | `/ai-agents-workflow:update`                                      | Refresh CLI-owned sections of the config              |
 | `/ai-agents-workflow:remove <target-type> <value> [--domain <d>]` | Remove a config entry                                 |
 | `/ai-agents-workflow:task <description>`                          | Kick off a new task through the chief-orchestrator    |
+| `/ai-agents-workflow:continue [task_id]`                          | Resume an interrupted or in-progress task             |
 
 Valid `<target-type>` values for `:add` / `:remove`: `domain`, `skill`, `plugin`, `baseline`, `validation-rule`, `forbidden-action`, `best-practice`, `cross-domain-rule`.
 
@@ -87,10 +88,10 @@ Run `/ai-agents-workflow:init` in a fresh consumer repo (or use natural language
 
 ## What's inside
 
-- `agents/` — 8 subagent definitions (adds `init`)
+- `agents/` — 9 subagent definitions (adds `init`, `resume-orchestrator`)
 - `skills/` — 15 skills with SKILL.md each (adds `project-discovery`, `project-config-template`, `project-config-review`, `project-config-mutate`)
 - `hooks/` — 5 Node.js hook scripts plus `hooks.json`
-- `commands/` — 5 user-facing slash commands (`init`, `add`, `update`, `remove`, `task`) namespaced as `/ai-agents-workflow:<command>`
+- `commands/` — 6 user-facing slash commands (`init`, `add`, `update`, `remove`, `task`, `continue`) namespaced as `/ai-agents-workflow:<command>`
 - `ai/core/`, `ai/governance/`, `ai/playbooks/`, `ai/agents/` — canonical governance docs
 
 See `CLAUDE.md` for the full layout and path conventions.

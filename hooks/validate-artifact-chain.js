@@ -163,6 +163,29 @@ const validateRequiredHeadings = () => {
   }
 };
 
+const getHeadingBlock = (heading) => {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(
+    `^##\\s+${escaped}\\b[\\t ]*\\n([\\s\\S]*?)(?=^##\\s+|\\Z)`,
+    'im',
+  );
+  const match = content.match(regex);
+  return match ? match[1] : '';
+};
+
+const getStatusFieldValue = (fieldName) => {
+  const statusBlock = getHeadingBlock('Status');
+  if (!statusBlock) {
+    return null;
+  }
+
+  const escapedField = fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = statusBlock.match(
+    new RegExp(`-\\s*\\*\\*${escapedField}\\*\\*:\\s*([^\\n]+)`, 'i'),
+  );
+  return match ? match[1].trim().toLowerCase() : null;
+};
+
 const validateSummaryPlaceholderDrift = () => {
   if (matched.name !== 'Subtask Summary') {
     return;
@@ -172,16 +195,25 @@ const validateSummaryPlaceholderDrift = () => {
   if (stalePhrases.some((pattern) => pattern.test(content))) {
     console.error(
       `[validate-artifact-chain] INVALID ${matched.name}: stale placeholder text remains in summary.md.\n` +
+      `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+
+  const workflowState = getStatusFieldValue('workflow_state');
+  const reviewVerdict = getStatusFieldValue('review_verdict');
+
+  if (reviewVerdict === 'approved' && workflowState === 'needs-replan') {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: review_verdict=approved conflicts with workflow_state=needs-replan.\n` +
         `File: ${filePath}\n`,
     );
     process.exit(1);
   }
 
-  const hasApprovedVerdict = /\*\*review_verdict\*\*:\s*approved\b/i.test(content);
-  const hasChangesRequestedStatus = /^##\s+Status[\s\S]*?changes requested/im.test(content);
-  if (hasApprovedVerdict && hasChangesRequestedStatus) {
+  if (reviewVerdict === 'changes_requested' && workflowState === 'approved') {
     console.error(
-      `[validate-artifact-chain] INVALID ${matched.name}: conflicting status text ("changes requested") remains after approval.\n` +
+      `[validate-artifact-chain] INVALID ${matched.name}: review_verdict=changes_requested conflicts with workflow_state=approved.\n` +
         `File: ${filePath}\n`,
     );
     process.exit(1);
@@ -205,6 +237,49 @@ const validateAcceptanceSignalsTable = () => {
   if (!tableHeaderPresent) {
     console.error(
       `[validate-artifact-chain] INVALID ${matched.name}: ## Acceptance Signals must include Signal, State, Evidence, and Notes columns.\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+};
+
+const validatePendingUserActionsSection = () => {
+  if (matched.name !== 'Task Summary') {
+    return;
+  }
+
+  const taskStatusBlock = getHeadingBlock('Task Status');
+  const actionsBlock = getHeadingBlock('Pending User Actions').trim();
+
+  if (!taskStatusBlock || !actionsBlock) {
+    return;
+  }
+
+  const countMatch = taskStatusBlock.match(/\*\*pending_user_action_count\*\*:\s*(\d+)/i);
+  if (!countMatch) {
+    return;
+  }
+
+  const declaredCount = Number.parseInt(countMatch[1], 10);
+  const bulletLines = actionsBlock
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('- '));
+
+  if (bulletLines.length === 0) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: ## Pending User Actions must contain bullet items or "- none".\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+
+  const hasNoneOnly = bulletLines.length === 1 && /^-\s+none$/i.test(bulletLines[0]);
+  const actualCount = hasNoneOnly ? 0 : bulletLines.length;
+
+  if (actualCount !== declaredCount) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: pending_user_action_count=${declaredCount} does not match ## Pending User Actions entries (${actualCount}).\n` +
         `File: ${filePath}\n`,
     );
     process.exit(1);
@@ -271,6 +346,7 @@ const ARTIFACT_RULES = [
       'Task Status',
       'Changes by Phase',
       'Open Gates',
+      'Pending User Actions',
       'Pipeline',
       'Detail',
       'Totals',
@@ -427,6 +503,7 @@ validateAiWorkDiagnosticsLocation();
 validateRequiredHeadings();
 validateSummaryPlaceholderDrift();
 validateAcceptanceSignalsTable();
+validatePendingUserActionsSection();
 
 // Run delivery plan section validation whenever task-data.md contains a
 // delivery-plan block. plan_format: sectioned-v1 is mandatory in v1 — if the

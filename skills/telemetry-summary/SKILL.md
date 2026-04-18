@@ -52,6 +52,10 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 
 - none
 
+## Pending User Actions
+
+- none
+
 ## Pipeline
 
 <agent_1> <turns>t ~<tokens>tok → <agent_2> <turns>t ~<tokens>tok → ...
@@ -93,5 +97,6 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 - **Context Breakdown is mandatory**: every update must refresh per-agent bucket totals, task totals, and Repeat reads from `## Context Manifest` subsections in each subtask's `<subtask_id>/summary.md`.
 - **Repeat reads**: list any path appearing in at least 2 agents' manifests for the same task; write `none` when none exist yet.
 - **Task Status is mandatory**: derive it from subtask `workflow_state` values and open gates.
+- **Pending User Actions is mandatory**: list concrete user actions as flat bullets, or write `- none`. `pending_user_action_count` is derived from this section.
 - **Completion semantics**: the task is complete only when `workflow_state: complete`, `open_gate_count: 0`, and `pending_user_action_count: 0`.
 - **Do not overstate completion**: if any subtask is `blocked-on-user` or `pending-integration-check`, the task summary must remain `active` or the matching blocked state.

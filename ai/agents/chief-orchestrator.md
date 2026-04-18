@@ -113,7 +113,7 @@ Reject any dispatch result that:
 | after-integration-checker | + `section:integration-check` non-empty (if triggered) |
 | after-reviewer | + `section:review` non-empty; `<subtask_id>/summary.md` exists |
 | escalation | + `section:escalation-N` matching count |
-| task-done | task-root `ai-workflow-data/tasks/<task_id>/summary.md` exists |
+| task-done | task-root `ai-workflow-data/tasks/<task_id>/summary.md` exists AND `## Task Status` says `workflow_state: complete` with zero open gates and zero pending user actions |
 
 **Escalation-N assignment rule:** Before appending an escalation section, count all existing `<!-- section:escalation-* -->` blocks in the subtask's `ai-work.md` and set N = count + 1. Always recount from the file — never rely on in-memory state.
 
