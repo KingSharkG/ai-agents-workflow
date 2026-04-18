@@ -12,26 +12,57 @@ Discover resumable workflow tasks, reconstruct execution context, present a resu
 
 ## Discovery Protocol (MANDATORY)
 
+### Step 0 — Validate consumer CWD
+
+Before scanning, confirm CWD is the consumer repo:
+
+1. Check whether `ai-workflow-data/` exists in CWD (`test -d ai-workflow-data/` via Bash).
+2. If it exists → CWD is valid, proceed to Step 1.
+3. If it does not exist, check whether `.claude-plugin/plugin.json` exists in CWD.
+   - If yes → CWD is the plugin repo. Emit: "Current directory is the plugin repo, not the consumer project. Run `/ai-agents-workflow:continue` from your project directory." Exit.
+   - If no → `ai-workflow-data/` has not been initialized. Emit: "No `ai-workflow-data/` directory found. Run `/ai-agents-workflow:init` first." Exit.
+
 ### Step 1 — Scan for resumable tasks
 
+**Primary scan:**
 1. Glob `ai-workflow-data/tasks/*/orchestration-state.json`.
-2. For each state file, read only `phase` and `task_id`. A task is **in-progress** when `phase` is not `"complete"` and not `"answered"`. Tasks with `phase: "planned"` are resumable (user approved a plan but did not execute).
-3. For the **recommended task** (multiple in-progress): compare `orchestration-state.json` mtimes via `Bash`. Use `stat -f %m` on macOS or `stat -c %Y` on Linux. If `stat` fails (e.g., busybox), fall back to `ls -l` ISO timestamp comparison. Most recently modified = recommended.
+2. For each state file, read only `phase` and `task_id`. A task is **in-progress** when `phase` is not `"complete"` and not `"answered"`. Tasks with `phase: "planned"` are resumable.
+3. Collect the set of discovered task directories.
+
+**Fallback scan (stateless tasks):**
+4. Glob `ai-workflow-data/tasks/*/task-data.md`.
+5. Exclude any task directory already found in primary scan.
+6. For each remaining task (has `task-data.md` but no `orchestration-state.json`), infer state from artifacts:
+   - `task_id`: directory name (e.g., `TP-003`).
+   - Glob `ai-workflow-data/tasks/<task_id>/<task_id>-*/summary.md` to find subtask summaries. Grep each for `verdict:` — if present, that subtask is complete.
+   - Grep `task-data.md` for `<!-- section:delivery-plan -->` to check if a plan exists.
+   - Inferred phase:
+     - Subtask summaries with `verdict:` exist → `phase: "execution"`
+     - No verdicts but delivery plan section exists → `phase: "planned"`
+     - No delivery plan section → `phase: "planning"`
+   - Mark as `[stateless]` in all subsequent display.
+
+**Merge and rank:**
+7. Combine primary and fallback results. For recommended-task ranking, compare mtimes (`stat -f %m` on macOS, `stat -c %Y` on Linux) of `orchestration-state.json` (primary) or `task-data.md` (fallback). If `stat` fails (e.g., busybox), fall back to `ls -l` ISO timestamp comparison. Most recently modified = recommended.
 
 ### Step 2 — Select task
 
 | Scenario | Action |
 |---|---|
 | `task_id` argument provided | Validate the task exists; read its state; skip menu |
+| Argument matches a subtask pattern (`<TASK>-<SUFFIX>`, e.g., `TP-003-A2`) | Resolve to parent task (see Subtask ID Resolution below); auto-select parent; set `target_subtask` for Step 3 |
 | 1 in-progress task found | Auto-select; confirm with user via `AskUserQuestion` before proceeding |
 | 2+ in-progress tasks found | Show menu via `AskUserQuestion` (see Menu Protocol) |
 | 0 in-progress tasks found | Show completed-tasks summary and exit (see Completion Summary) |
 
 **Invalid task_id:** Surface the error and offer to show the in-progress task menu instead.
 
+**Subtask ID resolution:** If the argument does not match a top-level task directory in `ai-workflow-data/tasks/`, check whether it matches a subtask directory inside a parent task. Glob `ai-workflow-data/tasks/*/<argument>/` — the parent is the matching task directory. If found, use the parent task for resume and pass the argument as `target_subtask` to Step 3 so the resume point focuses on that specific subtask. If no parent is found, treat as an invalid task_id.
+
 ### Step 3 — Reconstruct context
 
 1. Read the full `orchestration-state.json` for the selected task.
+   - **If the task is stateless (no `orchestration-state.json`):** Do not attempt to read state. Use the inferred phase and resume point from Step 1 fallback scan. Note to user in resume summary: "This task has no orchestration state file — state was inferred from artifacts."
 2. Determine the **resume point** using the Resume Point Decision Table.
 3. For `RESUME_SUBTASK`: use `Grep` to detect non-empty section markers in `ai-work.md` (do NOT load full file) to determine which agent ran last. Also grep `summary.md` for finalization signal (see stage detection table).
 4. Compose the **resume summary** (see Resume Summary Format).
@@ -51,6 +82,10 @@ interrupted_subtask_stage=<stage_code | null>
 ```
 
 Routing-critical fields to inline: `task_id`, `phase`, `mode`, `current_subtask`, `pending_subtasks[0]`, `blocked_gates`, `pending_user_actions`, `resume_point`, `interrupted_subtask_stage`, `task_summary_path`.
+
+**Stateless task dispatch:** For tasks without `orchestration-state.json`, construct a minimal synthetic state:
+- `task_id`, `phase` (inferred from Step 1 fallback), `mode: "normal"`, `current_subtask` (first incomplete subtask or null), `pending_subtasks` (subtasks without approved verdicts in their summaries), `blocked_gates: []`, `pending_user_actions: []`.
+- Include `stateless: true` in the dispatch prompt so chief-orchestrator persists `orchestration-state.json` before proceeding.
 
 Chief-orchestrator detects the `resume` keyword and enters the resume entry point in `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-RESUME.md → <!-- section:resume-entry -->`.
 
@@ -117,11 +152,12 @@ For `BLOCKED`: list all `blocked_gates` and `pending_user_actions`. Present two 
 
 ## Completion Summary (0 in-progress tasks)
 
-1. Glob all `ai-workflow-data/tasks/*/orchestration-state.json`.
-2. Read `task_id` and `task_summary_path` from each.
-3. For each task, check whether the file at `task_summary_path` exists. If it does not exist, note "summary not yet written" in the table.
-4. Print: "All tasks are complete." + table of task_id → summary_path (or status note).
-5. Exit without dispatching any agent.
+1. Glob `ai-workflow-data/tasks/*/orchestration-state.json` and `ai-workflow-data/tasks/*/task-data.md`.
+2. For tasks with state files: read `task_id` and `task_summary_path`.
+3. For tasks with only `task-data.md` (no state file): include with note `[stateless — may be resumable]`. These are NOT counted as complete — if any stateless task exists, do NOT report "All tasks are complete."
+4. For each task with a state file, check whether the file at `task_summary_path` exists. If it does not exist, note "summary not yet written" in the table.
+5. Print table of task_id → status (complete, stateless, summary path). If all tasks have state files with `phase: "complete"` and no stateless tasks exist, print "All tasks are complete." Otherwise, print the table with status indicators.
+6. Exit without dispatching any agent.
 
 ## Allowed Actions
 
@@ -143,8 +179,10 @@ For `BLOCKED`: list all `blocked_gates` and `pending_user_actions`. Present two 
 
 ## Inputs
 
-- Optional `task_id` argument from the `/continue` command
-- `ai-workflow-data/tasks/*/orchestration-state.json` (all tasks)
+- Optional `task_id` or `subtask_id` argument from the `/continue` command
+- `ai-workflow-data/tasks/*/orchestration-state.json` (primary scan: all tasks)
+- `ai-workflow-data/tasks/*/task-data.md` (fallback scan: tasks without orchestration state)
+- `ai-workflow-data/tasks/*/<subtask_id>/summary.md` (fallback scan: infer completed subtasks)
 - `ai-work.md` section markers (Grep only, for `RESUME_SUBTASK`)
 - `summary.md` finalization signal (Grep only, for `RESUME_SUBTASK`)
 

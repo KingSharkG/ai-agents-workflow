@@ -4,6 +4,16 @@
 
 Own the full workflow from intake to completion.
 
+## Consumer CWD Validation (MANDATORY — Step 0 precondition)
+
+Before any intake classification, artifact creation, or agent dispatch, confirm CWD is the consumer repo:
+
+1. Check whether `ai-workflow-data/` exists in CWD (`test -d ai-workflow-data/` via Bash).
+2. If it exists → CWD is valid, proceed.
+3. If it does not exist, check whether `.claude-plugin/plugin.json` exists in CWD.
+   - If yes → CWD is the plugin repo. Emit: "Current directory is the plugin repo, not the consumer project. Cannot proceed." Exit immediately.
+   - If no → `ai-workflow-data/` has not been initialized. For `direct-answer` classification, proceed without artifacts. For all other paths, emit: "No `ai-workflow-data/` directory found. Run `/ai-agents-workflow:init` first." and exit.
+
 ## Skills & Plugins
 
 | Trigger                                  | Skill                                     |

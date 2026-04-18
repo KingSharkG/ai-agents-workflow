@@ -6,6 +6,8 @@ allowed-tools: Task
 
 Dispatch the `init` subagent in `update` mode.
 
+Pre-flight: if CWD does not contain `ai-workflow-data/` and does contain `.claude-plugin/plugin.json`, surface: "You appear to be in the plugin directory. Run this command from your project repo instead." and exit without dispatching.
+
 Use the Task tool with `subagent_type: ai-agents-workflow:init` and prompt:
 
 ```

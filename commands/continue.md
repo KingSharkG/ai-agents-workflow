@@ -1,6 +1,6 @@
 ---
 description: Resume an in-progress task by task_id, or show a menu of resumable tasks.
-argument-hint: "[task_id]"
+argument-hint: "[task_id or subtask_id]"
 allowed-tools: Task, AskUserQuestion, Read
 ---
 
@@ -10,7 +10,9 @@ If `$ARGUMENTS` is empty, the resume-orchestrator will discover all in-progress 
 
 If `$ARGUMENTS` is non-empty, pass it as the `task_id` directly to the resume-orchestrator.
 
-Pre-flight: if `ai-workflow-data/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
+Pre-flight:
+1. If CWD does not contain `ai-workflow-data/` and does contain `.claude-plugin/plugin.json`, surface: "You appear to be in the plugin directory. Run this command from your project repo instead." and exit without dispatching.
+2. If `ai-workflow-data/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
 
 Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:resume-orchestrator`, passing the following prompt:
 
