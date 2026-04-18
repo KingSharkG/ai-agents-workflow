@@ -15,7 +15,7 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 
 ## Collection Protocol
 
-1. After each subtask completes, read `## Telemetry` lines from `<subtask_id>/summary.md` — one line per agent, format: `<role> | <turns>/<budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET>`.
+1. After each subtask completes, read `## Telemetry` lines from `<subtask_id>/summary.md` — one line per agent, format: `<role> | <model> | <turns>/<budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET>` (the `<model>` field is the model ID used for that agent invocation, e.g., `claude-sonnet-4-6` or `claude-opus-4-6`).
 2. Read `### <role>` subsections from `## Context Manifest` in `<subtask_id>/summary.md` to get per-agent bucket totals.
 3. Read `## Status` and `## Open Gates` from `<subtask_id>/summary.md` to determine whether the subtask is fully closed, blocked on user action, or pending integration.
 4. Read `## Notes` from `<subtask_id>/summary.md` for the completion one-liner (used in Changes by Phase).
@@ -62,15 +62,18 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 
 ## Detail
 
-| #   | Agent  | Subtask           | Turns           | Tokens (in/out) | Skills | Plugins | Status                       |
-| --- | ------ | ----------------- | --------------- | --------------- | ------ | ------- | ---------------------------- |
-| 1   | <role> | <subtask_id or —> | <used>/<budget> | ~<in>/~<out>    | <low>  | <low>   | <ok | warning | escalated> |
+| #   | Agent  | Model              | Subtask           | Turns           | Tokens (in/out) | Skills | Plugins | Status                       |
+| --- | ------ | ------------------ | ----------------- | --------------- | --------------- | ------ | ------- | ---------------------------- |
+| 1   | <role> | <model>            | <subtask_id or —> | <used>/<budget> | ~<in>/~<out>    | <low>  | <low>   | <ok | warning | escalated> |
 
 ## Totals
 
 - **Total turns**: <sum used>/<sum budget>
 - **Total tokens**: ~<sum in> in / ~<sum out> out
 - **Rework cycles**: <count>
+- **By model**:
+  - <model-id-1>: ~<in> in / ~<out> out (<N> invocations)
+  - <model-id-2>: ~<in> in / ~<out> out (<N> invocations)
 
 ## Context Breakdown
 
@@ -93,6 +96,7 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 - **Status values**: `ok` (within budget), `warning` (exceeded turns budget), `escalated` (blocker raised), `ul:approved` (ultra-light approved).
 - **Skills / Plugins columns**: copy the cost buckets from the telemetry line exactly.
 - **Rework cycles**: count only reviewer→executor rework loops, not normal pipeline progression.
+- **Model attribution**: the `Model` column in the Detail table records which model was used for each agent invocation. At task completion, the **By model** section in Totals aggregates tokens per model ID. If a telemetry line omits the model field (legacy format), record the model as `unknown`.
 - **Creator**: only the chief-orchestrator creates or updates this file.
 - **Context Breakdown is mandatory**: every update must refresh per-agent bucket totals, task totals, and Repeat reads from `## Context Manifest` subsections in each subtask's `<subtask_id>/summary.md`.
 - **Repeat reads**: list any path appearing in at least 2 agents' manifests for the same task; write `none` when none exist yet.

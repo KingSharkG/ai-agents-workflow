@@ -14,6 +14,7 @@ Own the full workflow from intake to completion.
 | Unresolved blocker after 3 review cycles | `blocker-escalation-report`               |
 | Maintaining per-task telemetry summary   | `telemetry-summary`                       |
 | Aggregating per-agent context manifests  | `telemetry-summary` (Context Breakdown)   |
+| Post-task retrospective (after completion) | `post-task-review`                       |
 
 **Plugins:** Use the **github** plugin to inspect PRs, issues, or branch state when routing decisions depend on repo context.
 
@@ -145,6 +146,53 @@ After accepting a subtask completion, read `<subtask_id>/summary.md` (written by
 - trigger rules
 - returned artifacts from all other agents
 
+## User Interaction Gates (MANDATORY)
+
+The orchestrator MUST pause for user input at these checkpoints. Use `AskUserQuestion` with the specified options.
+
+### P1 — Delivery Plan Approval
+
+**When:** After Delivery PM appends `<!-- section:delivery-plan -->` to `task-data.md`, before dispatching any subtask agent.
+
+**Action:** Present a summary of the delivery plan (subtask count, phases, ordering, complexity sizing, integration gates) and ask:
+
+- `Approve plan` — proceed to execution
+- `Revise plan` — collect free-form notes via a follow-up AskUserQuestion, route revisions back to Delivery PM, re-present. Loop until approved
+- `Abort task` — mark task as aborted in orchestration-state.json
+
+### P2 — Phase Boundary Checkpoint
+
+**When:** All subtasks of phase N are closed in `orchestration-state.json` AND phase N+1 has pending subtasks.
+
+**Action:** Present a phase summary (subtask outcomes, rework count, open issues) and ask via AskUserQuestion menu:
+
+1. `Continue to Phase <N+1>` — proceed normally
+2. `Run contract verification before continuing` — dispatch Integration Checker in "contract-only" mode against the foundation established in phase N, then re-present the checkpoint with IC results
+3. `Adjust scope (add/remove/reorder subtasks)` — collect changes via follow-up AskUserQuestion, update delivery plan, re-present
+4. `Pause and review artifacts` — halt orchestration; user reviews manually and resumes via `/ai-agents-workflow:continue`
+5. `Abort task` — mark task as aborted
+
+**Skip condition:** If the delivery plan has only one phase (no explicit phase boundaries), skip P2.
+
+### P4 — Task Completion Review
+
+**When:** All subtasks are closed, `blocked_gates` and `pending_user_actions` are empty, and the orchestrator is about to set `workflow_state: complete`.
+
+**Action:** Present the full task summary (subtask outcomes table, open items, blockers carried forward, deferred items) and ask:
+
+- `Approve completion` — set `workflow_state: complete`
+- `Reopen subtask <id>` — collect the subtask ID and reason, create a reversal packet, re-enter the execution loop
+- `Add follow-up task` — collect a brief description; note it in the task summary's `## Notes` section for future intake
+
+### P5 — Post-Task Retrospective (Optional)
+
+**When:** After `workflow_state: complete` is set and the task summary is finalized.
+
+**Action:** Invoke the `post-task-review` skill to generate a `## Retrospective` section (rework heat-map, artifact completeness audit, dispatch bundle coverage, telemetry gaps). Then ask:
+
+- `Any feedback on this task execution?` — collect free-form notes; save actionable items as a new entry in the task summary's `## Notes`
+- `No feedback` — close the session
+
 ## Post-Approval Closure
 
 When the Reviewer returns a closed review outcome (signalled by `<subtask_id>/summary.md` containing final `## Status` fields):
@@ -152,7 +200,11 @@ When the Reviewer returns a closed review outcome (signalled by `<subtask_id>/su
 1. Read `<subtask_id>/summary.md` — pull `workflow_state`, `review_verdict`, `files changed`, `open gates`, and `notes` from it.
 2. Extend `ai-workflow-data/tasks/<task_id>/summary.md` with the subtask row using the `telemetry-summary` skill.
 3. Emit the task/subtask completion signal.
-4. For **task-level completion** (all subtasks done and no pending gates / user actions remain), finalize `ai-workflow-data/tasks/<task_id>/summary.md` with aggregate totals and `Changes by Phase`, and set the task summary `workflow_state: complete`.
+4. For **task-level completion** (all subtasks done and no pending gates / user actions remain):
+   a. Read EVERY `<subtask_id>/summary.md` file and cross-reference against `orchestration-state.json` notes to populate the task-level summary. Do NOT reconstruct subtask descriptions from conversation context — always source from the written artifacts.
+   b. Finalize `ai-workflow-data/tasks/<task_id>/summary.md` with aggregate totals and `Changes by Phase`.
+   c. Execute the **P4 — Task Completion Review** gate before setting `workflow_state: complete`.
+   d. After P4 approval, optionally execute **P5 — Post-Task Retrospective**.
 5. Do NOT spawn a separate Summary Agent. This step replaces it.
 
 ## Outputs

@@ -54,8 +54,11 @@ for (const relPath of governanceFiles) {
   }
 }
 
-// Parse task_id: LETTERS-TAG-NNN (e.g. FEAT-V1-042)
-const taskIdMatch = prompt.match(/\b([A-Z]{2,}-[A-Z0-9]+-\d+)\b/);
+// Parse task_id: supports both 2-segment (e.g. TP-002) and 3-segment (e.g. FEAT-V1-042) formats.
+// Try 3-segment first (more specific), then fall back to 2-segment.
+const taskIdMatch =
+  prompt.match(/\b([A-Z]{2,}-[A-Z0-9]+-\d+)\b/) ||
+  prompt.match(/\b([A-Z]{2,}-\d+)\b/);
 
 if (!taskIdMatch) {
   // Cannot determine task — let dispatch proceed (cannot safely block)
@@ -90,18 +93,35 @@ if (subagentType === 'delivery-pm') {
 
 // --- Subtask-level checks (all agents except chief-orchestrator and delivery-pm) ---
 
-// Parse subtask_id: LETTERS-NNN (e.g. A-003) or LETTERS-LETTER+N (e.g. B-A1)
-// Remove the task_id from the prompt first to avoid false matches (e.g. TEST-V1
-// inside TEST-V1-001 matching the [A-Z]+-[A-Z]\d+ branch).
-const promptWithoutTaskId = prompt.replace(taskId, '');
-const subtaskIdMatch = promptWithoutTaskId.match(/\b([A-Z]{1,2}-\d{3}|[A-Z]+-[A-Z]\d+)\b/);
+// Parse subtask_id. Subtask directories use the full compound ID: <taskId>-<suffix>.
+// Examples: TP-002-A1, FEAT-V1-042-B-A1, TP-001-IC-F4.
+// Strategy: find all occurrences of "<taskId>-<suffix>" in the prompt where <suffix>
+// is one or more alphanumeric segments separated by hyphens (e.g. A1, B-A1, IC-F4).
+// Also support the legacy standalone format: LETTERS-NNN (e.g. A-003) or LETTERS-LETTER+N (e.g. B-A1).
+const compoundSubtaskRegex = new RegExp(
+  taskId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-([A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)',
+  'g',
+);
+let subtaskId = null;
+let compoundMatch;
+while ((compoundMatch = compoundSubtaskRegex.exec(prompt)) !== null) {
+  // Use the full compound ID (taskId + suffix) as the subtask directory name
+  subtaskId = compoundMatch[0];
+}
 
-if (!subtaskIdMatch) {
+// Fallback: try legacy standalone format
+if (!subtaskId) {
+  const promptWithoutTaskId = prompt.replace(taskId, '');
+  const legacyMatch = promptWithoutTaskId.match(/\b([A-Z]{1,2}-\d{3}|[A-Z]+-[A-Z]\d+)\b/);
+  if (legacyMatch) {
+    subtaskId = legacyMatch[1];
+  }
+}
+
+if (!subtaskId) {
   // Cannot determine subtask — let dispatch proceed (cannot safely block)
   process.exit(0);
 }
-
-const subtaskId = subtaskIdMatch[1];
 
 // --- Original check: ai-work.md skeleton existence ---
 

@@ -52,7 +52,7 @@ interrupted_subtask_stage=<stage_code | null>
 
 Routing-critical fields to inline: `task_id`, `phase`, `mode`, `current_subtask`, `pending_subtasks[0]`, `blocked_gates`, `pending_user_actions`, `resume_point`, `interrupted_subtask_stage`, `task_summary_path`.
 
-Chief-orchestrator detects the `resume` keyword and enters the resume entry point in `ORCHESTRATION.md → <!-- section:resume-entry -->`.
+Chief-orchestrator detects the `resume` keyword and enters the resume entry point in `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-RESUME.md → <!-- section:resume-entry -->`.
 
 ## Resume Point Decision Table
 

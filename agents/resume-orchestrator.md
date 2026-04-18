@@ -13,7 +13,7 @@ You are the Resume Orchestrator.
 
 Authoritative role contract: `${CLAUDE_PLUGIN_ROOT}/ai/agents/resume-orchestrator.md`. Load it on session start and follow it as the single source of truth — do not rely on this stub restating its rules.
 
-Supporting governance:
-
-- `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` — orchestrator state schema, resume entry point
+Supporting governance (load on session start):
+- `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-RESUME.md` — resume entry point, resume codes
+- `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-STATE.md` — orchestrator state schema
 - `${CLAUDE_PLUGIN_ROOT}/ai/core/PROJECT_CONSTITUTION.md` — workflow rules, repo layout

@@ -172,7 +172,7 @@ The orchestrator creates the summary.md skeleton (with diagnostic section placeh
 
 For `task-data.md` (task-packet and delivery-plan sections), the agent appends telemetry inside `<!-- section:task-telemetry -->` and `<!-- section:delivery-telemetry -->` respectively.
 
-Authoritative format: `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:telemetry -->` and `<!-- section:context-manifest -->`.
+Authoritative format: `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-TELEMETRY.md` → `<!-- section:telemetry -->` and `<!-- section:context-manifest -->`.
 
 Policy:
 

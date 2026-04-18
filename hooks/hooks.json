@@ -38,6 +38,10 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-dispatch-bundle.js\" \"$CLAUDE_TOOL_INPUT_FILE_PATH\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-summary-telemetry.js\" \"$CLAUDE_TOOL_INPUT_FILE_PATH\""
           }
         ]
       }

@@ -217,3 +217,27 @@ Rules:
 - Placeholder text must be replaced on finalization; do not leave "skeleton" or "reviewer fills this later" text in the final file.
 
 <!-- /section:summary-skeleton -->
+
+<!-- section:summary-minimum-schema -->
+
+## Minimum Summary Content (Reviewer Finalization Checklist)
+
+When the Reviewer finalizes `<subtask_id>/summary.md`, ALL of the following fields MUST be present and non-placeholder. A summary missing any of these is rejected by the orchestrator's artifact gate.
+
+| Field | Section | Required Content |
+|-------|---------|-----------------|
+| `workflow_state` | `## Status` | One of: `approved`, `blocked-on-user`, `pending-integration-check`, `needs-replan` |
+| `review_verdict` | `## Status` | One of: `approved`, `changes_requested`, `needs-replan` |
+| `cycle_count` | `## Status` | Integer ≥ 1 |
+| `updated_at` | `## Status` | ISO 8601 UTC timestamp |
+| Acceptance signals table | `## Acceptance Signals` | All rows with `State` and `Evidence` filled (not `pending`) |
+| Files changed list | `## Files Changed` | At least one entry, or `- none (audit-only subtask)` with rationale |
+| Dispatch bundle data | `## Dispatch Bundles` | One row per agent dispatched (role, token ceiling, sections included) |
+| Telemetry lines | `## Telemetry` | One line per agent in format: `<role> \| <model> \| <turns>/<budget> turns \| tokens: ~<in>/~<out> \| skills: <bucket> \| plugins: <bucket> \| <status>` |
+| Context manifest | `## Context Manifest` | One `### <role>` subsection per agent with bucket totals |
+| Findings taxonomy | `## Notes` | Summary of findings by severity: `H:<n> M:<n> L:<n> N:<n> I:<n>` (may be `H:0 M:0 L:0 N:0 I:0` for clean passes) |
+| Next steps | `## Notes` | One-liner describing what this subtask unblocks, or `- none (terminal subtask)` |
+
+The `validate-summary-telemetry` hook provides non-blocking warnings when telemetry or context manifest is missing at verdict time. The orchestrator's artifact gate (chief-orchestrator step 13) enforces the full schema.
+
+<!-- /section:summary-minimum-schema -->

@@ -48,6 +48,22 @@ Review section required content (inside `<!-- section:review -->` `### Cycle N`)
 
 **Ultra-light path:** Append the compact `review-ultra` block inside `<!-- section:review -->` in `ai-work.md`. Still finalize `summary.md`.
 
+## Cross-Subtask Consistency Check (MANDATORY)
+
+When the current subtask introduces or modifies any of the following shared artifacts, the Reviewer MUST grep the codebase for existing usages to verify consistency before approving:
+
+- **Shared constants or config keys** (e.g., storage keys, feature flags, env var names) — verify all consumers reference the same value
+- **Shared types or interfaces** — verify all imports resolve and no stale type references remain
+- **Dependency declarations** — verify that any newly imported package is declared in the relevant package manifest (package.json, requirements.txt, etc.)
+- **Cross-subtask contract assumptions** — verify that data shapes passed between modules (established in prior subtasks) are still honored
+
+If a consistency violation is found, classify it as:
+- `High` if it would cause a runtime crash or silent data loss (e.g., missing dependency, mismatched storage key)
+- `Medium` if it would cause incorrect behavior (e.g., stale type causing wrong field access)
+- `Low` if it would cause a build warning or cosmetic issue
+
+This check is scoped to artifacts the current subtask touches — the reviewer does NOT audit the entire codebase. Use targeted grep patterns based on the specific constants, types, or packages introduced.
+
 ## Allowed Actions
 
 - inspect implementation reports
@@ -57,6 +73,7 @@ Review section required content (inside `<!-- section:review -->` `### Cycle N`)
 - assign severity
 - request rework
 - recommend constitution/checklist updates when patterns emerge
+- grep for cross-subtask consistency of shared artifacts
 
 ## Forbidden Actions
 
