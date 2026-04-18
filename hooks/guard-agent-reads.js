@@ -19,10 +19,10 @@
  */
 
 const path = require('path');
+const { resolvePluginRoot } = require('./_resolve-plugin-root');
 
 const filePath = process.env.CLAUDE_TOOL_INPUT_FILE_PATH || '';
-const PLUGIN_ROOT =
-  process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..');
+const PLUGIN_ROOT = resolvePluginRoot();
 
 if (!filePath) {
   process.exit(0);

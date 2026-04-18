@@ -20,9 +20,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolvePluginRoot } = require('./_resolve-plugin-root');
 
-const PLUGIN_ROOT =
-  process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..');
+const PLUGIN_ROOT = resolvePluginRoot();
 
 // Strip plugin namespace prefix if present (e.g., "ai-agents-workflow:executor" → "executor").
 // The Claude Code plugin system provides namespaced types but all role comparisons use bare names.
@@ -51,16 +51,31 @@ const ROLE_GOVERNANCE_FILES = {
   'integration-checker': ['ai/core/PROJECT_CONSTITUTION.md'],
 };
 
-const governanceFiles = ROLE_GOVERNANCE_FILES[subagentType] || [];
-for (const relPath of governanceFiles) {
-  const absPath = path.join(PLUGIN_ROOT, relPath);
-  if (!fs.existsSync(absPath)) {
-    console.error(
-      `[guard-subtask-skeleton] BLOCKED: governance file not found: ${relPath}\n` +
-        `Required by ${subagentType} for dispatch bundle assembly.\n` +
-        `Expected at: ${absPath}\n`,
-    );
-    process.exit(1);
+// Validate PLUGIN_ROOT is a real installation before checking governance files.
+// If the install is broken/mid-update, warn instead of hard-blocking.
+const pluginMarker = path.join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json');
+const pluginRootValid = fs.existsSync(pluginMarker);
+
+if (!pluginRootValid) {
+  console.error(
+    `[guard-subtask-skeleton] WARNING: plugin root appears invalid (no .claude-plugin/plugin.json).\n` +
+      `Resolved PLUGIN_ROOT: ${PLUGIN_ROOT}\n` +
+      `Skipping governance file checks. If this persists, reinstall:\n` +
+      `  /plugin uninstall ai-agents-workflow\n` +
+      `  /plugin install ai-agents-workflow@ai-agents-workflow\n`,
+  );
+} else {
+  const governanceFiles = ROLE_GOVERNANCE_FILES[subagentType] || [];
+  for (const relPath of governanceFiles) {
+    const absPath = path.join(PLUGIN_ROOT, relPath);
+    if (!fs.existsSync(absPath)) {
+      console.error(
+        `[guard-subtask-skeleton] BLOCKED: governance file not found: ${relPath}\n` +
+          `Required by ${subagentType} for dispatch bundle assembly.\n` +
+          `Expected at: ${absPath}\n`,
+      );
+      process.exit(1);
+    }
   }
 }
 

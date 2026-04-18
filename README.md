@@ -21,7 +21,11 @@ You should see `ai-agents-workflow` listed as enabled. Pick up upstream edits wi
 
 ```
 /plugin marketplace update ai-agents-workflow
+/plugin uninstall ai-agents-workflow
+/plugin install ai-agents-workflow@ai-agents-workflow
 ```
+
+> **Note:** `/plugin marketplace update` only refreshes the marketplace source — you must uninstall and reinstall for changes to take effect in the plugin cache.
 
 ## Install (local development)
 
@@ -32,7 +36,13 @@ If you have this repo cloned locally and want to iterate on the plugin itself:
 /plugin install ai-agents-workflow@ai-agents-workflow
 ```
 
-Pick up local edits via `/plugin marketplace update ai-agents-workflow` without reinstalling.
+Pick up local edits with the same update sequence:
+
+```
+/plugin marketplace update ai-agents-workflow
+/plugin uninstall ai-agents-workflow
+/plugin install ai-agents-workflow@ai-agents-workflow
+```
 
 ## Uninstall
 

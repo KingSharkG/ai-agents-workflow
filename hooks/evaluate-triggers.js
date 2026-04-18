@@ -11,9 +11,8 @@
  * Optionally receives the artifact path as argv[3] (ai-work.md spec section).
  *
  * Path resolution (plugin install):
- *   PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT (set by harness when the
- *                 plugin is loaded); falls back to __dirname/.. for dev runs
- *                 inside the plugin repo itself.
+ *   PLUGIN_ROOT = resolved via _resolve-plugin-root.js shared utility
+ *                 (CLAUDE_PLUGIN_ROOT env var → __dirname/.. fallback).
  *   CWD         = process.cwd(); this is the consumer repo where
  *                 ai-workflow-data/config/PROJECT_CONFIG.md lives.
  *
@@ -31,6 +30,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolvePluginRoot, getPluginVersion } = require('./_resolve-plugin-root');
 
 // Strip plugin namespace prefix if present (e.g., "ai-agents-workflow:executor" → "executor").
 const rawTargetAgent = process.argv[2] || '';
@@ -38,8 +38,7 @@ const targetAgent = rawTargetAgent.includes(':')
   ? rawTargetAgent.split(':').pop()
   : rawTargetAgent;
 
-const PLUGIN_ROOT =
-  process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..');
+const PLUGIN_ROOT = resolvePluginRoot();
 const CWD = process.cwd();
 
 const GOVERNANCE_PATH = path.join(PLUGIN_ROOT, 'ai', 'governance', 'TRIGGER_RULES.md');
@@ -135,7 +134,13 @@ function getCachedOrParse(filePath, sectionName, cacheKey, cache) {
 
 // --- Union base (governance) + optional overlay (project config) per agent. ---
 
-const cache = loadCachedRules() || {};
+const pluginVersion = getPluginVersion(PLUGIN_ROOT);
+let cache = loadCachedRules();
+if (cache && cache.pluginVersion !== pluginVersion) {
+  cache = {}; // Version mismatch — full cache invalidation
+}
+cache = cache || {};
+cache.pluginVersion = pluginVersion;
 const baseRules = getCachedOrParse(GOVERNANCE_PATH, 'trigger-keywords', 'base', cache);
 if (!baseRules || Object.keys(baseRules).length === 0) process.exit(0);
 
