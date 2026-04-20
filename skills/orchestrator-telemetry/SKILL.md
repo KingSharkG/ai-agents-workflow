@@ -1,6 +1,9 @@
-# ORCHESTRATION — Telemetry & Context Manifest
+---
+name: orchestrator-telemetry
+description: Telemetry line format and Context Manifest rules that every dispatched agent must follow, plus the orchestrator's per-task aggregation procedure. Use when specifying agent output requirements, when auditing dispatch returns, and when rolling subtask manifests into the task-level summary.
+---
 
-<!-- section:telemetry -->
+# Orchestrator Telemetry — Per-Agent Requirements & Aggregation
 
 ## Telemetry
 
@@ -28,10 +31,6 @@ The Chief Orchestrator maintains `ai-workflow-data/tasks/<task_id>/summary.md` a
 4. Use the `telemetry-summary` skill for the template and rules.
 
 Telemetry is collected forward-only — do not retroactively fill past artifacts.
-
-<!-- /section:telemetry -->
-
-<!-- section:context-manifest -->
 
 ## Context Manifest
 
@@ -83,7 +82,7 @@ Repeat reads: none (dispatch bundles are pre-curated per role)
 
 The **Repeat reads** line lists any source path appearing in ≥2 agents' manifests within the same task (governance repeats are expected to be minimal with dispatch bundles).
 
-### Diagnostic loop
+## Diagnostic loop
 
 Observation is per-task; action waits for aggregate signal.
 
@@ -95,5 +94,3 @@ Observation is per-task; action waits for aggregate signal.
 
 1. If source files are read by both a Lead and its Executor → the TEP's `context_bundle` is not carrying enough; fix the dispatch bundle content.
 2. Otherwise collect one more task before changing anything.
-
-<!-- /section:context-manifest -->

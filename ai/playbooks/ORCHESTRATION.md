@@ -2,36 +2,26 @@
 
 <!-- section:default-flow -->
 
-## Default flow
+## Default flow (15-step outline)
 
-0. **Intake Classification.** Before any artifact creation, classify the task description into one of: `direct-answer`, `plan-only`, `execution-simple`, `execution-full` (see `${CLAUDE_PLUGIN_ROOT}/ai/agents/chief-orchestrator.md` → Intake Classification Protocol for heuristics and hard constraints).
-   - If `direct-answer`: answer the question using available tools (Read, Grep, Glob, Bash for read-only operations), then exit. Do NOT create `task-data.md`, `orchestration-state.json`, or dispatch any agent. Do NOT use `degraded-inline` mode. The orchestrator simply responds and terminates.
-   - If `plan-only`, `execution-simple`, or `execution-full`: proceed to Step 1.
+Each step cites the skill that owns the procedural detail. Full step content lives in the skills — this file is a quick-reference outline.
+
+0. **Intake Classification** → `orchestrator-intake` skill. If `direct-answer`, respond inline and exit with zero artifacts.
 1. Chief Orchestrator receives the task.
-2. Create `task-data.md` at `ai-workflow-data/tasks/<task_id>/task-data.md`. First write `<!-- section:intake-classification -->` with the classification result (classification path, confidence, signals, timestamp), then write the task-packet content inside `<!-- section:task-packet -->` using the `task-packet` skill. For `execution-simple`, include a note in the task-packet that the task was classified as low-complexity. Persist the `classification` field to `orchestration-state.json`.
-3. Delivery PM appends the Delivery Plan section to `task-data.md` using the `delivery-plan` skill. The delivery-plan content lives inside `<!-- section:delivery-plan -->` (with nested `<!-- section:delivery-subtask-* -->` IDs unchanged). For `execution-simple` classification, the Delivery PM dispatch bundle includes a hint: "This task was classified as execution-simple. Prefer single-phase plans with `complexity: low` subtasks where possible. Skip Lead triggers when trigger rules allow." This hint does NOT override trigger rules — it is a soft signal. After the Delivery PM completes, the orchestrator populates `subtask_offsets` in `orchestration-state.json` with the line range of each `<!-- section:delivery-subtask-<id> -->` block — this enables targeted reads later (see `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-STATE.md`).
-4. **User Gate P1 — Delivery Plan Approval.** After the Delivery PM completes step 3, the orchestrator presents the delivery plan summary (subtask count, phases, ordering, complexity sizing, integration gates) and asks the user via `AskUserQuestion`. The options depend on classification:
-   - For `plan-only`: `Approve plan and stop` / `Approve plan and execute` / `Revise plan` / `Abort task`. "Approve plan and stop" sets `phase: planned` in `orchestration-state.json` and exits — the task can be resumed later via `/continue`. "Approve plan and execute" overrides the classification to `execution-simple` or `execution-full` (ask which if ambiguous) and continues to Step 5.
-   - For `execution-simple` / `execution-full`: `Approve plan` / `Revise plan` / `Abort task` (unchanged from today).
-   - If `Revise plan`: collect notes, route back to Delivery PM, re-present. Loop until approved. No subtask agent may be dispatched before P1 approval.
-5. Before any role-owned step, the Chief Orchestrator MUST determine the workflow mode and persist it to `orchestration-state.json`:
-   - `mode: normal` — agent dispatch is available. Dispatch bundles, role separation, and normal gates apply.
-   - `mode: degraded-inline` — agent dispatch is unavailable or blocked. The orchestrator MUST record the blocker, request explicit user waiver before continuing, and MUST NOT fabricate Delivery PM / Lead / Executor / Reviewer / Integration Checker execution, dispatch bundles, or approvals. In this mode, only intake artifacts, blocker records, pending gate records, and explicitly user-waived inline work may be written.
-6. Before dispatching any agent for a subtask, the Chief Orchestrator MUST create these files in order:
-   a. **`orchestration-state.json`** — if not yet created, write `ai-workflow-data/tasks/<task_id>/orchestration-state.json` with the initial state (see `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-STATE.md` for schema). If it already exists, update `current_subtask` to the new subtask ID.
-   b. **`ai-work.md` skeleton** — write `ai-workflow-data/tasks/<task_id>/<subtask_id>/ai-work.md` using the template from `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:ai-work-skeleton -->`. The `<!-- section:spec -->` is populated by copying the exact content of the matching `<!-- section:delivery-subtask-<id> -->` from `task-data.md`.
-   c. **`summary.md` skeleton** — write `<subtask_id>/summary.md` with placeholder sections for Status, Acceptance Signals, Files Changed, Dispatch Bundles, Telemetry, Context Manifest, Notes, and Open Gates (see `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:summary-skeleton -->`).
-   d. **Dispatch bundle** — invoke the `context-minimizer` skill for the target agent role and write the bundle to `<subtask_id>/roles/<role>.md`.
-   e. **Pre-Dispatch Checklist** — run `test -f` checks on all three files (ai-work.md, roles/<role>.md, orchestration-state.json) to confirm they exist before proceeding. See `${CLAUDE_PLUGIN_ROOT}/ai/agents/chief-orchestrator.md` → Pre-Dispatch Checklist. This is the primary enforcement mechanism — hooks may not fire on nested subagent dispatches.
-7. Every subtask in the Delivery Plan carries a `domain` tag (assigned by Delivery PM from `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:domains -->`) that rides along with dispatch. For subtasks whose domain is in `design_hook_domains`, trigger Design Agent only if rules require it. When both Design Agent and Lead are triggered for the same subtask, Design Agent MUST run first and Lead MUST receive the addendum as input — they are sequential, not parallel. The Design Review Addendum is appended to `<!-- section:plan-addendum -->` in `ai-work.md`. Lead reads this section when creating the TEP. Domain validation is absorbed by the Lead for the subtask's domain — no separate Domain Agent exists.
-8. Lead appends the Technical Execution Packet to `<!-- section:tep -->` in `ai-work.md` (merges former Tech Prep + Lead validation into one step). For `complexity: low` subtasks where no Lead / Design Agent trigger fires, the orchestrator may dispatch the executor directly using `<!-- section:spec -->` from `ai-work.md` as a lightweight TEP. If the subtask additionally qualifies for the ultra-light tier (`complexity: low` + single-file diff + no endpoint/schema/auth change), use the compact inline artifact format — see `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:ultra-light-tier -->`.
-9. Executor appends implementation work to `<!-- section:implementation -->` in `ai-work.md`.
-10. Run Integration Checker when paired fe+be subtasks belong to the same feature (mandatory in that case — see `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:domains -->` `decomposition_rule`), when request/response contracts, auth expectations, or field/nullability alignment may have drifted across the domain boundary, or when the Delivery Plan marks `integration_gate: required`. The IC report is appended to `<!-- section:integration-check -->` in the fe subtask's `ai-work.md` (or the changed side's `ai-work.md` when only one side changed). If `verdict: NOT ok`, Orchestrator routes fix to `fix_owner` executor(s) from the IC report before proceeding to Review (see `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:integration-trigger -->`). If the IC gate is required and the IC has not yet returned `verdict: ok`, the subtask's `workflow_state` remains `pending-integration-check` even if review findings are otherwise closed.
-11. Reviewer appends `### Cycle N` block to `<!-- section:review -->` in `ai-work.md` AND finalizes `<subtask_id>/summary.md`. If changes requested, return to executor with focused rework only when `cycle_count` < complexity-tied cap (see `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:rework-cap -->`). Otherwise auto-downgrade the subtask to `needs-replan` and escalate to Delivery PM via `blocker-escalation-report`. **If any finding is severity `High` and touches logic defined in the TEP** (not a style fix, not a standalone utility), the Executor's rework MUST route back through the Lead for re-validation before the Reviewer receives the next cycle. Findings of severity `Medium` or `Low` only → Executor goes directly back to Reviewer. **Rework dispatch bundles use the delta-review protocol** (see `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-DISPATCH.md` → `<!-- section:token-saving -->`).
-12. **User Gate P2 — Phase Boundary Checkpoint.** When all subtasks of a delivery-plan phase are closed AND the next phase has pending subtasks, the orchestrator presents a phase summary (subtask outcomes, rework count, open issues) and asks the user via `AskUserQuestion` with a menu: `1. Continue to Phase <N+1>` / `2. Run contract verification before continuing` / `3. Adjust scope (add/remove/reorder subtasks)` / `4. Pause and review artifacts` / `5. Abort task`. Option 2 dispatches Integration Checker in "contract-only" mode against the foundation from the completed phase, then re-presents the checkpoint. Option 3 collects changes via a follow-up question and routes to Delivery PM. **Skip P2** if the delivery plan has no explicit phase boundaries.
-13. Orchestrator reads `<subtask_id>/summary.md` (written by Reviewer) and refreshes the task-level `ai-workflow-data/tasks/<task_id>/summary.md` using the `telemetry-summary` skill.
-14. **User Gate P4 — Task Completion Review.** When all subtasks are closed, `blocked_gates` and `pending_user_actions` are empty, the orchestrator presents the full task summary and asks the user via `AskUserQuestion`: `Approve completion` / `Reopen subtask <id>` / `Add follow-up task`. Task `workflow_state` is set to `complete` only after P4 approval. After P4, invoke the `post-task-review` skill (P5) for a retrospective if the task has ≥3 subtasks or any subtask hit a rework cycle; skip P5 for tasks with ≤2 subtasks where all were approved on cycle 1.
-15. Task completion is determined by the task summary's `workflow_state`, not by the file merely existing. A task is `complete` only when the task summary exists, its `workflow_state` is `complete`, and both `open_gates` and `pending_user_actions` are empty.
+2. Create `task-data.md` with `<!-- section:intake-classification -->` then task-packet → `task-packet` skill. Persist `classification` to `orchestration-state.json`.
+3. Delivery PM appends `<!-- section:delivery-plan -->` → `delivery-plan` skill. For `execution-simple`, bundle includes a low-complexity hint. Orchestrator then populates `subtask_offsets` in `orchestration-state.json` → `orchestrator-state` skill.
+4. **P1 — Delivery Plan Approval** → `orchestrator-user-gates` skill (menu varies by classification).
+5. Determine and persist `mode` (`normal` vs `degraded-inline`) → `orchestrator-degraded` skill.
+6. Before every agent dispatch: write state → ai-work.md skeleton → summary.md skeleton → dispatch bundle → Pre-Dispatch Checklist → `orchestrator-dispatch` skill (bundle contents assembled via `context-minimizer`).
+7. Domain-tagged routing: Design Agent runs first when triggered; Lead receives addendum in `<!-- section:plan-addendum -->`. Triggers per `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md`.
+8. Lead appends `<!-- section:tep -->`. `complexity: low` without triggers may dispatch Executor directly with spec as lightweight TEP; ultra-light tier uses compact inline artifact format.
+9. Executor appends `<!-- section:implementation -->`.
+10. Integration Checker runs per `TRIGGER_RULES.md` → `<!-- section:integration-trigger -->`. Report appended to `<!-- section:integration-check -->`. `verdict: NOT ok` → route fixes before Review.
+11. Reviewer appends `### Cycle N` to `<!-- section:review -->` and finalizes `<subtask_id>/summary.md`. Rework routing + delta bundles → `orchestrator-dispatch` skill. Rework cap → `TRIGGER_RULES.md` → `<!-- section:rework-cap -->`.
+12. **P2 — Phase Boundary Checkpoint** → `orchestrator-user-gates` skill. Skip if plan has only one phase.
+13. Post-approval closure → `orchestrator-state` skill → refresh task-level summary via `telemetry-summary` skill.
+14. **P4 — Task Completion Review** and optionally **P5 — Post-Task Retrospective** → `orchestrator-user-gates` skill (P5 body via `post-task-review`).
+15. Task is `complete` only when task summary exists, `workflow_state: complete`, `open_gates` empty, `pending_user_actions` empty.
 
 <!-- /section:default-flow -->
 
@@ -48,7 +38,13 @@
 
 ## Related playbooks
 
-- `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-STATE.md` — orchestrator state schema and management
 - `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-RESUME.md` — resume entry point and resume codes
-- `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-DISPATCH.md` — dispatch bundle model and token-saving rules
-- `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-TELEMETRY.md` — telemetry and context manifest rules
+
+## Related skills
+
+- `orchestrator-intake` — Step 0 classification
+- `orchestrator-dispatch` — bundle protocol, skeleton, checklist, artifact gate, token-saving, delta-review
+- `orchestrator-state` — state schema, phase transitions, post-approval closure
+- `orchestrator-telemetry` — telemetry and context manifest rules
+- `orchestrator-degraded` — dispatch failure handling, degraded-inline mode
+- `orchestrator-user-gates` — P1 / P2 / P4 / P5

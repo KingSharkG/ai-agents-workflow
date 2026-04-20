@@ -15,5 +15,7 @@ Authoritative role contract: `${CLAUDE_PLUGIN_ROOT}/ai/agents/resume-orchestrato
 
 Supporting governance (load on session start):
 - `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-RESUME.md` — resume entry point, resume codes
-- `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-STATE.md` — orchestrator state schema
 - `${CLAUDE_PLUGIN_ROOT}/ai/core/PROJECT_CONSTITUTION.md` — workflow rules, repo layout
+
+Load on demand:
+- `orchestrator-state` skill — state schema, phase transitions (invoke when parsing or writing `orchestration-state.json`).

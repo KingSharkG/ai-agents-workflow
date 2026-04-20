@@ -23,7 +23,7 @@ If the assembled context exceeds the ceiling, re-excerpt until it fits — never
 # Dispatch Bundle — <role> for <subtask_id>
 
 ## Role Contract
-[mission, relevant skill rituals, forbidden actions — excerpted from canonical contract at ${CLAUDE_PLUGIN_ROOT}/ai/agents/<role>.md]
+[copy the matching `<!-- role-contract:<role> -->` block verbatim from the Role Contract Blocks section below — do NOT read ai/agents/<role>.md]
 
 ## Project Context
 [relevant domain section + baseline + role best-practices — pre-extracted from ai-workflow-data/config/PROJECT_CONFIG.md]
@@ -39,12 +39,17 @@ The agent reads ONLY this bundle (plus its own stub for tool/model config). It d
 
 ---
 
+## Role Contract Blocks
+
+Role contracts live in the sibling file [`role-contracts.md`](./role-contracts.md). Read it only at bundle-assembly time, extract the `<!-- role-contract:<role> -->` block matching the target role, and copy it verbatim into the bundle's `## Role Contract` section. The canonical `ai/agents/<role>.md` files exist for human documentation only and are NOT read at dispatch time — any edit there MUST be mirrored in `role-contracts.md` in the same commit.
+
+---
+
 ## Context Bundle by Role
 
 ### delivery-pm
 
-**Role Contract excerpt from** `ai/agents/delivery-pm.md`:
-- Mission, decomposition rules, domain tagging rules
+**Role Contract:** copy `<!-- role-contract:delivery-pm -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/delivery-pm.md`.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:domains -->` — declared_domains, detection_rules, decomposition_rule, escalation_rule
@@ -62,8 +67,7 @@ The agent reads ONLY this bundle (plus its own stub for tool/model config). It d
 
 ### lead (TEP creation + validation)
 
-**Role Contract excerpt from** `ai/agents/lead.md`:
-- Mission, TEP readiness criteria, context_bundle production rules, menu guard rail, forbidden actions, blocker escalation rules
+**Role Contract:** copy `<!-- role-contract:lead -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/lead.md`.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:<domain> -->` block (skills, plugins, baseline anchors, validation_rules, forbidden_actions)
@@ -85,8 +89,7 @@ The agent reads ONLY this bundle (plus its own stub for tool/model config). It d
 
 ### executor
 
-**Role Contract excerpt from** `ai/agents/executor.md`:
-- Mission, skill invocation rituals (executing-plans, TDD, systematic-debugging, verification-before-completion, receiving-code-review, code-simplifier, implementation-report, blocker-escalation), decision-fork rule, menu guard rail, forbidden actions
+**Role Contract:** copy `<!-- role-contract:executor -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/executor.md`.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:<domain> -->` block (for baseline anchors, validation_rules, forbidden_actions)
@@ -116,8 +119,7 @@ The agent reads ONLY this bundle (plus its own stub for tool/model config). It d
 
 ### design-agent (FE subtasks only)
 
-**Role Contract excerpt from** `ai/agents/design-agent.md`:
-- Mission, design addendum output rules, domain interaction rules
+**Role Contract:** copy `<!-- role-contract:design-agent -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/design-agent.md`.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - FE section only (`<!-- section:fe-baseline -->`)
@@ -136,8 +138,7 @@ The agent reads ONLY this bundle (plus its own stub for tool/model config). It d
 
 ### integration-checker
 
-**Role Contract excerpt from** `ai/agents/integration-checker.md`:
-- Mission, comparison protocol, verdict rules, fix_owner assignment rules
+**Role Contract:** copy `<!-- role-contract:integration-checker -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/integration-checker.md`.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:api-baseline -->` and `<!-- section:auth-baseline -->` only
@@ -156,8 +157,7 @@ The agent reads ONLY this bundle (plus its own stub for tool/model config). It d
 
 ### reviewer
 
-**Role Contract excerpt from** `ai/agents/reviewer.md`:
-- Mission, review cycle protocol, severity definitions, verdict rules, summary.md writing rules
+**Role Contract:** copy `<!-- role-contract:reviewer -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/reviewer.md`.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - Relevant layer section only (domain validation_rules)
