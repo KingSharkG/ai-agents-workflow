@@ -93,6 +93,14 @@ yarn test --filter <module>
 ## Recommended Skills
 - <skill name> — <why>
 <!-- /section:tep-recommended-skills -->
+
+<!-- section:tep-clarifying-questions -->
+## Clarifying Questions (optional — appears only when Lead identifies ambiguity)
+Each question MUST be specific, actionable, and unresolvable from the Delivery Plan alone. Omit the section entirely when there are no questions — do NOT emit placeholder text.
+
+1. **<question>** — why it matters: <one line>; impact if unanswered: <one line>.
+2. **<question>** — why it matters: <one line>; impact if unanswered: <one line>.
+<!-- /section:tep-clarifying-questions -->
 ```
 
 Then write diagnostics to `<subtask_id>/summary.md`:
@@ -113,6 +121,8 @@ Target line counts per complexity tier (TEP section only):
 - `complexity` and `turns_budget` are copied from the Delivery Plan, never re-derived.
 - `source_delivery_section` is the exact `delivery-subtask-*` tag from `task-data.md`.
 - `context_bundle` must contain the exact signatures/types/contracts the executor needs; if the executor would still need to open a non-target file, add it here.
+- When `<!-- section:exploration-notes -->` exists for this subtask, every `target_files` entry MUST be among the files listed in `exploration-key-files` — the exploration record is the audit trail.
 - **No duplication across sections.** Each fact appears exactly once.
 - `implementation_steps` must be concrete enough that an executor can follow them without further clarification.
 - If a required file path cannot be confirmed, raise a blocker via `blocker-escalation-report`.
+- Emit `<!-- section:tep-clarifying-questions -->` ONLY when real ambiguity exists. The orchestrator treats a non-empty block as a mandatory hold — Executor dispatch pauses until the user answers. Do NOT use this section as a design-discussion placeholder, a wishlist, or a way to defer decisions the Lead is supposed to make. If you would write "I chose X because...", the explanation belongs in `tep-risks` or the relevant step, not here.

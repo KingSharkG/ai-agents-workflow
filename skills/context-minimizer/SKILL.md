@@ -11,11 +11,23 @@ Before every agent delegation the orchestrator MUST invoke this skill to produce
 
 1. Determine the target agent role and subtask context (domain, complexity, rework cycle if any).
 2. Assemble the bundle content per the role-specific rules below.
-3. Verify the assembled governance/context excerpts stay within the token ceiling for the target role.
-4. Write the bundle file to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md`.
-5. Pass the bundle file path to the agent in the dispatch prompt.
+3. **Apply the forbidden-workflows filter** (see next subsection) to every `plugins:` and `skills:` list before they land in the bundle.
+4. Verify the assembled governance/context excerpts stay within the token ceiling for the target role.
+5. Write the bundle file to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md`.
+6. Pass the bundle file path to the agent in the dispatch prompt.
 
 If the assembled context exceeds the ceiling, re-excerpt until it fits — never silently exceed. Over-ceiling dispatch is an orchestration defect.
+
+### Forbidden-Workflows Filter (MANDATORY)
+
+Before writing the bundle, strip every entry that matches `ai/governance/FORBIDDEN_WORKFLOWS.md` → `<!-- section:denylist -->` from the bundle's Project Context `plugins:` and `skills:` lists, scoped by the target role. Specifically:
+
+- Load the denylist entries.
+- For each `plugins:` / `skills:` item about to land in the bundle, drop it when an entry with matching `id` (supports trailing `*` wildcard) has `applies_to` equal to `all` or a list that contains the target role.
+- If a consumer's `PROJECT_CONFIG.md` lists `feature-dev` under a domain's `plugins:`, the filter removes it before the target agent ever sees its dispatch bundle — Lead/Executor/Reviewer never have the option to pick a competing workflow orchestrator. The hook at `hooks/guard-forbidden-workflows.js` is the second line of defense; this filter is the first.
+- Record stripped entries in a private `<!-- section:bundle-audit -->` block inside the bundle so the reviewer rollup into `summary.md` can see why an entry from PROJECT_CONFIG did not appear.
+
+Helper plugins (e.g. `context7`, `figma:*`, `supabase:*`) are not on the denylist and pass through untouched.
 
 ## Bundle Format
 

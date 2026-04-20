@@ -117,6 +117,14 @@ The Chief Orchestrator MUST write the `ai-work.md` skeleton before dispatching a
 <!-- placeholder: populated by design-agent if triggered -->
 <!-- /section:plan-addendum -->
 
+<!-- section:exploration-notes -->
+<!-- placeholder: populated by lead via codebase-exploration skill (optional on complexity: low; mandatory on medium/hard unless reusing a sibling subtask's exploration) -->
+<!-- /section:exploration-notes -->
+
+<!-- section:architecture-options -->
+<!-- placeholder: populated by lead via multi-approach-architecture skill when complexity is medium/hard AND the approach is non-trivial -->
+<!-- /section:architecture-options -->
+
 <!-- section:tep -->
 <!-- placeholder: populated by lead -->
 <!-- /section:tep -->

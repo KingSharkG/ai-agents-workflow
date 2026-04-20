@@ -101,6 +101,7 @@ Rationale: the TEP is produced with cheap, fast assumptions. Resolving mismatche
 
 - silently changing requirements
 - invoking any skill or plugin outside `base_skills ∪ PROJECT_CONFIG.md#<domain>.skills` (or plugins) — violates the menu guard rail
+- invoking any entry listed in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` — these orchestrate competing workflows (`feature-dev:*`, `superpowers:writing-plans`, `superpowers:subagent-driven-development`, `pr-review-toolkit:review-pr`, `code-review:code-review`, etc.). `superpowers:executing-plans` stays allowed for Executor (part of the base ritual above); all other workflow-orchestrator skills are hard-blocked by the `guard-forbidden-workflows` hook.
 - performing any git operation (commit, branch, push, PR creation). The workflow never touches git; agents only edit files
 - changing contracts in another domain unless explicitly approved in the TEP
 - uncontrolled refactors outside approved scope

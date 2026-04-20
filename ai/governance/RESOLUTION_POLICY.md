@@ -4,6 +4,8 @@ Canonical policy for how agents resolve skills and plugins. Covers the resolutio
 
 Any plugin not listed in `<!-- section:registry -->` with `status: approved` (or `trial`) MAY NOT be invoked. Using an unlisted or `deprecated` plugin is a hard blocker.
 
+Plugins and skills that orchestrate competing end-to-end workflows are tracked separately in `ai/governance/FORBIDDEN_WORKFLOWS.md`. An entry appearing there is a hard blocker regardless of its status here. `RESOLUTION_POLICY.md` governs *which helpers agents may use*; `FORBIDDEN_WORKFLOWS.md` governs *which orchestrators agents may not become*.
+
 ## Fixed Before Dynamic
 
 1. Agent-fixed skills (see `## Skills & Plugins` in each agent file, plus the role-generic sections below: `<!-- section:global-skills -->`, `<!-- section:reviewer-skills -->`).
@@ -45,12 +47,13 @@ The following skills are referenced in agent contracts but provided by the tool 
 
 | Prefix               | Skills                                                                                                                                                                                                          | Source                   |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| `superpowers:`       | `test-driven-development`, `verification-before-completion`, `finishing-a-development-branch`, `systematic-debugging`, `brainstorming`, `writing-plans`, `dispatching-parallel-agents`, `receiving-code-review` | `claude-builtin`         |
+| `superpowers:`       | `test-driven-development`, `verification-before-completion`, `finishing-a-development-branch`, `systematic-debugging`, `receiving-code-review` (plus `brainstorming`, `writing-plans`, `dispatching-parallel-agents`, `executing-plans`, `subagent-driven-development` — role-scoped; see `FORBIDDEN_WORKFLOWS.md`) | `claude-builtin`         |
 | `frontend-design:`   | `frontend-design`                                                                                                                                                                                               | `claude-builtin`         |
-| `feature-dev:`       | `feature-dev`                                                                                                                                                                                                   | `mcp-server` (`feature-dev`) |
 | `figma:`             | `figma-use`, `figma-implement-design`, `figma-generate-library`, `figma-code-connect`                                                                                                                           | `mcp-server` (`figma`)   |
-| `pr-review-toolkit:` | `review-pr`, `silent-failure-hunter`, `pr-test-analyzer`                                                                                                                                                        | `claude-builtin`         |
-| `code-review:`       | `code-review`                                                                                                                                                                                                   | `claude-builtin`         |
+| `pr-review-toolkit:` | `silent-failure-hunter`, `pr-test-analyzer` (plus `review-pr`, `code-reviewer` — role-scoped; see `FORBIDDEN_WORKFLOWS.md`)                                                                                     | `claude-builtin`         |
+| `code-review:`       | `code-review` (role-scoped; see `FORBIDDEN_WORKFLOWS.md`)                                                                                                                                                       | `claude-builtin`         |
+
+The `feature-dev:` prefix is intentionally absent — it is denylisted in `FORBIDDEN_WORKFLOWS.md` because it orchestrates a competing end-to-end workflow. Consumers who want codebase-aware exploration or multi-option architecture should use ai-agents-workflow's `codebase-exploration` and `multi-approach-architecture` skills invoked by Lead.
 
 If an agent references one of these and the environment does not provide it, the agent MUST emit a `blocker-escalation-report` (`blocker_type: environment-capability-gap`) rather than silently skipping.
 
@@ -86,7 +89,6 @@ Intake rule: new rows with `source ∈ {consumer-marketplace, npx-skills-find}` 
 | `context7`        | `mcp-server`      | `context7`            | Current library / framework / SDK documentation lookup     | lead (base), executor (base), init (base), delivery-pm (base), design-agent (base)                         | low       | approved |
 | `filesystem`      | `mcp-server`      | `filesystem`          | Scoped filesystem access for read-only path exploration    | lead (base), init (base)                                                                                   | low       | approved |
 | `github`          | `mcp-server`      | `github`              | PR diffs, issues, CI status, repo metadata                 | chief-orchestrator, reviewer, integration-checker; lead/executor per `PROJECT_CONFIG.md#<domain>.plugins`   | low       | approved |
-| `feature-dev`     | `mcp-server`      | `feature-dev`         | Codebase-aware guided feature development                  | lead/executor per `PROJECT_CONFIG.md#<domain>.plugins`                                                     | medium    | approved |
 | `figma`           | `mcp-server`      | `figma`               | Figma file / node / image access and design-system tooling | design-agent; lead/executor per `PROJECT_CONFIG.md#<domain>.plugins`                                        | medium    | approved |
 | `superpowers`     | `claude-builtin`  | `superpowers:`        | Workflow skills (TDD, debugging, brainstorming, plans)     | all roles (skill provider)                                                                                 | low       | approved |
 | `frontend-design` | `claude-builtin`  | `frontend-design:`    | Frontend-design skill                                      | design-agent; lead/executor per `PROJECT_CONFIG.md#<domain>.plugins`                                        | low       | approved |

@@ -27,12 +27,16 @@ On startup, read the dispatch bundle file at the path provided by the orchestrat
 
 Shape the subtask into an executor-ready TEP. Do not implement final production code by default.
 
+Before drafting the TEP, invoke the `codebase-exploration` skill when the subtask has `complexity ∈ {medium, hard}` or touches unfamiliar territory. The skill appends a `<!-- section:exploration-notes -->` block with entry points, architecture layers, similar-feature patterns, and 5–10 key files. Every `target_file` you list in the TEP MUST also appear in that exploration record — the mapping is the audit trail.
+
+When the Delivery Plan flagged `complexity ∈ {medium, hard}` AND the approach is non-trivial, invoke `multi-approach-architecture` to surface 2–3 trade-off approaches before committing to one in the TEP. For straightforward subtasks, skip it.
+
 Use filesystem MCP tools to verify every `target_file` in the TEP actually exists — a TEP must reference real paths, not assumed ones.
 
 Produce a `context_bundle` containing exactly the signatures, type definitions, and contracts the executor needs — nothing more.
 
-A TEP is "Ready" only when: target_files verified, context_bundle populated, complexity/turns_budget set, acceptance_signals present. If any cannot be satisfied, raise a blocker via `blocker-escalation-report`.
+A TEP is "Ready" only when: target_files verified, context_bundle populated, complexity/turns_budget set, acceptance_signals present. If any cannot be satisfied, raise a blocker via `blocker-escalation-report`. If during TEP drafting you identify ambiguity the Delivery Plan did not resolve, list it inside the TEP's `<!-- section:tep-clarifying-questions -->` block — the orchestrator will pause Executor dispatch until the user answers.
 
-Menu guard rail: before invoking any skill or plugin, verify it is listed in the dispatch bundle's Project Context section (domain skills/plugins). Anything outside that union is forbidden for this subtask.
+Menu guard rail: before invoking any skill or plugin, verify it is listed in the dispatch bundle's Project Context section (domain skills/plugins). Anything outside that union is forbidden for this subtask. Additionally, never invoke skills or subagents listed in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` — those orchestrate competing workflows and the `guard-forbidden-workflows` hook will hard-block them. If you need codebase exploration, invoke the `codebase-exploration` skill; for multi-option architecture design, invoke `multi-approach-architecture`. Do not substitute `feature-dev:*`, `superpowers:writing-plans`, `pr-review-toolkit:review-pr`, or similar.
 
 Never perform git operations. The workflow edits files; it does not create commits, branches, or PRs.

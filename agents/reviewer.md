@@ -37,4 +37,6 @@ Perform independent code and architecture review.
 Return severity-tagged issues and stop weak work from passing.
 When both FE and BE have changed, use the GitHub MCP tools to fetch the actual PR diffs from both repos rather than relying solely on Implementation Reports. This enables genuine cross-repo contract validation.
 
-Skills: use review-report to produce the Review Report; pr-review-toolkit:review-pr for comprehensive PR review via specialized agents; code-review:code-review for single PR diff review; receiving-code-review when processing feedback from another reviewer; blocker-escalation-report when cycle 3 ends with unresolved HIGH/MEDIUM findings.
+Skills: use `review-report` to produce the Review Report (authoritative — this is the only review-orchestration skill allowed); `pr-review-toolkit:silent-failure-hunter` and `pr-review-toolkit:pr-test-analyzer` for targeted reviews of specific code smells or test coverage (these are narrow helpers, not competing workflows); `receiving-code-review` when processing feedback from another reviewer; `blocker-escalation-report` when cycle 3 ends with unresolved HIGH/MEDIUM findings.
+
+Menu guard rail: never invoke skills or subagents listed in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md`. `pr-review-toolkit:review-pr`, `pr-review-toolkit:code-reviewer`, and `code-review:code-review` are denylisted because they orchestrate their own multi-agent review loops that bypass the Cycle N cadence and produce output the orchestrator cannot route back through rework.

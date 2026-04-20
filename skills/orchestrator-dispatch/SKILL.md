@@ -76,6 +76,28 @@ If ANY check prints "MISSING":
 
 This checklist applies to ALL agent dispatches including Lead, Executor, Reviewer, Design Agent, and Integration Checker. It does NOT apply to Delivery PM (which operates at task level, not subtask level).
 
+### Clarifying-Questions Hold (Executor / Integration Checker dispatches only)
+
+After the Lead returns, but BEFORE dispatching Executor (or Integration Checker when it would precede implementation), inspect the subtask's `ai-work.md` for a non-empty `<!-- section:tep-clarifying-questions -->` block:
+
+```bash
+awk '/<!-- section:tep-clarifying-questions -->/,/<!-- \/section:tep-clarifying-questions -->/' \
+  ai-workflow-data/tasks/<task_id>/<subtask_id>/ai-work.md \
+  | grep -E '^\s*[0-9]+\.\s+\*\*' | head -1
+```
+
+If the grep returns a line (i.e., at least one numbered question exists), enter the **clarifying-questions hold**:
+
+1. **Do NOT dispatch Executor.** Pause the subtask.
+2. Present each question to the user verbatim via `AskUserQuestion`, one question per call (respecting the AskUserQuestion 2–4-options constraint; use "Other" for free text when the question cannot be pre-multi-choiced).
+3. Record each answer as an `### Answered <YYYY-MM-DD HH:MM UTC>` subsection appended inside `<!-- section:tep-clarifying-questions -->`.
+4. Update `orchestration-state.json` → `pending_user_actions` to clear the hold once every question carries an answer.
+5. Only when every question has an `Answered` subsection does Executor dispatch resume.
+
+This hold is a first-class user gate (sibling to P1 / P2 / P4). It does NOT require a P-number because it is subtask-local, but it is surfaced through the same `orchestrator-user-gates` skill so the UX is consistent.
+
+An empty `<!-- section:tep-clarifying-questions -->` block, or its absence entirely, means no hold — proceed with Executor dispatch normally.
+
 ## Artifact Gate (MANDATORY — evaluate after every dispatch returns)
 
 Every agent dispatch must terminate in one of exactly two valid outcomes:

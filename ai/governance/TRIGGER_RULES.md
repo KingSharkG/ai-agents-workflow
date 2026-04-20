@@ -223,6 +223,8 @@ Maximum review/rework cycles per subtask are tied to complexity:
 
 Exceeding the cap does **not** trigger another executor turn. The subtask auto-downgrades to `status: needs-replan` and is routed to Delivery PM (via Blocker Escalation Report) for scope / approach revision. The orchestrator tracks the cycle count by counting `### Cycle N` headings in `<!-- section:review -->` of `ai-work.md` before each rework dispatch — never rely on in-memory state for the count.
 
+Only **confidence-filtered findings** (those inside `<!-- section:review-findings -->`, not `<!-- section:review-low-confidence -->`) count toward rework. A cycle whose only remaining items are low-confidence observations resolves as `approved` without re-dispatching Executor.
+
 <!-- /section:rework-cap -->
 
 <!-- section:trigger-keywords -->

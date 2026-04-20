@@ -1,17 +1,17 @@
 # ai-agents-workflow — Claude Code Plugin
 
-Portable multi-agent governance layer. Packages the orchestration, lead/executor, delivery-PM, design, reviewer, integration-checker, and init roles as a single installable plugin, plus fifteen governance skills and five hook scripts.
+Portable multi-agent governance layer. Packages the orchestration, lead/executor, delivery-PM, design, reviewer, integration-checker, and init roles as a single installable plugin, plus the governance skills and hook scripts listed below.
 
 ## Layout
 
 - `.claude-plugin/plugin.json` — plugin manifest
 - `.claude-plugin/marketplace.json` — local marketplace entry
 - `agents/` — nine subagent definitions (orchestrator, lead, executor, delivery-pm, design-agent, reviewer, integration-checker, init, resume-orchestrator)
-- `skills/` — fifteen governance skills: base eleven (task-packet, technical-execution-packet, delivery-plan, implementation-report, review-report, integration-check, telemetry-summary, context-minimizer, plan-addendum, blocker-escalation-report, reversal-packet) plus four project-config skills (project-discovery, project-config-template, project-config-review, project-config-mutate)
+- `skills/` — governance skills: base eleven (task-packet, technical-execution-packet, delivery-plan, implementation-report, review-report, integration-check, telemetry-summary, context-minimizer, plan-addendum, blocker-escalation-report, reversal-packet), four project-config skills (project-discovery, project-config-template, project-config-review, project-config-mutate), and two Lead-side pre-TEP skills (codebase-exploration, multi-approach-architecture) that replace implicit exploration and single-design patterns and are the ai-agents-workflow counter-offer to `feature-dev:code-explorer` / `feature-dev:code-architect`
 - `commands/` — six user-facing slash commands (`init`, `add`, `update`, `remove`, `task`, `continue`) that namespace as `/ai-agents-workflow:<command>`; thin entry-points dispatching the `init`, `chief-orchestrator`, or `resume-orchestrator` subagent
-- `hooks/` — five Node.js hook scripts wired via `hooks/hooks.json`: `guard-subtask-skeleton` (blocking `Task` PreToolUse), `evaluate-triggers` (`Task` PreToolUse), `guard-agent-reads` (`Read` PreToolUse), `validate-artifact-chain` (`Write|Edit` PostToolUse), `validate-dispatch-bundle` (`Write|Edit` PostToolUse)
+- `hooks/` — Node.js hook scripts wired via `hooks/hooks.json`: `guard-forbidden-workflows` (blocking `Task` + `Skill` PreToolUse — denies competing workflow orchestrators per `ai/governance/FORBIDDEN_WORKFLOWS.md`), `guard-subtask-skeleton` (blocking `Task` PreToolUse), `evaluate-triggers` (`Task` PreToolUse), `guard-agent-reads` (`Read` PreToolUse), `validate-artifact-chain` (`Write|Edit` PostToolUse), `validate-dispatch-bundle` (`Write|Edit` PostToolUse), `validate-summary-telemetry` (`Write|Edit` PostToolUse)
 - `ai/core/PROJECT_CONSTITUTION.md` — workflow rules, Definition of Done
-- `ai/governance/` — trigger rules, review checklist, artifact discipline, resolution policy (skills + plugins)
+- `ai/governance/` — trigger rules, review checklist, artifact discipline, resolution policy (helper plugins/skills), **`FORBIDDEN_WORKFLOWS.md`** (competing orchestrators — hard-denylisted)
 - `ai/playbooks/ORCHESTRATION.md` — default flow (Step 0 intake classification through Step 15 completion), dispatch bundles, orchestrator state, token-saving rules
 - `ai/agents/` — canonical stack-agnostic role contracts (source of truth for `agents/` stubs)
 

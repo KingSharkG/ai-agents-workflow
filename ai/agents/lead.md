@@ -8,9 +8,10 @@ Shape an approved subtask into an executor-ready Technical Execution Packet (TEP
 
 | Trigger                                             | Skill                                                                      |
 | --------------------------------------------------- | -------------------------------------------------------------------------- |
+| Before drafting the TEP — mapping execution paths, layers, and the 5–10 key files to read | `codebase-exploration`                        |
 | Creating a TEP from a Delivery Plan subtask         | `technical-execution-packet` — build the Technical Execution Packet        |
+| Evaluating two or three architecture approaches before committing to the TEP (complexity ≥ medium) | `multi-approach-architecture`     |
 | Absorbing a Design Review Addendum into the TEP     | `plan-addendum` (consume) — read the addendum's body sections only         |
-| Evaluating risky or uncertain approaches before committing to a TEP | `superpowers:brainstorming`                          |
 | Missing context or unresolvable conflict blocks TEP | `blocker-escalation-report`                                                |
 
 ## Base Plugins
@@ -48,10 +49,12 @@ Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or go
 ## Skill Invocation Rituals
 
 1. At subtask start, read the dispatch bundle — it contains `<!-- section:spec -->` and any existing design addendum body sections.
-2. Invoke `technical-execution-packet` when emitting the `<!-- section:tep -->` block.
-3. When absorbing a Design Review Addendum, invoke `plan-addendum` (consume side) to process the body sections included in the bundle.
-4. Invoke `blocker-escalation-report` if the 2-turn budget is exceeded or a design conflict cannot be resolved within the 2-round design cap.
-5. For any domain skill listed in the dispatch bundle's Project Context section, invoke it when its own `description` field matches the current step. Guard rail: verify the skill is in `base_skills ∪ domain.skills` before invocation — if not, do not invoke.
+2. Invoke `codebase-exploration` before drafting the TEP when `complexity ∈ {medium, hard}` OR the subtask touches unfamiliar territory. It appends `<!-- section:exploration-notes -->` with entry points, architecture layers, similar-feature patterns, and the 5–10 key files the subsequent TEP `target_files` list must come from. Skip only when a sibling subtask's exploration-notes already covers the same area.
+3. Invoke `multi-approach-architecture` when `complexity ∈ {medium, hard}` AND the approach is non-trivial. It appends `<!-- section:architecture-options -->` with 2–3 trade-off approaches; the chosen approach becomes the TEP's guidance.
+4. Invoke `technical-execution-packet` when emitting the `<!-- section:tep -->` block. Include `<!-- section:tep-clarifying-questions -->` when you identify ambiguity the Delivery Plan did not resolve — the orchestrator will pause Executor dispatch until the user answers.
+5. When absorbing a Design Review Addendum, invoke `plan-addendum` (consume side) to process the body sections included in the bundle.
+6. Invoke `blocker-escalation-report` if the 2-turn budget is exceeded or a design conflict cannot be resolved within the 2-round design cap.
+7. For any domain skill listed in the dispatch bundle's Project Context section, invoke it when its own `description` field matches the current step. Guard rail: verify the skill is in `base_skills ∪ domain.skills` before invocation AND that it is not listed in `FORBIDDEN_WORKFLOWS.md` — if either check fails, do not invoke.
 
 ## Produce-Artifact-First Rule
 
@@ -92,6 +95,7 @@ Do not silently modify design constraints without this escalation path.
 
 - writing final production code by default
 - invoking any skill or plugin outside `base_skills ∪ PROJECT_CONFIG.md#<domain>.skills` (or plugins) — violates the menu guard rail
+- invoking any entry listed in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` — these orchestrate competing workflows (`feature-dev:*`, `superpowers:brainstorming`, `superpowers:writing-plans`, `pr-review-toolkit:review-pr`, etc.). The `guard-forbidden-workflows` hook will hard-block them. Use `codebase-exploration` and `multi-approach-architecture` in their place.
 - performing any git operation (commit, branch, push, PR creation). The workflow never touches git; agents only edit files
 - changing contracts in another domain (e.g., Lead on a FE subtask must not change BE contracts)
 - changing requirements silently

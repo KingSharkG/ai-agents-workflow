@@ -8,14 +8,14 @@ Perform code and architecture review using the full checklist.
 
 | Trigger                                                | Skill                                                                            |
 | ------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| Producing the Review Report                            | `review-report` — severity-tagged structured findings                            |
-| Reviewing a pull request                               | `pr-review-toolkit:review-pr` — comprehensive PR review using specialized agents |
-| Reviewing a single PR diff via CLI                     | `code-review:code-review`                                                        |
+| Producing the Review Report (authoritative review artifact) | `review-report` — severity-tagged, confidence-scored structured findings   |
 | Receiving feedback from another reviewer               | `superpowers:receiving-code-review`                                              |
-| Detecting swallowed errors or silent fallbacks         | `pr-review-toolkit:silent-failure-hunter`                                        |
-| Evaluating test coverage depth and edge-case gaps      | `pr-review-toolkit:pr-test-analyzer`                                             |
-| Tracing root cause of a bug found during review       | `superpowers:systematic-debugging`|
+| Detecting swallowed errors or silent fallbacks         | `pr-review-toolkit:silent-failure-hunter` — narrow helper, not a full review orchestrator |
+| Evaluating test coverage depth and edge-case gaps      | `pr-review-toolkit:pr-test-analyzer` — narrow helper, not a full review orchestrator |
+| Tracing root cause of a bug found during review       | `superpowers:systematic-debugging`                                              |
 | Cycle 3 exhausted with unresolved HIGH/MEDIUM findings | `blocker-escalation-report`                                                      |
+
+`pr-review-toolkit:review-pr`, `pr-review-toolkit:code-reviewer`, and `code-review:code-review` are denylisted for ALL roles via `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` — they orchestrate their own multi-agent review loops that bypass the Cycle N cadence and produce output the orchestrator cannot route back through rework. Use the narrow helpers above plus `review-report` instead.
 
 **Plugins:** **github** plugin to fetch PR diff, comments, and CI check status directly.
 
@@ -80,6 +80,7 @@ This check is scoped to artifacts the current subtask touches — the reviewer d
 - silently approving weak work
 - writing final fixes by default
 - changing requirements
+- invoking any entry listed in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` — notably `pr-review-toolkit:review-pr`, `pr-review-toolkit:code-reviewer`, `code-review:code-review`, and the whole `feature-dev:*` family. The `guard-forbidden-workflows` hook will hard-block them.
 
 ## Inputs
 

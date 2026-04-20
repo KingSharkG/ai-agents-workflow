@@ -114,8 +114,11 @@ approved | changes_requested
 <!-- section:review-findings -->
 #### Findings
 
+Confidence-filtered — only findings with `confidence >= 75` appear here. Lower-confidence observations go under `section:review-low-confidence` and do NOT trigger rework.
+
 ##### <FINDING-001> — <short title>
 - **severity**: high | medium | low
+- **confidence**: <integer 0–100; must be ≥ 75 for this section>
 - **root_cause_category**: spec-gap | impl-bug | test-gap | review-noise
 - **affected_subtask**: <subtask_id>
 - **location**: `<file>:<line>` or `<module>`
@@ -124,6 +127,18 @@ approved | changes_requested
 
 <!-- repeat for each finding -->
 <!-- /section:review-findings -->
+
+<!-- section:review-low-confidence -->
+#### Low-Confidence Observations (not rework-eligible)
+Optional — include only when real observations with `confidence < 75` exist. These are recorded for audit and for pattern detection across subtasks; they do NOT route to Executor and do NOT count toward the rework cap.
+
+##### <OBSERVATION-001> — <short title>
+- **severity**: high | medium | low
+- **confidence**: <integer 0–74>
+- **location**: `<file>:<line>` or `<module>`
+- **description**: <specific observation>
+- **why_uncertain**: <one line: what additional evidence would promote this to a rework-eligible finding>
+<!-- /section:review-low-confidence -->
 
 <!-- section:review-summary -->
 #### Summary
@@ -152,11 +167,16 @@ These are soft targets to keep ai-work.md manageable — complex subtasks may ex
 - **Review summary:** ≤3 sentences.
 
 ## Rules
-- `verdict` must be `approved` only when zero high/medium findings remain.
+- `verdict` must be `approved` only when zero high/medium **confidence-filtered** findings remain (i.e., in `section:review-findings`). Low-confidence observations in `section:review-low-confidence` do NOT block approval.
 - `cycle_count` must be read from the previous `### Cycle N` subsection — do not reset or invent it.
 - `rework_direction` must be specific enough that the executor can act without asking follow-up questions.
-- Every finding must carry a `root_cause_category`.
-- If `cycle_count` reaches the complexity-tied cap and findings remain, use `blocker-escalation-report` instead.
+- Every finding must carry a `root_cause_category` AND a `confidence` integer.
+- **Confidence rubric** (target calibration — pick the lowest threshold that still fits):
+  - `90–100`: reproducible failure or violates a cited rule (quote the rule + diff); the Executor must act.
+  - `75–89`: confident the concern is real but the exact rework direction has a small degree of judgment; the Executor must act.
+  - `50–74`: plausible issue but evidence is partial (single code path, no failing test, no cited rule). Goes under `section:review-low-confidence` — record for audit, do not request rework.
+  - `< 50`: do NOT write it. Low-confidence noise degrades the rework loop.
+- If `cycle_count` reaches the complexity-tied cap and confidence-filtered findings remain, use `blocker-escalation-report` instead.
 - Do not write findings for issues outside the approved subtask scope.
 - When `review_verdict = approved`, `completion_summary` must be filled; write it into both `section:review-completion-summary` and `summary.md`.
 - `summary.md` is MANDATORY — write it even for ultra-light subtasks.

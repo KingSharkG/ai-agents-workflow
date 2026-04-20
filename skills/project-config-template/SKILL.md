@@ -7,6 +7,8 @@ description: Canonical skeleton for ai-workflow-data/config/PROJECT_CONFIG.md. U
 
 Produce the content for `ai-workflow-data/config/PROJECT_CONFIG.md`. All required anchors are present even when empty (per `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:produce-artifact-first -->`).
 
+**Denylist enforcement.** When populating `<!-- section:<domain> -->` → `plugins:` and `skills:` lists, drop every candidate whose identifier matches an entry in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` → `<!-- section:denylist -->`. Do NOT emit `feature-dev`, `feature-dev:*`, `pr-review-toolkit:review-pr`, `pr-review-toolkit:code-reviewer`, `code-review:code-review`, or the role-scoped `superpowers:*` orchestration skills listed there — they orchestrate competing workflows and would be stripped at bundle assembly by the `context-minimizer` filter and hard-blocked at dispatch by the `guard-forbidden-workflows` hook. Helpers that are safe to list: `context7`, `figma`, `supabase`, domain-specific MCP servers, and the narrow `superpowers:*` / `pr-review-toolkit:*` entries named in `FORBIDDEN_WORKFLOWS.md` → `<!-- section:allowed-helpers -->`.
+
 ## Output Target
 
 Return the full skeleton to the init agent. The agent writes it atomically after the `project-config-review` gate approves.
