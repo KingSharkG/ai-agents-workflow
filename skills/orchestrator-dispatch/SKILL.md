@@ -22,11 +22,7 @@ Dispatch bundles are valid only in `mode: normal`. In `mode: degraded-inline`, t
 2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt.
 3. Agent performs the work and appends its artifact section.
 
-**Bundle contents (assembled by orchestrator via `context-minimizer` skill):**
-- Role contract block (embedded in `context-minimizer`, not read from canonical files)
-- Pre-extracted PROJECT_CONFIG.md sections (domain, baselines, role best-practices)
-- Governance excerpts within token ceilings
-- Artifact input (the specific ai-work.md sections this role needs)
+Bundle contents are assembled by the `context-minimizer` skill — see `${CLAUDE_PLUGIN_ROOT}/skills/context-minimizer/SKILL.md` → "Bundle Format" for the section list (role contract, project context, governance, artifact input).
 
 Menu guard rail: the agent's allowed skills for the subtask are `base_skills ∪ domain.skills`; allowed plugins are `base_plugins ∪ domain.plugins`. Both lists are included in the dispatch bundle's Project Context section.
 
@@ -64,13 +60,15 @@ test -f ai-workflow-data/tasks/<task_id>/<subtask_id>/roles/<role>.md && echo "b
 test -f ai-workflow-data/tasks/<task_id>/orchestration-state.json && echo "state: OK" || echo "MISSING: orchestration-state.json"
 ```
 
+The Pre-Dispatch Checklist only tests `orchestration-state.json` (hot state). It does NOT require `orchestration-history.json` to exist — the history file is created on the first subtask completion, not at task start, and is only read at gates/resume. See the `orchestrator-state` skill for the hot/history split.
+
 If ANY check prints "MISSING":
 
 1. **STOP** — do NOT dispatch the agent.
 2. Create the missing file(s) using the appropriate protocol:
    - `ai-work.md` → write skeleton from `ARTIFACT_DISCIPLINE.md` → `<!-- section:ai-work-skeleton -->`
    - `roles/<role>.md` → invoke the `context-minimizer` skill for the target role
-   - `orchestration-state.json` → write initial state per `orchestrator-state` skill
+   - `orchestration-state.json` → write initial hot state per `orchestrator-state` skill
 3. Re-run the checklist to confirm all files now exist.
 4. Only then proceed with the agent dispatch.
 
@@ -160,36 +158,4 @@ After accepting a subtask completion, read `<subtask_id>/summary.md` (written by
 
 ## Delta-review protocol (rework cycles)
 
-For review cycle N > 1, the dispatch bundle for the target agent includes only delta context:
-
-**Medium/Low findings — Executor goes directly back to Reviewer:**
-
-The executor's rework dispatch bundle includes:
-- Current diff or changed files
-- Latest `review-findings` from last `### Cycle N` in `<!-- section:review -->`
-- Latest `impl-summary` and `impl-tests-run`
-- Relevant acceptance slice from `<!-- section:spec -->`
-- Do NOT resend: full implementation section, full review history, full baseline, full checklist
-
-The reviewer's re-review dispatch bundle includes:
-- Updated `<!-- section:implementation -->` (current cycle only)
-- Changed files or diff (current cycle only)
-- `<!-- section:spec -->` acceptance signals
-- Do NOT resend: full prior review cycles, full TEP, full baseline
-
-**High findings touching TEP-defined logic — Executor routes through Lead:**
-
-The lead's re-validation dispatch bundle includes:
-- Impacted TEP slice only (not full TEP)
-- Latest finding payload from `review-findings`
-- Do NOT resend: full prior review package, full implementation section
-
-The executor's rework bundle (after Lead re-validates) includes:
-- Updated TEP slice (if Lead revised it)
-- Latest `review-findings`
-- Do NOT resend: full TEP, full review history
-
-**Severity routing:**
-
-- `High` findings touching TEP-defined logic route: Executor → Lead → Executor → Reviewer
-- `Medium` and `Low` findings route: Executor → Reviewer (direct)
+For review cycle N > 1, dispatch bundles carry only delta context. The canonical rules — Medium/Low routing (Executor → Reviewer direct), High routing (Executor → Lead → Executor → Reviewer), and the cycle-N>2 finding-ID delta — live in `${CLAUDE_PLUGIN_ROOT}/skills/context-minimizer/SKILL.md` under `### executor` → "Rework bundle (cycle N > 1)" / "Executor rework bundle (cycle N > 2) — finding-ID delta", and under `### reviewer` → "Re-review bundle". Apply those rules when invoking `context-minimizer` for the rework dispatch; do not duplicate them here.

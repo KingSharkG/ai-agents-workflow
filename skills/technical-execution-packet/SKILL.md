@@ -32,6 +32,7 @@ Append inside `<!-- section:tep -->`:
 - **domain**: frontend | backend
 - **complexity**: low | medium | hard  <!-- carried forward, do not re-derive -->
 - **turns_budget**: <carried from Delivery Plan>
+- **shared_artifacts**: true | false  <!-- true when the subtask introduces or modifies constants, types, interfaces, config keys, or dependency declarations consumed by sibling subtasks; false when scope is self-contained. Reviewer uses this to decide whether the cross-subtask consistency grep is skip-eligible. When unsure, set true. -->
 - **created_at**: <ISO 8601 UTC>
 <!-- /section:tep-metadata -->
 
@@ -120,6 +121,13 @@ Target line counts per complexity tier (TEP section only):
 - All `target_files` paths must be verified to exist before writing the TEP — use filesystem tools.
 - `complexity` and `turns_budget` are copied from the Delivery Plan, never re-derived.
 - `source_delivery_section` is the exact `delivery-subtask-*` tag from `task-data.md`.
+- `shared_artifacts` must be set deliberately. Set `true` when the subtask introduces or modifies any of: shared constants / config keys (storage keys, feature flags, env var names), shared types / interfaces, dependency manifest entries (`package.json`, `requirements.txt`, `Cargo.toml`, `go.mod`, `pyproject.toml`), or cross-subtask contract surfaces consumed by siblings in the Delivery Plan. Set `false` only when the subtask's scope is demonstrably self-contained (e.g. edits inside a single file's private helpers). When uncertain, set `true` — the reviewer will run the cross-subtask consistency check, which is cheap relative to missing a real cross-subtask break.
+
+## Related
+
+- Reviewer role contract (`${CLAUDE_PLUGIN_ROOT}/ai/agents/reviewer.md`) → "Skip clause (ultra-light subtasks)" — consumes `shared_artifacts` to decide whether to run the Cross-Subtask Consistency Check.
+- `context-minimizer` → "Ultra-light subtask bundle adjustment" — omits the cross-subtask scan protocol from the reviewer bundle when the subtask is skip-eligible.
+- `codebase-exploration`, `multi-approach-architecture` — pre-TEP skills whose output often determines whether a subtask carries shared artifacts.
 - `context_bundle` must contain the exact signatures/types/contracts the executor needs; if the executor would still need to open a non-target file, add it here.
 - When `<!-- section:exploration-notes -->` exists for this subtask, every `target_files` entry MUST be among the files listed in `exploration-key-files` — the exploration record is the audit trail.
 - **No duplication across sections.** Each fact appears exactly once.

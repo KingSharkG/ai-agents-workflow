@@ -100,10 +100,12 @@ This plugin reads and writes files under `ai-workflow-data/` in the consumer rep
    - `<!-- section:extra-trigger-keywords -->` (optional)
    - `<!-- section:cross-domain-rules -->` (read by delivery-pm)
    - `<!-- section:quality-gates -->` (read by reviewer and executor)
-2. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — per-subtask artifact. The `guard-subtask-skeleton` hook blocks any non-exempt Task dispatch if this file is missing.
-3. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` — per-subtask summary with diagnostics such as telemetry, context manifests, and dispatch-bundle audit details.
-4. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md` — dispatch bundles written before each agent handoff with pre-curated role context.
-5. `ai-workflow-data/tasks/<task_id>/orchestration-state.json` — orchestrator state persisted across subtasks.
+2. `ai-workflow-data/config/domain-contexts/` — **derived cache** of the pre-extracted sections above. One `<tag>.md` file per cached section plus `_manifest.json`. Regenerated automatically by `init` / `update` / `add` / `remove`; never hand-edit. `context-minimizer` reads from this cache instead of grepping PROJECT_CONFIG.md on every agent dispatch. Contents are project-dependent — a Python-only backend repo has no `fe-baseline.md`. See `skills/project-config-template/SKILL.md` → "Derived Context Cache" for the exact format.
+3. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — per-subtask artifact. The `guard-subtask-skeleton` hook blocks any non-exempt Task dispatch if this file is missing.
+4. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` — per-subtask summary with diagnostics such as telemetry, context manifests, and dispatch-bundle audit details.
+5. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md` — dispatch bundles written before each agent handoff with pre-curated role context.
+6. `ai-workflow-data/tasks/<task_id>/orchestration-state.json` — **hot** orchestrator state (current cursor: phase, current_subtask, pending_subtasks, blocked_gates, pending_user_actions, subtask_offsets). Read before every subtask transition.
+7. `ai-workflow-data/tasks/<task_id>/orchestration-history.json` — **history** orchestrator state (`completed_subtasks[]` with validated sections, `trigger_decisions{}`). Written once per subtask completion; read only at P2/P4 gates, resume, and retrospective. Separated from hot state so task-history growth doesn't inflate per-dispatch read cost. See `skills/orchestrator-state/SKILL.md` for the schema.
 
 The `evaluate-triggers` hook reads the subtask's `ai-work.md` spec section for trigger keyword matching. It does NOT scan `.claude/plans/`.
 

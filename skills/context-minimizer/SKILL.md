@@ -92,11 +92,11 @@ Role contracts live inline in each canonical `${CLAUDE_PLUGIN_ROOT}/ai/agents/<r
 
 ## Context Bundle by Role
 
+> **Role Contract for every role below.** Read `${CLAUDE_PLUGIN_ROOT}/ai/agents/<role>.md` and copy the `<!-- role-contract:<role> -->` marker block verbatim into the bundle's `## Role Contract` section. Do not include the surrounding prose. This rule is identical for all roles per `## Role Contract Blocks` above and is not repeated per-section.
+
 > **Cache resolution.** Every `Project Context from PROJECT_CONFIG.md` bullet below that names a `<!-- section:<tag> -->` resolves via the Project-Level Context Cache protocol above: read `ai-workflow-data/config/domain-contexts/<tag>.md` when the tag is in `_manifest.json`, otherwise extract live from `PROJECT_CONFIG.md`. The per-role lists below describe **what** to include; the cache protocol describes **how** to read it.
 
 ### delivery-pm
-
-**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/delivery-pm.md` and copy the `<!-- role-contract:delivery-pm -->` marker block verbatim. Do not include the surrounding prose.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:domains -->` — declared_domains, detection_rules, decomposition_rule, escalation_rule
@@ -113,8 +113,6 @@ Role contracts live inline in each canonical `${CLAUDE_PLUGIN_ROOT}/ai/agents/<r
 ---
 
 ### lead (TEP creation + validation)
-
-**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/lead.md` and copy the `<!-- role-contract:lead -->` marker block verbatim. Do not include the surrounding prose.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:<domain> -->` block (skills, plugins, baseline anchors, validation_rules, forbidden_actions)
@@ -135,8 +133,6 @@ Role contracts live inline in each canonical `${CLAUDE_PLUGIN_ROOT}/ai/agents/<r
 ---
 
 ### executor
-
-**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/executor.md` and copy the `<!-- role-contract:executor -->` marker block verbatim. Do not include the surrounding prose.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:<domain> -->` block (for baseline anchors, validation_rules, forbidden_actions)
@@ -179,8 +175,6 @@ For Lead re-validation on High findings: same rule — send only the delta findi
 
 ### design-agent (FE subtasks only)
 
-**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/design-agent.md` and copy the `<!-- role-contract:design-agent -->` marker block verbatim. Do not include the surrounding prose.
-
 **Project Context from** `PROJECT_CONFIG.md`:
 - FE section only (`<!-- section:fe-baseline -->`)
 
@@ -198,8 +192,6 @@ For Lead re-validation on High findings: same rule — send only the delta findi
 
 ### integration-checker
 
-**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/integration-checker.md` and copy the `<!-- role-contract:integration-checker -->` marker block verbatim. Do not include the surrounding prose.
-
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:api-baseline -->` and `<!-- section:auth-baseline -->` only
 
@@ -216,8 +208,6 @@ For Lead re-validation on High findings: same rule — send only the delta findi
 ---
 
 ### reviewer
-
-**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/reviewer.md` and copy the `<!-- role-contract:reviewer -->` marker block verbatim. Do not include the surrounding prose.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - Relevant layer section only (domain validation_rules)
@@ -281,108 +271,7 @@ These caps apply to curated governance/context tokens in the bundle (excluding t
 
 ## Section Extraction Rules
 
-Use `<!-- section:TAG -->` markers in governance and core files to extract precise sections.
-
-### Delivery Plans
-
-Extract from `task-data.md` → `<!-- section:delivery-plan -->`:
-- Metadata only → `<!-- section:delivery-metadata -->`
-- Phase overview �� `<!-- section:delivery-phase-<phase-slug> -->`
-- Single subtask → `<!-- section:delivery-subtask-<normalized-subtask-id> -->`
-- Routing only → `<!-- section:delivery-routing -->`
-
-### Task Packet
-
-Extract from `task-data.md` → `<!-- section:task-packet -->`:
-- Metadata / title → `<!-- section:task-metadata -->`
-- Requirements → `<!-- section:task-requirements-excerpt -->`
-- Scope → `<!-- section:task-scope-estimate -->`
-- Audit context → `<!-- section:task-business-goal -->`, `<!-- section:task-known-blockers -->`, `<!-- section:task-assumptions -->`
-
-### Technical Execution Packet
-
-Extract from `section:tep` in `ai-work.md`:
-- Metadata → `<!-- section:tep-metadata -->`
-- Goal → `<!-- section:tep-goal -->`
-- Scope → `<!-- section:tep-target-files -->`, `<!-- section:tep-non-goals -->`
-- Contract/context → `<!-- section:tep-expected-contract -->`, `<!-- section:tep-context-bundle -->`
-- Execution guidance → `<!-- section:tep-implementation-steps -->`, `<!-- section:tep-risks -->`, `<!-- section:tep-acceptance-signals -->`, `<!-- section:tep-recommended-tests -->`
-
-### Implementation Report
-
-Extract from `section:implementation` in `ai-work.md`:
-- Metadata → `<!-- section:impl-metadata -->`
-- Change summary → `<!-- section:impl-summary -->`, `<!-- section:impl-files-changed -->`
-- Validation evidence → `<!-- section:impl-tests-run -->`
-- Audit → `<!-- section:impl-dynamic-skills -->`, `<!-- section:impl-plugins-used -->`, `<!-- section:impl-unresolved-issues -->`, `<!-- section:impl-project-state -->`
-
-### Review Report
-
-Extract from `section:review` in `ai-work.md` (multi-cycle: `### Cycle N` subsections, latest first):
-- Metadata → `<!-- section:review-metadata -->`
-- Rework input → `<!-- section:review-findings -->`
-- Closure → `<!-- section:review-verdict -->`, `<!-- section:review-completion-summary -->`
-
-**Latest review cycle rule:** For executor rework, extract only the last `### Cycle N` subsection. Do not send previous cycles.
-
-### Integration Check Report
-
-Standalone file: `ai-workflow-data/tasks/<task_id>/integration-check-<cycle>.md`
-- Metadata → `<!-- section:integration-metadata -->`
-- Surfaces → `<!-- section:integration-fe-surface -->`, `<!-- section:integration-be-surface -->`
-- Result → `<!-- section:integration-verdict -->`, `<!-- section:integration-findings -->`, `<!-- section:integration-recommended-fixes -->`
-
-### Design / Domain Addenda
-
-Extract from `section:plan-addendum` in `ai-work.md`:
-- Design body → `<!-- section:design-findings -->`, `<!-- section:design-constraints -->`, `<!-- section:design-open-questions -->`
-- Domain body → `<!-- section:domain-invariants -->`, `<!-- section:domain-role-checks -->`, `<!-- section:domain-status-checks -->`, `<!-- section:domain-clarifications -->`
-
-### Blocker Escalation Report
-
-Extract from `section:escalation-N` in `ai-work.md`:
-- Metadata → `<!-- section:blocker-metadata -->`
-- Payload → `<!-- section:blocker-type -->`, `<!-- section:blocker-what-is-blocked -->`, `<!-- section:blocker-what-was-tried -->`, `<!-- section:blocker-required-input -->`, `<!-- section:blocker-suggested-rerouting -->`
-
-### Baseline sections in `PROJECT_CONFIG.md`
-
-Resolved via the Project-Level Context Cache protocol (see top of skill) — read `domain-contexts/<tag>.md` first, fall back to live extraction.
-
-- FE executor/lead → `<!-- section:fe-baseline -->`
-- BE executor/lead → `<!-- section:be-baseline -->`
-- Integration checker → `<!-- section:api-baseline -->`
-- Auth-related → also `<!-- section:auth-baseline -->`
-- Reviewer → layer-relevant section only
-
-### REVIEW_CHECKLIST.md
-
-- Always: `<!-- section:core-review -->`, `<!-- section:severity -->`, `<!-- section:rework-policy -->`
-- Domain subtask → also `<!-- section:domain-review -->`
-- Paired cross-domain / IC report → also `<!-- section:integration-review -->`
-
-### RESOLUTION_POLICY.md
-
-- Always: `<!-- section:global-skills -->`
-- Reviewer → also `<!-- section:reviewer-skills -->`
-- Plugin availability → `<!-- section:registry -->` only
-- Budget enforcement → `<!-- section:plugin-budget -->`, `<!-- section:skill-budget -->`
-
-### PROJECT_CONSTITUTION.md
-
-- Executors/Reviewer → `<!-- section:definition-of-done -->`
-
-### TRIGGER_RULES.md
-
-- Delivery PM (full routing) → all trigger sections
-- FE dispatch → `<!-- section:fe-triggers -->`, `<!-- section:design-agent-trigger -->`, `<!-- section:domain-validation-note -->`
-- BE dispatch → `<!-- section:be-triggers -->`
-- Executor gate → `<!-- section:definition-of-ready -->`
-- Budget → `<!-- section:turn-budgets -->`, `<!-- section:telemetry-gate -->`
-
-### ORCHESTRATION.md
-
-- Default workflow → `<!-- section:default-flow -->`
-- Escalation → `<!-- section:escalation -->`
+Per-role bundle blocks above name the `<!-- section:<tag> -->` to extract from each artifact (`ai-work.md`, `task-data.md`, integration-check report). The full extraction rules — which sub-tags map to which artifact subsection, latest-cycle rules for `section:review`, baseline cache resolution, and per-governance-file extraction — live in `${CLAUDE_PLUGIN_ROOT}/skills/context-minimizer/references/section-extraction.md`. Read that file when extracting a section type for the first time in a dispatch; the rules are stable across cycles, so you only need to read once per session.
 
 ## Rules
 

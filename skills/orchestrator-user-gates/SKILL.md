@@ -46,6 +46,17 @@ The orchestrator MUST pause for user input at these checkpoints. Use `AskUserQue
 
 **When:** All subtasks are closed, `blocked_gates` and `pending_user_actions` are empty, and the orchestrator is about to set `workflow_state: complete`.
 
+**Artifact-chain validation.** Before presenting the summary, confirm each subtask's artifact chain is complete. Read `orchestration-history.json` once and for each `completed_subtasks[]` entry inspect its `sections[]` list. Compute the expected section set from the subtask's path:
+
+- Standard subtask → `["spec", "tep", "implementation", "review"]`
+- Ultra-light subtask (direct-executor, no TEP) → `["spec", "implementation", "review"]`
+- Add `"plan-addendum"` when the trigger decision recorded `design_agent: required`.
+- Add `"integration-check"` when the trigger decision recorded `integration_checker: required`.
+
+If every `completed_subtasks[]` entry satisfies its expected set, the artifact chain is validated — proceed to the approval question without re-reading subtask files. This map-based validation replaces the prior pattern of re-opening every subtask's `ai-work.md` at P4 (which cost ~200–400 KB of reads on large tasks).
+
+**Fallback.** If the map is incomplete — missing `sections` arrays (legacy pre-F5 history), missing entries for listed subtasks, or a subtask's actual `ai-work.md` contradicts the map — fall back to per-subtask grep: `grep -oE '<!-- section:[a-z0-9-]+ -->' <ai-work.md>` for each subtask. Record the fallback as a `cache_miss: artifact-chain-<subtask_id>` telemetry line in the task-level `summary.md` so retrospective captures repeated misses.
+
 **Action:** Present the full task summary (subtask outcomes table, open items, blockers carried forward, deferred items) and ask via `AskUserQuestion`:
 
 - `Approve completion` — set `workflow_state: complete`

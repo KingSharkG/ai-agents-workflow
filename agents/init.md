@@ -20,18 +20,27 @@ Modes (inferred from the user's prompt or passed as an explicit argument):
 - `update` — rescan the repo and refresh only CLI-owned sections; preserve user-authored sections and inter-section prose.
 - `add <target-type> <value> [--domain <d>]` / `remove <target-type> <value> [--domain <d>]` — diff-and-confirm mutations. Valid target-types: `domain`, `skill`, `plugin`, `baseline`, `validation-rule`, `forbidden-action`, `best-practice`, `cross-domain-rule`.
 
-Operating sequence (every run):
+Mode-dependent catalog load (see the full Load Order table in `${CLAUDE_PLUGIN_ROOT}/ai/agents/init.md` → "Load Order"):
+
+- `init` → full catalog (governance + all SKILL.md / agent stubs + PROJECT_CONSTITUTION).
+- `update` → governance only; skip SKILL.md / agent stubs / PROJECT_CONSTITUTION.
+- `add` → governance + only the one SKILL.md matching `<value>` when `target-type == skill`.
+- `remove` → `FORBIDDEN_WORKFLOWS.md` only.
+
+Determine the mode before loading any catalog files. `add`/`remove` skip Steps 1–4 (discovery) entirely — they operate on an already-initialized config.
+
+Operating sequence (init / update only; add / remove jump to Step 7):
 
 1. Non-mutating discovery via the `project-discovery` skill.
 2. Collect evidence (manifests, lockfiles, framework heuristics, monorepo markers, quality-gate signals).
 3. Classify the repo: `fe` / `be` / `mixed` / `new-domain`.
-4. Map evidence to the plugin's catalog (see `${CLAUDE_PLUGIN_ROOT}/ai/governance/RESOLUTION_POLICY.md`, `TRIGGER_RULES.md`, `skills/`, `agents/`, `ai/core/PROJECT_CONSTITUTION.md`).
+4. Map evidence to the plugin's catalog (scope per the mode-dependent table above; in `update` mode, consult `RESOLUTION_POLICY.md` / `TRIGGER_RULES.md` only — do NOT re-enumerate every SKILL.md).
 4a. Cross-reference `installed_capabilities` against the registry. For each entry from `project-discovery`, look it up in `RESOLUTION_POLICY.md` → `<!-- section:registry -->` or `<!-- section:external-skills -->`. Recommend only rows with `status ∈ {approved, trial}`. Installed-but-unapproved capabilities are advisory only — surface via `AskUserQuestion` with options `Do not use (not yet governed)` / `Skip and propose a registry PR separately`. Never auto-add unapproved capabilities. For `consumer_marketplaces`, ask via `AskUserQuestion` to enumerate (no reliable API).
 4b. **Apply the forbidden-workflows filter.** Before presenting plugin or skill options to the user, drop every candidate that matches an entry in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` → `<!-- section:denylist -->`. For each dropped entry, log a one-line skip reason to stderr naming the replacement (e.g. `[init] skipped feature-dev — denylisted; use codebase-exploration + multi-approach-architecture`). Never write a denylisted name into `PROJECT_CONFIG.md`; the `context-minimizer` filter and `guard-forbidden-workflows` hook would strip and block it at runtime anyway, and carrying it in config just pollutes the file.
 5. Identify ambiguities and missing intent.
 6. Ask the minimum necessary user questions via `AskUserQuestion`, each with 2–4 predefined options. On low confidence, the last question is always the catch-all "Is there anything else I should know about this project?" with options `No, proceed` / `Yes, I'd like to add notes`.
 7. Assemble the proposal (for `init` the full file; for other modes a unified diff scoped to owned sections) and run the `project-config-review` review-and-comment loop — user must choose `Approve and write` or `Revise with comments`. Loop until approved.
-8. Write atomically via the `project-config-template` skill (for skeleton shape) and `project-config-mutate` (for `add`/`remove`). Ensure `ai-workflow-data/tasks/.gitkeep` exists. Print written paths.
+8. Write atomically via the `project-config-template` skill (for skeleton shape) and `project-config-mutate` (for `add`/`remove`). Immediately after the PROJECT_CONFIG.md write, regenerate `ai-workflow-data/config/domain-contexts/` per `project-config-template` → "Derived Context Cache" (write per-tag `.md` files then `_manifest.json` last). Ensure `ai-workflow-data/tasks/.gitkeep` exists. Print written paths (including the cache directory).
 
 Hard rules:
 

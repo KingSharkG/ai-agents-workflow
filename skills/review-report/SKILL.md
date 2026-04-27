@@ -25,137 +25,11 @@ Produce this report after reviewing an Implementation Report (and Integration Ch
 
 ### 1. summary.md
 
-Write to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md`:
-
-```markdown
-# Subtask Summary — <subtask_id>
-
-## Status
-- **workflow_state**: approved | blocked-on-user | pending-integration-check | needs-replan
-- **review_verdict**: approved | changes_requested | needs-replan
-- **cycle_count**: <N>
-- **updated_at**: <ISO 8601 UTC>
-
-## Acceptance Signals
-| Signal | State | Evidence | Notes |
-| ------ | ----- | -------- | ----- |
-| <acceptance signal from spec> | pass | executed | verified in simulator |
-| <acceptance signal from spec> | pass | inspected | verified by code inspection |
-
-## Files Changed
-[list from impl-files-changed in section:implementation]
-
-## Dispatch Bundles
-| Role | Token Ceiling | Sections Included |
-|------|--------------|-------------------|
-| lead | 1800 | spec, fe-baseline, project-best-practices, lead-best-practices |
-| executor | 1500 | tep, fe-baseline, DoD |
-| reviewer | 2400 | implementation, spec, review-checklist, fe-baseline, DoD |
-
-## Telemetry
-lead | 3/4 turns | tokens: ~2400/~800 | skills: low | plugins: low | ok
-executor | 5/6 turns | tokens: ~1800/~1200 | skills: medium | plugins: low | ok
-reviewer | 2/3 turns | tokens: ~1600/~600 | skills: low | plugins: low | ok
-
-## Context Manifest
-### lead
-| path | bucket | bytes |
-| ---- | ------ | ----- |
-| roles/lead.md (dispatch bundle) | governance | 1240 |
-| ai-work.md (section:spec) | artifact | 890 |
-
-Totals: governance 1240 | artifact 890 | source 0 | schema 0 | docs 0
-
-### executor
-| path | bucket | bytes |
-| ---- | ------ | ----- |
-| roles/executor.md (dispatch bundle) | governance | 1100 |
-| ai-work.md (section:tep) | artifact | 2400 |
-| src/components/Auth.tsx | source | 3200 |
-
-Totals: governance 1100 | artifact 2400 | source 3200 | schema 0 | docs 0
-
-### reviewer
-| path | bucket | bytes |
-| ---- | ------ | ----- |
-| roles/reviewer.md (dispatch bundle) | governance | 2100 |
-| ai-work.md (section:implementation) | artifact | 1500 |
-
-Totals: governance 2100 | artifact 1500 | source 0 | schema 0 | docs 0
-
-## Notes
-[completion_summary text — 1–3 sentences describing what was delivered]
-
-## Open Gates
-- none
-```
-
-The orchestrator creates this skeleton (with empty placeholders for Dispatch Bundles, Telemetry, Context Manifest) alongside the ai-work.md skeleton. Each agent appends its telemetry line and context manifest subsection. The orchestrator populates the Dispatch Bundles table after each agent dispatch. The Reviewer finalizes the status fields, acceptance-signal table, Files Changed, Notes, and Open Gates.
+Write to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` using the skeleton in `${CLAUDE_PLUGIN_ROOT}/skills/review-report/references/summary-skeleton.md`. The orchestrator pre-creates the skeleton (with empty placeholders for Dispatch Bundles, Telemetry, Context Manifest) alongside `ai-work.md`; each agent appends its telemetry line and context manifest subsection along the way; the Reviewer finalizes Status, Acceptance Signals, Files Changed, Notes, and Open Gates.
 
 ### 2. Append inside `<!-- section:review -->`
 
-```markdown
-### Cycle <N>
-
-<!-- section:review-metadata -->
-#### Metadata
-- **task_id**: <from implementation section>
-- **subtask_id**: <from implementation section>
-- **reviewer**: reviewer
-- **cycle_count**: <N>
-- **created_at**: <ISO 8601 UTC>
-<!-- /section:review-metadata -->
-
-<!-- section:review-verdict -->
-#### Verdict
-approved | changes_requested
-<!-- /section:review-verdict -->
-
-<!-- section:review-findings -->
-#### Findings
-
-Confidence-filtered — only findings with `confidence >= 75` appear here. Lower-confidence observations go under `section:review-low-confidence` and do NOT trigger rework.
-
-##### <FINDING-001> — <short title>
-- **severity**: high | medium | low
-- **confidence**: <integer 0–100; must be ≥ 75 for this section>
-- **root_cause_category**: spec-gap | impl-bug | test-gap | review-noise
-- **affected_subtask**: <subtask_id>
-- **location**: `<file>:<line>` or `<module>`
-- **description**: <specific observation — quote code or field names>
-- **rework_direction**: <exact action required to resolve>
-
-<!-- repeat for each finding -->
-<!-- /section:review-findings -->
-
-<!-- section:review-low-confidence -->
-#### Low-Confidence Observations (not rework-eligible)
-Optional — include only when real observations with `confidence < 75` exist. These are recorded for audit and for pattern detection across subtasks; they do NOT route to Executor and do NOT count toward the rework cap.
-
-##### <OBSERVATION-001> — <short title>
-- **severity**: high | medium | low
-- **confidence**: <integer 0–74>
-- **location**: `<file>:<line>` or `<module>`
-- **description**: <specific observation>
-- **why_uncertain**: <one line: what additional evidence would promote this to a rework-eligible finding>
-<!-- /section:review-low-confidence -->
-
-<!-- section:review-summary -->
-#### Summary
-<1–3 sentences: overall quality assessment>
-<!-- /section:review-summary -->
-
-<!-- section:review-completion-summary -->
-#### Completion Summary
-<only when verdict = approved: 1–3 sentences the orchestrator can copy into `summary.md`; otherwise write "n/a">
-<!-- /section:review-completion-summary -->
-```
-
-Then write diagnostics to `<subtask_id>/summary.md`:
-
-- Append your telemetry line under `## Telemetry`
-- Append your `### reviewer` context manifest subsection under `## Context Manifest`
-- Replace any placeholder or skeleton text in `## Status`, `## Acceptance Signals`, `## Notes`, and `## Open Gates` rather than leaving stale draft content above the final result.
+Append a `### Cycle <N>` block using the template in `${CLAUDE_PLUGIN_ROOT}/skills/review-report/references/review-cycle-template.md`. The template lays out `section:review-metadata`, `section:review-verdict`, `section:review-findings` (with the per-finding record schema), `section:review-resolved`, `section:review-low-confidence`, `section:review-summary`, and `section:review-completion-summary`. After appending the cycle block, write the diagnostics block (telemetry line + `### reviewer` context-manifest subsection + finalized Status / Acceptance Signals / Notes / Open Gates) to `<subtask_id>/summary.md`.
 
 ## Output Size Guidelines
 
@@ -171,6 +45,27 @@ These are soft targets to keep ai-work.md manageable — complex subtasks may ex
 - `cycle_count` must be read from the previous `### Cycle N` subsection — do not reset or invent it.
 - `rework_direction` must be specific enough that the executor can act without asking follow-up questions.
 - Every finding must carry a `root_cause_category` AND a `confidence` integer.
+
+### Stable Finding IDs (Cycle N > 1)
+
+On the first cycle, number findings sequentially: `F-001`, `F-002`, etc. On subsequent cycles:
+
+1. **Read the previous `### Cycle N-1` subsection's `section:review-findings` block** before writing the new cycle. Build a set `prior_ids = {F-001, F-003, ...}` from it.
+2. For each issue you would write in Cycle N:
+   - If it is the **same finding** (same defect, same location or clearly-equivalent location after code movement) as one in `prior_ids`: **reuse the original ID**, set `status: persisted` (no material progress) or `status: regressed` (Executor's fix introduced a new manifestation of the same root cause).
+   - If it is a genuinely **new** issue: assign the next unused ID from the cycle-1 sequence (`F-<max(prior_ids) + 1>`), set `status: new` (or omit the field — `new` is the default).
+3. For every prior-cycle ID **not** in the new Cycle N findings, add a bullet to `<!-- section:review-resolved -->` naming the ID and the cycle it first appeared in.
+4. Never renumber existing IDs. A finding that originated as `F-003` in Cycle 1 is `F-003` forever, even if Cycle 2 resolves `F-001` and `F-002`.
+
+**Why this matters.** Executor rework bundles in cycles ≥ 3 carry only delta findings (new + persisted + regressed) rather than the full Cycle N-1 findings list — see `context-minimizer` → "Executor rework bundle (cycle N > 2)". Stable IDs make that delta computable without natural-language matching.
+
+**When unsure whether two findings are "the same"**: if the root-cause-category, location, and rework-direction all match and the new description would repeat the prior one, reuse the ID. If any of those three diverge in a material way, assign a new ID.
+
+## Related skills
+
+- `context-minimizer` → "Executor rework bundle (cycle N > 2) — finding-ID delta" — the reader of stable IDs. The delta protocol only works when IDs survive across cycles as specified above.
+- `technical-execution-packet` — the TEP's `shared_artifacts` metadata flag drives the reviewer cross-subtask skip clause.
+- `blocker-escalation-report` — escalation path when rework cap is reached with unresolved confidence-filtered findings.
 - **Confidence rubric** (target calibration — pick the lowest threshold that still fits):
   - `90–100`: reproducible failure or violates a cited rule (quote the rule + diff); the Executor must act.
   - `75–89`: confident the concern is real but the exact rework direction has a small degree of judgment; the Executor must act.

@@ -24,6 +24,21 @@ Before scanning, confirm CWD is the consumer repo:
 
 ### Step 1 — Scan for resumable tasks
 
+**Fast path — explicit `task_id` argument:**
+
+When the invocation carries an explicit `task_id` (or a subtask ID that resolves to a parent task — see Subtask ID resolution in Step 2), **skip the scan entirely**. The scan exists to populate a menu or infer the recommended task; neither is needed when the user already named the task. Instead:
+
+1. Resolve the path: `ai-workflow-data/tasks/<task_id>/`.
+2. If the directory does not exist, surface "Unknown task: `<task_id>`" and offer the menu (fall through to the full-scan path below).
+3. If the directory exists, check whether `orchestration-state.json` is present:
+   - Present → read `phase` and `task_id` only; proceed to Step 2 with the single candidate.
+   - Absent → apply the stateless inference rules (see the "Fallback scan" bullets below) to this one task only; mark as `[stateless]`; proceed.
+4. Skip mtime ranking — with a single explicit task there is nothing to rank.
+
+This fast path avoids the `Glob ai-workflow-data/tasks/*` traversal entirely, which matters for repos with many historical tasks.
+
+**Full scan path — no `task_id` argument (or fast-path fall-through):**
+
 **Primary scan:**
 1. Glob `ai-workflow-data/tasks/*/orchestration-state.json`.
 2. For each state file, read only `phase` and `task_id`. A task is **in-progress** when `phase` is not `"complete"` and not `"answered"`. Tasks with `phase: "planned"` are resumable.
@@ -61,12 +76,13 @@ Before scanning, confirm CWD is the consumer repo:
 
 ### Step 3 — Reconstruct context
 
-1. Read the full `orchestration-state.json` for the selected task.
-   - **If the task is stateless (no `orchestration-state.json`):** Do not attempt to read state. Use the inferred phase and resume point from Step 1 fallback scan. Note to user in resume summary: "This task has no orchestration state file — state was inferred from artifacts."
-2. Determine the **resume point** using the Resume Point Decision Table.
-3. For `RESUME_SUBTASK`: use `Grep` to detect non-empty section markers in `ai-work.md` (do NOT load full file) to determine which agent ran last. Also grep `summary.md` for finalization signal (see stage detection table).
-4. Compose the **resume summary** (see Resume Summary Format).
-5. Present summary to user. Confirm via `AskUserQuestion` with options: `Proceed` / `Cancel`. Do NOT dispatch without confirmation.
+1. Read the full `orchestration-state.json` (hot state) for the selected task.
+2. Also read `orchestration-history.json` if present — it holds `completed_subtasks[]` and `trigger_decisions{}`, which the resume summary surfaces and `RESUME_SUBTASK` routing occasionally consults. If the file is absent (first-subtask-not-yet-completed, or legacy pre-split task), treat `completed_subtasks = []` and `trigger_decisions = {}` — do NOT block resume on its absence. See `orchestrator-state` skill → State File Schemas for the split rationale.
+   - **If the task is stateless (no `orchestration-state.json`):** Do not attempt to read either state file. Use the inferred phase and resume point from Step 1 fallback scan. Note to user in resume summary: "This task has no orchestration state file — state was inferred from artifacts."
+3. Determine the **resume point** using the Resume Point Decision Table.
+4. For `RESUME_SUBTASK`: use `Grep` to detect non-empty section markers in `ai-work.md` (do NOT load full file) to determine which agent ran last. Also grep `summary.md` for finalization signal (see stage detection table).
+5. Compose the **resume summary** (see Resume Summary Format).
+6. Present summary to user. Confirm via `AskUserQuestion` with options: `Proceed` / `Cancel`. Do NOT dispatch without confirmation.
 
 ### Step 4 — Hand off to chief-orchestrator
 

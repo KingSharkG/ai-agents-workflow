@@ -30,106 +30,7 @@ For `fe`-only or `be`-only projects, drop the unused domain and its baseline; tr
 
 ## Skeleton
 
-```markdown
-# PROJECT_CONFIG
-
-<!-- section:domains -->
-```yaml
-declared_domains:
-  - fe
-  - be
-design_hook_domains:
-  - fe
-detection_rules:
-  fe_signals: [ui, screen, navigation, component, hook]
-  be_signals: [endpoint, contract, migration, schema, auth]
-decomposition_rule: one-subtask-per-domain
-escalation_rule: emit blocker-escalation-report when signals match an undeclared domain
-```
-<!-- /section:domains -->
-
-<!-- section:fe -->
-```yaml
-skills: []
-plugins: []
-baseline_anchor: fe-baseline
-validation_rules: []
-forbidden_actions: []
-```
-<!-- /section:fe -->
-
-<!-- section:fe-baseline -->
-```yaml
-framework: <detected-or-ask>
-router: <detected-or-ask>
-data_layer: <detected-or-ask>
-```
-<!-- /section:fe-baseline -->
-
-<!-- section:be -->
-```yaml
-skills: []
-plugins: []
-baseline_anchor: be-baseline
-validation_rules: []
-forbidden_actions: []
-```
-<!-- /section:be -->
-
-<!-- section:be-baseline -->
-```yaml
-framework: <detected-or-ask>
-runtime: <detected-or-ask>
-```
-<!-- /section:be-baseline -->
-
-<!-- section:api-baseline -->
-```yaml
-style: <rest|graphql|rpc>
-auth: <jwt|session|oauth>
-```
-<!-- /section:api-baseline -->
-
-<!-- section:auth-baseline -->
-```yaml
-provider: <detected-or-ask>
-session_model: <detected-or-ask>
-```
-<!-- /section:auth-baseline -->
-
-<!-- section:project-best-practices -->
-- single-fact-per-artifact
-<!-- /section:project-best-practices -->
-
-<!-- section:agent-best-practices -->
-lead: []
-executor: []
-reviewer: []
-<!-- /section:agent-best-practices -->
-
-<!-- section:extra-trigger-keywords -->
-```yaml
-# project-specific keyword overlays (unioned with TRIGGER_RULES.md)
-```
-<!-- /section:extra-trigger-keywords -->
-
-<!-- section:cross-domain-rules -->
-```yaml
-# rules that span multiple domains (read by delivery-pm)
-rules: []
-```
-<!-- /section:cross-domain-rules -->
-
-<!-- section:quality-gates -->
-```yaml
-# commands that executors and reviewers run to verify a change
-test: <detected-or-ask>
-lint: <detected-or-ask>
-typecheck: <detected-or-ask>
-build: <detected-or-ask>
-```
-<!-- /section:quality-gates -->
-```
+The canonical PROJECT_CONFIG.md skeleton (all required `<!-- section:* -->` anchors with placeholder YAML and ordering, plus the FE-only / BE-only trimming rule) lives at `${CLAUDE_PLUGIN_ROOT}/skills/project-config-template/references/skeleton.md`. Read it once at init; emit the bytes verbatim with placeholders filled from project discovery evidence per the rules below. The skeleton's anchors are the source of truth for "Required Anchors (v1)" above and for the regex validation in the next section.
 
 ## Validation Rules (MANDATORY before the init agent writes)
 
@@ -140,6 +41,71 @@ The emitted text must parse under these exact regex literals from `${CLAUDE_PLUG
 - **List-item line** (line 70): `^\s*-\s+(.+?)\s*$`
 
 Before returning, the init agent must compile each emitted `<!-- section:... -->` block and confirm round-trip extraction works. Any deviation aborts the write with a diagnostic.
+
+## Derived Context Cache (MANDATORY after every PROJECT_CONFIG.md write)
+
+After atomically writing `ai-workflow-data/config/PROJECT_CONFIG.md`, regenerate the derived cache under `ai-workflow-data/config/domain-contexts/`. The cache lets `context-minimizer` read pre-extracted section bytes instead of grepping PROJECT_CONFIG.md on every dispatch.
+
+### Cacheable section tags
+
+The cache contains **only** section tags that appear in the just-written PROJECT_CONFIG.md AND are in the cacheable set below. Tags absent from the config are not cached (the manifest reflects this). A Python-only backend repo has no `fe.md` / `fe-baseline.md`; a repo without auth has no `auth-baseline.md`.
+
+Cacheable set (these are the tags `context-minimizer` repeatedly extracts during bundle assembly):
+
+- `domains` — read by Delivery PM
+- `cross-domain-rules` — read by Delivery PM
+- `<domain>` — one per declared domain (e.g. `fe`, `be`) — read by Lead / Executor / Reviewer
+- `<domain>-baseline` — one per declared domain — read by Lead / Executor
+- `api-baseline` — read by Executor / Integration Checker when BE declared
+- `auth-baseline` — read by Executor / Integration Checker when BE declared
+- `project-best-practices` — read by Lead / Executor
+- `agent-best-practices-<role>` — one per role sub-block (`lead`, `executor`, `reviewer`) extracted from the `<!-- section:agent-best-practices -->` YAML — read by the matching role
+- `quality-gates` — read by Executor / Reviewer
+
+### Cache file format
+
+For each cacheable tag `T` present in PROJECT_CONFIG.md, write `ai-workflow-data/config/domain-contexts/<T>.md` containing **only** the bytes between `<!-- section:T -->` and `<!-- /section:T -->` (inclusive of the anchor comments). No transformation, no reformatting — byte-for-byte identical to the source section so `context-minimizer` receives exactly what extraction would produce.
+
+For the split `agent-best-practices-<role>` files: extract the YAML sub-block whose key matches the role (e.g. `lead:`) from the `<!-- section:agent-best-practices -->` block. Preserve list-item indentation verbatim. Wrap the sub-block in the same `<!-- section:agent-best-practices-<role> -->` / `<!-- /section:agent-best-practices-<role> -->` anchor pair so the file is self-describing.
+
+### Manifest
+
+Write `ai-workflow-data/config/domain-contexts/_manifest.json` after generating the per-tag files:
+
+```json
+{
+  "generated_at": "<ISO-8601 UTC>",
+  "source_path": "ai-workflow-data/config/PROJECT_CONFIG.md",
+  "source_sha256": "<hex digest of PROJECT_CONFIG.md bytes>",
+  "sections": ["domains", "fe", "fe-baseline", "project-best-practices", "agent-best-practices-executor", ...]
+}
+```
+
+`sections` lists every `<tag>` that has a corresponding `<tag>.md` on disk. `context-minimizer` reads this first to decide cache-hit vs fallback-to-extraction.
+
+### Generation protocol
+
+1. After the atomic rename of `PROJECT_CONFIG.md`, compute its SHA-256.
+2. Remove every file under `ai-workflow-data/config/domain-contexts/` (simpler than diffing; cache is small and write-cheap).
+3. For each tag in the cacheable set, check whether the just-written PROJECT_CONFIG.md contains `<!-- section:<tag> -->`:
+   - Yes → write `domain-contexts/<tag>.md` with the section's bytes.
+   - No → skip; tag is absent from the manifest.
+4. For `agent-best-practices-<role>`: if `<!-- section:agent-best-practices -->` exists and contains a top-level `<role>:` key with non-empty content, emit `domain-contexts/agent-best-practices-<role>.md`. Empty role lists (`lead: []`) produce an empty-list file — still cached so context-minimizer doesn't fall back for a section that is explicitly empty-by-design.
+5. Write `_manifest.json` last (acts as a completion marker — readers that see the manifest can trust the directory is consistent).
+6. The manifest write is atomic: `_manifest.json.tmp` + rename.
+
+### Rules
+
+- **Never hand-edit `domain-contexts/*.md` or `_manifest.json`.** They are derived; the source of truth is PROJECT_CONFIG.md.
+- **Always regenerate the whole directory after any PROJECT_CONFIG.md write.** Partial regeneration is a bug surface.
+- **`_manifest.json` is written last.** A missing manifest signals an incomplete generation — readers must fall back to live extraction.
+- **Cache is committed.** These files are valid git artifacts alongside PROJECT_CONFIG.md — reviewable, diffable, and resolve cleanly under merge.
+
+## Related skills
+
+- `project-config-mutate` — owns `add` / `remove` mutations; MUST regenerate the cache after every successful write (see that skill's Write Protocol).
+- `context-minimizer` → "Project-Level Context Cache (consumption protocol)" — the reader of this cache during dispatch bundle assembly.
+- `project-config-review` — approval gate; surfaces cache invalidation as part of the mutation preview so users see the blast radius.
 
 ## Rules
 

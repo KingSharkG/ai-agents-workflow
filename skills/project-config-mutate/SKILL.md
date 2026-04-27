@@ -51,6 +51,7 @@ Apply a single `add` or `remove` to an existing `ai-workflow-data/config/PROJECT
 - Compute final file contents (target section replaced; all other sections byte-identical).
 - Write to `<path>.tmp`, `fsync`, then `rename` over `<path>`.
 - Re-run the `evaluate-triggers.js` regex against the written file to confirm the hook can still parse it. On parse failure: restore the previous file from in-memory cache, log a diagnostic, and error.
+- **Regenerate the derived context cache.** Immediately after a successful `PROJECT_CONFIG.md` write, regenerate `ai-workflow-data/config/domain-contexts/` following the `project-config-template` skill → "Derived Context Cache" protocol. Cache regeneration MUST complete in the same invocation as the mutation — leaving a stale cache visible to `context-minimizer` is an orchestration defect. If cache regeneration fails after the PROJECT_CONFIG.md write succeeded, delete `_manifest.json` so `context-minimizer` falls back to live extraction, and surface the failure to the user.
 
 ## Rules
 
@@ -60,3 +61,9 @@ Apply a single `add` or `remove` to an existing `ai-workflow-data/config/PROJECT
 - **Cross-domain-rule.** Targets the new `<!-- section:cross-domain-rules -->` anchor; do not attempt to embed it inside `<!-- section:domains -->`.
 - **Preserve comment-only YAML.** If the target section's YAML block contains only comments, the mutation adds the appropriate top-level key and preserves the comments above it.
 - **Atomicity.** Never partial-write. If any step fails, leave the original file untouched.
+
+## Related skills
+
+- `project-config-template` → "Derived Context Cache" — the cache-regeneration protocol this skill invokes after every successful PROJECT_CONFIG.md write.
+- `context-minimizer` — reads the regenerated cache during dispatch bundle assembly.
+- `project-config-review` — approval gate this skill goes through before any write.

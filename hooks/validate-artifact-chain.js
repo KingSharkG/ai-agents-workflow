@@ -460,11 +460,14 @@ if (matched.jsonValidation) {
     process.exit(1);
   }
 
+  // Hot-state required fields only. After the F2 split, `completed_subtasks`
+  // and `trigger_decisions` live in `orchestration-history.json`; the hot
+  // file no longer requires them. Legacy state files may still carry
+  // `completed_subtasks` — tolerated (extra fields are not an error).
   const requiredFields = [
     'task_id',
     'mode',
     'phase',
-    'completed_subtasks',
     'pending_subtasks',
     'blocked_gates',
     'pending_user_actions',
@@ -497,14 +500,16 @@ if (matched.jsonValidation) {
     process.exit(1);
   }
 
+  // `completed_subtasks` moved to orchestration-history.json in the F2 split.
+  // If the hot file still carries it (legacy), verify the type; absence is OK.
   if (
-    !Array.isArray(parsed.completed_subtasks) ||
     !Array.isArray(parsed.pending_subtasks) ||
     !Array.isArray(parsed.blocked_gates) ||
-    !Array.isArray(parsed.pending_user_actions)
+    !Array.isArray(parsed.pending_user_actions) ||
+    ('completed_subtasks' in parsed && !Array.isArray(parsed.completed_subtasks))
   ) {
     console.error(
-      `[validate-artifact-chain] INVALID ${matched.name}: completed_subtasks, pending_subtasks, blocked_gates, and pending_user_actions must be arrays\n` +
+      `[validate-artifact-chain] INVALID ${matched.name}: pending_subtasks, blocked_gates, and pending_user_actions must be arrays (and completed_subtasks when present)\n` +
         `File: ${filePath}\n`,
     );
     process.exit(1);

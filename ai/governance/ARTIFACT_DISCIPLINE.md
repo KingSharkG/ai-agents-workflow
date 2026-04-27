@@ -276,7 +276,7 @@ Verdicts are used in three contexts with distinct allowed values. Agents and hoo
 | `ok` | FE/BE contract surfaces are compatible; no mismatches found |
 | `not-ok` | Mismatches found; `fix_owner` (fe / be / both) identifies who must fix |
 
-### Orchestration Verdict (`completed_subtasks[].verdict` in orchestration-state.json)
+### Orchestration Verdict (`completed_subtasks[].verdict` in orchestration-history.json)
 
 | Value | Meaning |
 |-------|---------|

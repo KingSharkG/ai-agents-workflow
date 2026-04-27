@@ -209,7 +209,12 @@ if (fs.existsSync(statePath)) {
     process.exit(1);
   }
 
-  const requiredFields = ['task_id', 'phase', 'completed_subtasks', 'pending_subtasks'];
+  // Hot-state required fields. `completed_subtasks` / `trigger_decisions` live
+  // in the sibling `orchestration-history.json` after the F2 split; they are
+  // NOT required in the hot file. Legacy state files may still carry them —
+  // that is tolerated for the one-dispatch migration window documented in
+  // skills/orchestrator-state/references/state-schemas.md → Migration.
+  const requiredFields = ['task_id', 'phase', 'pending_subtasks'];
   const missingFields = requiredFields.filter((f) => !(f in parsed));
   if (missingFields.length > 0) {
     console.error(

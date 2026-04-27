@@ -25,13 +25,18 @@ Every invocation follows this sequence before doing work:
 
 1. Harness reads the stub (`${CLAUDE_PLUGIN_ROOT}/agents/init.md`) — tools, model, permissionMode.
 2. Agent reads this canonical contract.
-3. Agent reads the plugin's catalog sources at run time (do not cache across sessions):
-   - `${CLAUDE_PLUGIN_ROOT}/ai/governance/RESOLUTION_POLICY.md`
-   - `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md`
-   - `${CLAUDE_PLUGIN_ROOT}/skills/` — each `SKILL.md` frontmatter (`name`, `description`)
-   - `${CLAUDE_PLUGIN_ROOT}/agents/` — each stub frontmatter (`name`, `description`)
-   - `${CLAUDE_PLUGIN_ROOT}/ai/core/PROJECT_CONSTITUTION.md`
-4. Agent performs discovery against the consumer CWD. Never reads plugin governance files from the consumer repo.
+3. Agent reads the plugin's catalog sources at run time (do not cache across sessions). **Catalog scope is mode-dependent** — load only what the current mode needs:
+
+   | Mode | Always load | Skill frontmatters (`skills/*/SKILL.md`) | Agent stubs (`agents/*.md`) | PROJECT_CONSTITUTION |
+   |------|-------------|-------------------------------------------|-----------------------------|----------------------|
+   | `init` | `RESOLUTION_POLICY.md`, `TRIGGER_RULES.md`, `FORBIDDEN_WORKFLOWS.md` | **all** | **all** | **yes** |
+   | `update` | `RESOLUTION_POLICY.md`, `TRIGGER_RULES.md`, `FORBIDDEN_WORKFLOWS.md` | skip (already-initialized projects have validated skill lists) | skip | skip (refresh scope is detection rules + baselines, not DoD) |
+   | `add` | `RESOLUTION_POLICY.md`, `FORBIDDEN_WORKFLOWS.md` | **only** the SKILL.md matching the `<value>` being added, if `target-type == skill` | skip | skip |
+   | `remove` | `FORBIDDEN_WORKFLOWS.md` | skip — value must already be present in PROJECT_CONFIG.md to remove | skip | skip |
+
+   Mode is determined from the invocation prompt/argument before the catalog load begins. When in doubt between `init` and `update`, inspect `ai-workflow-data/config/PROJECT_CONFIG.md` — if it exists, the mode is not `init`.
+
+4. Agent performs discovery against the consumer CWD. Never reads plugin governance files from the consumer repo. Scope of discovery is also mode-dependent: `add`/`remove` do no discovery at all; `update` runs the full `project-discovery` flow; `init` runs `project-discovery` + catalog cross-reference.
 5. Agent writes `ai-workflow-data/config/PROJECT_CONFIG.md` only after review approval.
 
 Read only the excerpts you need. Prefer section anchors over full files.
@@ -46,7 +51,7 @@ Read only the excerpts you need. Prefer section anchors over full files.
 5. **Identify ambiguities.** Flag: (a) multi-framework conflicts, (b) multiple equal-confidence catalog matches, (c) detected domain absent from the repo's declared domains (update mode only), (d) no evidence at all.
 6. **Ask minimum questions.** Use `AskUserQuestion` with 2–4 labeled options per question (tool auto-appends "Other" for free-form). Group related questions into a single call (up to 4 per call). On low confidence, the last question is always the catch-all: *"Is there anything else I should know about this project?"* with options `No, proceed` / `Yes, I'd like to add notes`.
 7. **Review-and-comment loop.** Invoke `project-config-review` to present a change summary plus a full preview (`init`) or unified diff (`update` / `add` / `remove`). `AskUserQuestion` with `Approve and write` / `Revise with comments`. If `Revise`: collect free-form notes (second question), integrate, re-render, re-ask. Loop until approved.
-8. **Write.** Create `ai-workflow-data/` if missing. Write the config atomically (`tmp` path then rename). Ensure `ai-workflow-data/tasks/.gitkeep` exists. Print paths written and a suggested `git add` command.
+8. **Write.** Create `ai-workflow-data/` if missing. Write the config atomically (`tmp` path then rename). Regenerate the derived context cache under `ai-workflow-data/config/domain-contexts/` following the `project-config-template` skill → "Derived Context Cache" protocol (write per-tag `.md` files for cacheable sections present in PROJECT_CONFIG.md, then write `_manifest.json` last). Ensure `ai-workflow-data/tasks/.gitkeep` exists. Print paths written (including the cache directory) and a suggested `git add` command.
 
 ## Mode Rules
 
@@ -132,8 +137,9 @@ Low confidence triggers when any of:
 
 - Create `ai-workflow-data/` in the consumer CWD if missing.
 - Write `ai-workflow-data/config/PROJECT_CONFIG.md` via temp file + atomic rename.
+- Regenerate `ai-workflow-data/config/domain-contexts/` per the `project-config-template` skill → "Derived Context Cache" protocol. `_manifest.json` is written last as the completion marker.
 - Ensure `ai-workflow-data/tasks/.gitkeep` exists (create empty if missing).
-- Print the full paths written and a suggested `git add ai-workflow-data/` command.
+- Print the full paths written (including the cache directory) and a suggested `git add ai-workflow-data/` command.
 - Never perform git operations directly.
 
 ## Allowed Actions
@@ -162,6 +168,7 @@ Low confidence triggers when any of:
 ## Outputs
 
 - `ai-workflow-data/config/PROJECT_CONFIG.md` (created or updated).
+- `ai-workflow-data/config/domain-contexts/` (regenerated — one `<tag>.md` per cacheable section present in PROJECT_CONFIG.md, plus `_manifest.json` written last as the completion marker).
 - `ai-workflow-data/tasks/.gitkeep` (created if missing).
 - Terminal summary with file paths and suggested `git add`.
 
