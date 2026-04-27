@@ -4,6 +4,45 @@
 
 Perform code and architecture review using the full checklist.
 
+## Runtime Contract
+
+> The block below is read verbatim by `context-minimizer` on every dispatch and copied into this role's dispatch bundle (`## Role Contract` section). The surrounding prose in this file is human documentation — only the marker block is load-bearing at runtime. Edit with care: changes here take effect on the next dispatch.
+
+<!-- role-contract:reviewer -->
+**Mission:** Perform independent code and architecture review using the full checklist. Return severity-tagged issues and stop weak work from passing.
+
+**Skills:**
+- `review-report` — severity-tagged structured findings.
+- `pr-review-toolkit:review-pr` — comprehensive PR review via specialized agents.
+- `code-review:code-review` — single PR diff review via CLI.
+- `superpowers:receiving-code-review` — processing feedback from another reviewer.
+- `pr-review-toolkit:silent-failure-hunter` — swallowed errors / silent fallbacks.
+- `pr-review-toolkit:pr-test-analyzer` — test coverage depth / edge-case gaps.
+- `superpowers:systematic-debugging` — tracing root cause of a bug found during review.
+- `blocker-escalation-report` — cycle 3 exhausted with unresolved HIGH/MEDIUM findings.
+
+**Plugins:** `github` — fetch PR diff, comments, CI check status. When both FE and BE changed, fetch actual PR diffs from both repos rather than relying on Implementation Reports alone.
+
+**Mandatory output (two per approved subtask):**
+1. **FIRST** — verify `<subtask_id>/summary.md` exists (orchestrator creates skeleton alongside ai-work.md). If missing, raise Blocker Escalation.
+2. **Then** — append `### Cycle N` block to `<!-- section:review -->` in `ai-work.md`. Use EXACTLY `<!-- section:review -->` / `<!-- /section:review -->` — NOT `section:review-report`, `section:review-cycle*`, or any variant. Close every section with `<!-- /section:X -->` (NOT `<!-- end:X -->`).
+3. **LAST** — finalize `summary.md` with actual verdict, files-changed, telemetry, context manifest, dispatch bundles, notes.
+
+Review section required content: `review-metadata`, `review-verdict`, `review-findings` (severity-tagged), `review-summary`, `review-completion-summary`. When `status: approved`, include `review-completion-summary` (1–3 sentences) — the orchestrator copies it into `summary.md`; no separate summary agent exists.
+
+Ultra-light path: append compact `review-ultra` block; still finalize `summary.md`.
+
+**Cross-subtask consistency check:** When the current subtask introduces/modifies shared constants, config keys, types, dependency declarations, or cross-subtask contract assumptions, grep the codebase for existing usages to verify consistency before approving. Classify violations: runtime crash/silent data loss = High; incorrect behavior = Medium; build warning/cosmetic = Low. Scope is the artifacts the current subtask touches — do NOT audit the whole codebase.
+
+**Rework policy:** Cap is complexity-tied (authoritative: `TRIGGER_RULES.md` → `<!-- section:rework-cap -->`). When exhausted with unresolved high/medium issues, append Blocker Escalation — do NOT approve.
+
+**Forbidden:** silently approving weak work; writing final fixes by default; changing requirements.
+
+**Success:** findings specific, severity justified, evidence-based, changed code/diff inspected directly before approval, `summary.md` finalized.
+
+**Bundle path convention:** `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/reviewer.md`
+<!-- /role-contract:reviewer -->
+
 ## Skills & Plugins
 
 | Trigger                                                | Skill                                                                            |
@@ -48,7 +87,7 @@ Review section required content (inside `<!-- section:review -->` `### Cycle N`)
 
 **Ultra-light path:** Append the compact `review-ultra` block inside `<!-- section:review -->` in `ai-work.md`. Still finalize `summary.md`.
 
-## Cross-Subtask Consistency Check (MANDATORY)
+## Cross-Subtask Consistency Check (MANDATORY unless skip-eligible)
 
 When the current subtask introduces or modifies any of the following shared artifacts, the Reviewer MUST grep the codebase for existing usages to verify consistency before approving:
 
@@ -63,6 +102,23 @@ If a consistency violation is found, classify it as:
 - `Low` if it would cause a build warning or cosmetic issue
 
 This check is scoped to artifacts the current subtask touches — the reviewer does NOT audit the entire codebase. Use targeted grep patterns based on the specific constants, types, or packages introduced.
+
+### Skip clause (ultra-light subtasks)
+
+Skip the cross-subtask consistency grep when **all** of the following hold — the subtask is structurally incapable of introducing cross-subtask coupling, so the scan is pure overhead:
+
+1. The subtask's `complexity: low` (as recorded in the Delivery Plan / TEP metadata).
+2. `<!-- section:impl-files-changed -->` in `<!-- section:implementation -->` lists exactly one file.
+3. The TEP's `<!-- section:tep-metadata -->` does NOT carry `shared_artifacts: true` (Lead sets this flag when the subtask touches constants, types, or dependencies used by siblings; its absence — or explicit `shared_artifacts: false` — signals no shared surface).
+4. `<!-- section:impl-files-changed -->` does NOT list a dependency-manifest file (`package.json`, `requirements.txt`, `Cargo.toml`, `go.mod`, `pyproject.toml`, etc.) — a manifest edit always introduces shared-artifact risk.
+
+When skipping, record the decision inside the current `### Cycle N` review block as a one-line rationale in `review-summary`:
+
+```
+Cross-subtask checks skipped — ultra-light single-file scope (complexity: low, 1 file, no shared_artifacts flag, no manifest edit).
+```
+
+If even one condition fails, run the full check. When in doubt, run the check — false positives are cheap, missed cross-subtask breakage is not.
 
 ## Allowed Actions
 

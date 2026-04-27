@@ -29,13 +29,46 @@ Before writing the bundle, strip every entry that matches `ai/governance/FORBIDD
 
 Helper plugins (e.g. `context7`, `figma:*`, `supabase:*`) are not on the denylist and pass through untouched.
 
+## Project-Level Context Cache (consumption protocol)
+
+Per-role bundle assembly needs the same `PROJECT_CONFIG.md` sections repeatedly — the domain block, baselines, best-practices sub-blocks — and re-grepping PROJECT_CONFIG.md on every dispatch is wasted work. The init / update / mutate skills write a pre-extracted cache under `ai-workflow-data/config/domain-contexts/`; this skill reads that cache instead of extracting live whenever possible.
+
+**Cache directory:** `ai-workflow-data/config/domain-contexts/`
+- `_manifest.json` — completion marker + `sections` list of cached tags.
+- `<tag>.md` — one file per cached section tag. Contents are the raw bytes of `<!-- section:<tag> -->...<!-- /section:<tag> -->` from PROJECT_CONFIG.md (byte-for-byte identical to what live extraction produces).
+
+**Read protocol for any PROJECT_CONFIG.md section the bundle needs:**
+
+1. Check `_manifest.json` first. If missing or unreadable, skip to step 3 (fallback).
+2. If the needed `<tag>` appears in `manifest.sections`, read `ai-workflow-data/config/domain-contexts/<tag>.md` and use its bytes directly.
+3. **Fallback** — if the manifest is missing, the tag is absent from `manifest.sections`, or the cache file is unreadable: extract the section live from `ai-workflow-data/config/PROJECT_CONFIG.md` as this skill has always done. Emit a telemetry warning (`cache_miss: <tag>`) into the subtask's `summary.md` → Context Manifest so the reviewer rollup captures the miss. Never block dispatch on a cache miss.
+
+**Cache freshness.** The cache is regenerated atomically by `project-config-template` / `project-config-mutate` after every PROJECT_CONFIG.md write, and `_manifest.json` is always written last. If `_manifest.json` is older than `PROJECT_CONFIG.md` (mtime comparison), treat the cache as stale and fall back to live extraction. Do not attempt to regenerate the cache from this skill — only the config-writing skills own cache regeneration.
+
+**What is cached** (authoritative list — kept in sync with `project-config-template` → "Derived Context Cache"):
+
+- `domains`
+- `cross-domain-rules`
+- `<domain>` — one per declared domain
+- `<domain>-baseline` — one per declared domain
+- `api-baseline`, `auth-baseline`
+- `project-best-practices`
+- `agent-best-practices-<role>` — split into `agent-best-practices-lead.md`, `agent-best-practices-executor.md`, `agent-best-practices-reviewer.md`
+- `quality-gates`
+
+**What is not cached** (always extracted live):
+
+- Governance files under `${CLAUDE_PLUGIN_ROOT}/ai/governance/` and `${CLAUDE_PLUGIN_ROOT}/ai/core/` — plugin-internal, not project-specific.
+- Role contract blocks — embedded in `${CLAUDE_PLUGIN_ROOT}/ai/agents/<role>.md` between `<!-- role-contract:<role> -->` markers (read once per dispatch by `context-minimizer`).
+- Artifact input — per-subtask and per-cycle, cannot be cached at project level.
+
 ## Bundle Format
 
 ```markdown
 # Dispatch Bundle — <role> for <subtask_id>
 
 ## Role Contract
-[copy the matching `<!-- role-contract:<role> -->` block verbatim from the Role Contract Blocks section below — do NOT read ai/agents/<role>.md]
+[read `${CLAUDE_PLUGIN_ROOT}/ai/agents/<role>.md` and copy the `<!-- role-contract:<role> -->` … `<!-- /role-contract:<role> -->` block verbatim — only this marker block, not the surrounding human documentation]
 
 ## Project Context
 [relevant domain section + baseline + role best-practices — pre-extracted from ai-workflow-data/config/PROJECT_CONFIG.md]
@@ -53,15 +86,17 @@ The agent reads ONLY this bundle (plus its own stub for tool/model config). It d
 
 ## Role Contract Blocks
 
-Role contracts live in the sibling file [`role-contracts.md`](./role-contracts.md). Read it only at bundle-assembly time, extract the `<!-- role-contract:<role> -->` block matching the target role, and copy it verbatim into the bundle's `## Role Contract` section. The canonical `ai/agents/<role>.md` files exist for human documentation only and are NOT read at dispatch time — any edit there MUST be mirrored in `role-contracts.md` in the same commit.
+Role contracts live inline in each canonical `${CLAUDE_PLUGIN_ROOT}/ai/agents/<role>.md` file, fenced by `<!-- role-contract:<role> -->` … `<!-- /role-contract:<role> -->` markers. At bundle-assembly time, read the per-role file, extract that marker block, and copy it verbatim into the bundle's `## Role Contract` section. The surrounding prose in `ai/agents/<role>.md` is human documentation and is NOT included in the bundle — only the marker block is load-bearing at runtime.
 
 ---
 
 ## Context Bundle by Role
 
+> **Cache resolution.** Every `Project Context from PROJECT_CONFIG.md` bullet below that names a `<!-- section:<tag> -->` resolves via the Project-Level Context Cache protocol above: read `ai-workflow-data/config/domain-contexts/<tag>.md` when the tag is in `_manifest.json`, otherwise extract live from `PROJECT_CONFIG.md`. The per-role lists below describe **what** to include; the cache protocol describes **how** to read it.
+
 ### delivery-pm
 
-**Role Contract:** copy `<!-- role-contract:delivery-pm -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/delivery-pm.md`.
+**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/delivery-pm.md` and copy the `<!-- role-contract:delivery-pm -->` marker block verbatim. Do not include the surrounding prose.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:domains -->` — declared_domains, detection_rules, decomposition_rule, escalation_rule
@@ -79,7 +114,7 @@ Role contracts live in the sibling file [`role-contracts.md`](./role-contracts.m
 
 ### lead (TEP creation + validation)
 
-**Role Contract:** copy `<!-- role-contract:lead -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/lead.md`.
+**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/lead.md` and copy the `<!-- role-contract:lead -->` marker block verbatim. Do not include the surrounding prose.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:<domain> -->` block (skills, plugins, baseline anchors, validation_rules, forbidden_actions)
@@ -101,7 +136,7 @@ Role contracts live in the sibling file [`role-contracts.md`](./role-contracts.m
 
 ### executor
 
-**Role Contract:** copy `<!-- role-contract:executor -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/executor.md`.
+**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/executor.md` and copy the `<!-- role-contract:executor -->` marker block verbatim. Do not include the surrounding prose.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:<domain> -->` block (for baseline anchors, validation_rules, forbidden_actions)
@@ -127,11 +162,24 @@ Role contracts live in the sibling file [`role-contracts.md`](./role-contracts.m
 - For High findings routed through Lead: include only the impacted TEP slice and latest finding payload, not the full prior package.
 - Do NOT include: full implementation section, full review history, full baseline, full checklist.
 
+**Executor rework bundle (cycle N > 2) — finding-ID delta:**
+
+Starting with the third cycle the finding set has typically churned: some Cycle N-1 findings were resolved, some persist, a few may be new or regressed. Sending the full Cycle N-1 `review-findings` wastes tokens on findings the Executor has already addressed. Use the stable `F-<id>` fields (see `review-report` → "Stable Finding IDs") to send only the delta:
+
+1. Parse `section:review-findings` from Cycle N-1.
+2. Keep only findings whose `status` is `new`, `persisted`, or `regressed`. Drop any finding absent from Cycle N-1 altogether (it was resolved and appears in `section:review-resolved` — Executor does not need it).
+3. For `persisted` findings, **prepend a one-line context note**: `This finding persisted from Cycle <M>. Prior rework attempt did not resolve it.` This signals to the Executor that a different approach is warranted.
+4. For `regressed` findings, note `This finding regressed — same root cause re-emerged after Cycle <M> fix.`
+
+Cycle 2 executor rework still receives the full Cycle 1 findings (no prior IDs to diff against). The delta kicks in only from Cycle 3 onward.
+
+For Lead re-validation on High findings: same rule — send only the delta findings plus the impacted TEP slice.
+
 ---
 
 ### design-agent (FE subtasks only)
 
-**Role Contract:** copy `<!-- role-contract:design-agent -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/design-agent.md`.
+**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/design-agent.md` and copy the `<!-- role-contract:design-agent -->` marker block verbatim. Do not include the surrounding prose.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - FE section only (`<!-- section:fe-baseline -->`)
@@ -150,7 +198,7 @@ Role contracts live in the sibling file [`role-contracts.md`](./role-contracts.m
 
 ### integration-checker
 
-**Role Contract:** copy `<!-- role-contract:integration-checker -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/integration-checker.md`.
+**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/integration-checker.md` and copy the `<!-- role-contract:integration-checker -->` marker block verbatim. Do not include the surrounding prose.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - `<!-- section:api-baseline -->` and `<!-- section:auth-baseline -->` only
@@ -169,7 +217,7 @@ Role contracts live in the sibling file [`role-contracts.md`](./role-contracts.m
 
 ### reviewer
 
-**Role Contract:** copy `<!-- role-contract:reviewer -->` block verbatim from the Role Contract Blocks section above. Do NOT read `ai/agents/reviewer.md`.
+**Role Contract:** read `${CLAUDE_PLUGIN_ROOT}/ai/agents/reviewer.md` and copy the `<!-- role-contract:reviewer -->` marker block verbatim. Do not include the surrounding prose.
 
 **Project Context from** `PROJECT_CONFIG.md`:
 - Relevant layer section only (domain validation_rules)
@@ -190,6 +238,16 @@ Role contracts live in the sibling file [`role-contracts.md`](./role-contracts.m
 - Include only: updated `<!-- section:implementation -->` (current cycle), changed files or diff (current cycle), `<!-- section:spec -->` acceptance signals.
 - Do NOT include: full prior review cycles, full TEP, full baseline.
 - **Governance reduction:** Each reviewer dispatch is a new agent instance with no memory of prior cycles. However, if the re-review is for Medium/Low findings only (no scope change), include a condensed governance reminder instead of full sections: include only `<!-- section:severity -->` and `<!-- section:rework-policy -->` (skip `core-review`, `domain-review`, `integration-review`). Add a one-liner: `Review protocol: same as Cycle 1 — focus on whether findings from Cycle N-1 are resolved.` This saves ~800-1,200 tokens per rework cycle. For High findings or scope changes, include full governance as in Cycle 1.
+
+**Ultra-light subtask bundle adjustment:**
+
+When the subtask is ultra-light (`complexity: low` AND `<!-- section:impl-files-changed -->` lists exactly one non-manifest file AND TEP has no `shared_artifacts` flag), the reviewer's Cross-Subtask Consistency Check is skip-eligible per `ai/agents/reviewer.md` → "Skip clause". In this case:
+
+- Omit the "Cross-Subtask Consistency Check" instructions block from the bundle — don't include the protocol text for a check the reviewer is going to skip.
+- Include instead a one-line note in the bundle's `## Governance` section: `Cross-subtask consistency check: skip-eligible — see reviewer.md skip clause. Record the skip rationale in review-summary.`
+- The reviewer still evaluates skip eligibility at review time (the reviewer sees the actual `impl-files-changed` in the artifact input and confirms the file count / manifest-absence before skipping). The bundle adjustment just avoids shipping ~200–400 tokens of protocol text the reviewer won't follow.
+
+For non-ultra-light subtasks, include the full Cross-Subtask Consistency Check block as usual.
 
 ---
 
@@ -288,6 +346,8 @@ Extract from `section:escalation-N` in `ai-work.md`:
 
 ### Baseline sections in `PROJECT_CONFIG.md`
 
+Resolved via the Project-Level Context Cache protocol (see top of skill) — read `domain-contexts/<tag>.md` first, fall back to live extraction.
+
 - FE executor/lead → `<!-- section:fe-baseline -->`
 - BE executor/lead → `<!-- section:be-baseline -->`
 - Integration checker → `<!-- section:api-baseline -->`
@@ -332,3 +392,12 @@ Extract from `section:escalation-N` in `ai-work.md`:
 - If in doubt, exclude and note it — the agent can request more context via `blocker-escalation-report`.
 - The bundle file path convention is `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md`.
 - Bundle files are retained after agent completion. Their key data (role, token ceiling used, sections included) is summarized into `<subtask_id>/summary.md` by the orchestrator. Bundle files may then be deleted.
+- Always consult the Project-Level Context Cache (`ai-workflow-data/config/domain-contexts/_manifest.json`) before extracting any PROJECT_CONFIG.md section. Live extraction from PROJECT_CONFIG.md is the fallback path, not the default — silently re-extracting when a cached copy exists wastes the work the init / mutate skills did. Record every cache miss as `cache_miss: <tag>` in the subtask's `summary.md` so repeat misses surface in retrospective.
+
+## Related skills
+
+- `project-config-template` → "Derived Context Cache" — authoritative definition of the cache directory layout, `_manifest.json` format, and generation protocol (consumer repo gets the cache written here on every `init` / `update`).
+- `project-config-mutate` — regenerates the cache after `add` / `remove` mutations. Read this when debugging a stale cache.
+- `review-report` → "Stable Finding IDs" — the finding-ID contract that the Executor rework delta (cycle N > 2) relies on.
+- `orchestrator-state` — schemas for the hot and history state files that the orchestrator reads to determine which subtask bundle to assemble.
+- `orchestrator-dispatch` — wraps the bundle assembly flow with Pre-Dispatch Checklist and Post-Dispatch Gate.

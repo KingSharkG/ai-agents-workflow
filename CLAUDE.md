@@ -13,7 +13,7 @@ Portable multi-agent governance layer. Packages the orchestration, lead/executor
 - `ai/core/PROJECT_CONSTITUTION.md` — workflow rules, Definition of Done
 - `ai/governance/` — trigger rules, review checklist, artifact discipline, resolution policy (helper plugins/skills), **`FORBIDDEN_WORKFLOWS.md`** (competing orchestrators — hard-denylisted)
 - `ai/playbooks/ORCHESTRATION.md` — default flow (Step 0 intake classification through Step 15 completion), dispatch bundles, orchestrator state, token-saving rules
-- `ai/agents/` — canonical stack-agnostic role contracts (source of truth for `agents/` stubs)
+- `ai/agents/` — canonical stack-agnostic role docs. Each per-role file embeds a `<!-- role-contract:<role> -->` marker block that `context-minimizer` reads verbatim on every dispatch and copies into the bundle's `## Role Contract` section. The surrounding prose is human documentation; only the marker block is load-bearing at runtime.
 
 ## Paths inside this plugin
 
@@ -24,10 +24,12 @@ Agent stubs, role contracts, and skills reference plugin-internal docs via `${CL
 The plugin reads files from the consumer repo (NOT from the plugin), under `ai-workflow-data/`:
 
 - `ai-workflow-data/config/PROJECT_CONFIG.md` — per-project overlay: domains, baselines, cross-domain rules, quality gates, per-domain skills/plugins, `<!-- section:extra-trigger-keywords -->`. Generated and maintained by the `init` agent.
+- `ai-workflow-data/config/domain-contexts/` — derived cache of pre-extracted PROJECT_CONFIG.md sections. One `<tag>.md` per cached section plus `_manifest.json` written last as completion marker. Regenerated on every `init` / `update` / `add` / `remove`; read by `context-minimizer` during bundle assembly instead of re-extracting. Never hand-edit. Contents are project-dependent — only sections present in PROJECT_CONFIG.md appear in the cache. See `skills/project-config-template/SKILL.md` → "Derived Context Cache".
 - `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — per-subtask artifact. Must exist before dispatching any non-exempt agent, or the `guard-subtask-skeleton` hook blocks the Task call.
 - `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` — per-subtask summary with diagnostics (telemetry, context manifest, dispatch bundle audit). Created by orchestrator alongside ai-work.md, finalized by Reviewer.
 - `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md` — dispatch bundles written by orchestrator before each agent dispatch. Contain pre-curated role context (contract excerpts, config, governance, artifact input).
-- `ai-workflow-data/tasks/<task_id>/orchestration-state.json` — orchestrator state persistence between subtasks.
+- `ai-workflow-data/tasks/<task_id>/orchestration-state.json` — **hot** orchestrator state (execution cursor: phase, current_subtask, pending_subtasks, blocked_gates, pending_user_actions, subtask_offsets). Read before every subtask transition.
+- `ai-workflow-data/tasks/<task_id>/orchestration-history.json` — **history** orchestrator state (`completed_subtasks[]` with validated sections + `trigger_decisions{}`). Written once per subtask completion, read only at P2/P4 gates, resume, and post-task retrospective. Split from hot state so task-history growth doesn't inflate per-dispatch read cost. See `skills/orchestrator-state/SKILL.md`.
 
 Run `/ai-agents-workflow:init` in a new consumer project (or natural language: "initialize project config") to generate `ai-workflow-data/config/PROJECT_CONFIG.md` and scaffold `ai-workflow-data/tasks/`. The full slash-command surface (`init` | `add` | `update` | `remove` | `task` | `continue`) is documented in `README.md` → **Usage**.
 
