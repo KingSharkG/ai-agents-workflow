@@ -5,16 +5,13 @@ description: Surface 2–3 trade-off approaches (minimal / clean / pragmatic) be
 
 # Multi-Approach Architecture Skill
 
-When a subtask's approach is non-trivial, the Lead enumerates 2–3 competing approaches with explicit trade-offs rather than silently picking one. This replaces the implicit single-design path that earlier Lead contracts produced — and closes the gap that made `feature-dev:code-architect`'s multi-option ritual appealing at dispatch time.
+When a subtask's approach is non-trivial, the Lead enumerates 2–3 competing approaches with explicit trade-offs rather than silently picking one.
 
 ## When to invoke
 
-- **Invoke** when `complexity ∈ {medium, hard}` AND at least one of:
-  - The subtask can be implemented in materially different ways (new abstraction vs. inline change; stateful vs. stateless; at-rest vs. in-flight transform; etc.).
-  - The Lead's first-pass design would couple together concerns that later subtasks might want to change independently.
-  - The Delivery Plan's `subtask_risk` flags architecture ambiguity.
-- **Skip** when `complexity = low`, when the Delivery Plan already narrows the approach, or when exploration-notes already established that one pattern dominates the codebase and the subtask is a straightforward instance of it.
-- **Never** use this skill as a substitute for `blocker-escalation-report` when the right answer is "we need user input." Multi-approach design is for technical trade-offs the Lead can adjudicate; requirements ambiguity goes into `<!-- section:tep-clarifying-questions -->`.
+- **Invoke** when `complexity ∈ {medium, hard}` AND at least one of: the subtask is implementable in materially different ways (abstraction vs. inline; stateful vs. stateless; at-rest vs. in-flight); first-pass design would couple concerns later subtasks might want to vary; or `subtask_risk` flags architecture ambiguity.
+- **Skip** when `complexity = low`, the Delivery Plan already narrows the approach, or exploration-notes show one dominant pattern and the subtask is a straightforward instance.
+- **Never** substitute this skill for `blocker-escalation-report`. Multi-approach is for technical trade-offs the Lead can adjudicate; requirements ambiguity belongs in `<!-- section:tep-clarifying-questions -->`.
 
 ## Output Target
 
@@ -43,36 +40,22 @@ Append inside `<!-- section:architecture-options -->`:
 <!-- /section:architecture-metadata -->
 
 <!-- section:architecture-option-a -->
-## Option A — <one-line label, anchored on existing pattern>
-**Summary:** <2–3 sentences of what this option does and how it reuses the dominant pattern from exploration-notes.>
-
-**Trade-offs:**
-- Pros: <bullet list, 1–3 items>
-- Cons: <bullet list, 1–3 items>
-- Risk areas: <what is fragile about this option>
-
-**TEP implications:** `target_files` would be <files>; `implementation_steps` would be <count> steps of <character>.
+## Option A — <label, anchored on existing pattern>
+**Summary:** <2–3 sentences; how it reuses the dominant pattern from exploration-notes.>
+**Trade-offs:** Pros / Cons / Risk areas (1–3 bullets each).
+**TEP implications:** `target_files` and step count/character.
 <!-- /section:architecture-option-a -->
 
 <!-- section:architecture-option-b -->
-## Option B — <one-line label, varies ONE axis from A>
-**Summary:** <2–3 sentences; state explicitly which axis differs from A.>
-
-**Trade-offs:**
-- Pros: <bullet list, 1–3 items>
-- Cons: <bullet list, 1–3 items>
-- Risk areas: <what is fragile about this option>
-
-**TEP implications:** <same shape as A>
+## Option B — <label; varies ONE axis from A>
+**Summary:** <2–3 sentences; state which axis differs.>
+**Trade-offs:** as above.
+**TEP implications:** as above.
 <!-- /section:architecture-option-b -->
 
 <!-- section:architecture-option-c -->
-## Option C — <omit block entirely when only two meaningful options exist>
-**Summary:** <as above>
-
-**Trade-offs:** <as above>
-
-**TEP implications:** <as above>
+## Option C — <omit block when only two meaningful options exist>
+**Summary / Trade-offs / TEP implications:** as above.
 <!-- /section:architecture-option-c -->
 
 <!-- section:architecture-selected -->

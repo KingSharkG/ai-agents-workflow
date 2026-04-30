@@ -15,13 +15,15 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 
 ## Collection Protocol
 
-1. After each subtask completes, read `## Telemetry` lines from `<subtask_id>/summary.md` — one line per agent, format: `<role> | <model> | <turns>/<budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET>` (the `<model>` field is the model ID used for that agent invocation, e.g., `claude-sonnet-4-6` or `claude-opus-4-6`).
-2. Read `### <role>` subsections from `## Context Manifest` in `<subtask_id>/summary.md` to get per-agent bucket totals.
-3. Read `## Status` and `## Open Gates` from `<subtask_id>/summary.md` to determine whether the subtask is fully closed, blocked on user action, or pending integration.
-4. Read `## Notes` from `<subtask_id>/summary.md` for the completion one-liner (used in Changes by Phase).
-5. Read `## Dispatch Bundles` from `<subtask_id>/summary.md` for bundle audit data.
-6. Append rows to the Detail table, update Context Breakdown, and recalculate Totals.
-7. At task completion, populate the Changes by Phase section and set task `workflow_state: complete`. The file may exist before completion; completion is determined by status, not by file presence alone.
+After each subtask completes, read these sections from `<subtask_id>/summary.md`:
+
+1. `## Telemetry` — one line per agent, format `<role> | <model> | <turns>/<budget> turns | tokens: ~<in>/~<out> | skills: <low|medium|high> | plugins: <low|medium|high> | <ok|OVER_BUDGET>`.
+2. `## Context Manifest` → `### <role>` subsections — per-agent bucket totals.
+3. `## Status` and `## Open Gates` — closed / blocked-on-user / pending-integration.
+4. `## Notes` — completion one-liner for Changes by Phase.
+5. `## Dispatch Bundles` — bundle audit data.
+
+Then append rows to Detail, update Context Breakdown, and recalculate Totals. At task completion, populate Changes by Phase and set `workflow_state: complete` (status-driven, not file-presence-driven).
 
 ## Output Template
 
@@ -87,20 +89,16 @@ Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of t
 
 ## Rules
 
-- **File location**: always `ai-workflow-data/tasks/<task_id>/summary.md` (replaces the old `telemetry_summary.md`).
-- **Append-only** for Detail table and Context Breakdown: never rewrite or remove previous rows. Only add new rows and recalculate totals.
-- **One row per agent invocation** in Detail: if an executor does rework (cycle 2), that is a separate row.
-- **Changes by Phase** is populated at task completion from `<subtask_id>/summary.md` Notes fields.
-- **Pipeline one-liner**: use shorthand. For tasks with >5 subtasks, show phase-level aggregation in the one-liner; full detail stays in the table.
-- **Tokens are approximate**: accept ~20% variance. The goal is trend visibility, not accounting.
-- **Status values**: `ok` (within budget), `warning` (exceeded turns budget), `escalated` (blocker raised), `ul:approved` (ultra-light approved).
-- **Skills / Plugins columns**: copy the cost buckets from the telemetry line exactly.
-- **Rework cycles**: count only reviewer→executor rework loops, not normal pipeline progression.
-- **Model attribution**: the `Model` column in the Detail table records which model was used for each agent invocation. At task completion, the **By model** section in Totals aggregates tokens per model ID. If a telemetry line omits the model field (legacy format), record the model as `unknown`.
-- **Creator**: only the chief-orchestrator creates or updates this file.
-- **Context Breakdown is mandatory**: every update must refresh per-agent bucket totals, task totals, and Repeat reads from `## Context Manifest` subsections in each subtask's `<subtask_id>/summary.md`.
-- **Repeat reads**: list any path appearing in at least 2 agents' manifests for the same task; write `none` when none exist yet.
-- **Task Status is mandatory**: derive it from subtask `workflow_state` values and open gates.
-- **Pending User Actions is mandatory**: list concrete user actions as flat bullets, or write `- none`. `pending_user_action_count` is derived from this section.
-- **Completion semantics**: the task is complete only when `workflow_state: complete`, `open_gate_count: 0`, and `pending_user_action_count: 0`.
-- **Do not overstate completion**: if any subtask is `blocked-on-user` or `pending-integration-check`, the task summary must remain `active` or the matching blocked state.
+- **File location**: `ai-workflow-data/tasks/<task_id>/summary.md`. Only the chief-orchestrator writes it.
+- **Append-only** for Detail and Context Breakdown — one row per agent invocation (rework cycles are separate rows). Never rewrite or remove rows.
+- **Tokens are approximate** (~20% variance ok); trend visibility, not accounting.
+- **Status values**: `ok` (within budget) | `warning` (exceeded turns) | `escalated` (blocker) | `ul:approved` (ultra-light).
+- **Skills / Plugins columns**: copy cost buckets from the telemetry line verbatim.
+- **Rework cycles**: count reviewer→executor loops only, not normal progression.
+- **Model attribution**: Detail's Model column records the model per invocation; Totals → By model aggregates tokens per model ID. Missing model field → record as `unknown`.
+- **Pipeline one-liner**: shorthand. >5 subtasks → phase-level aggregation; full detail stays in Detail.
+- **Changes by Phase** is populated at task completion from each subtask's `## Notes`.
+- **Context Breakdown is mandatory** on every update — refresh per-agent buckets, task totals, and Repeat reads from each subtask's `## Context Manifest`.
+- **Repeat reads**: any path in ≥2 agents' manifests for this task. Write `none` when empty.
+- **Task Status / Pending User Actions are mandatory**: derive Status from subtask workflow_state + open gates; list user actions as flat bullets or `- none` (the count is derived from this list).
+- **Completion semantics**: complete only when `workflow_state: complete` AND `open_gate_count: 0` AND `pending_user_action_count: 0`. If any subtask is blocked, the task summary must reflect that blocked state — never overstate completion.

@@ -31,9 +31,9 @@ For all new plans, default to the sectioned format `sectioned-v1` so the orchest
 - **plan_format**: sectioned-v1
 - **plan_version**: 1
 - **created_at**: <ISO 8601 UTC>
-- **updated_at**: <ISO 8601 UTC, set on revision>
+- **updated_at**: <set on revision>
 - **task_title**: <from Task Packet>
-- **phases**: <short label per phase, e.g. A (auth), B (groups), C (sync)>
+- **phases**: <short label per phase, e.g. A (auth), B (groups)>
 <!-- /section:delivery-metadata -->
 
 ---
@@ -44,17 +44,17 @@ For all new plans, default to the sectioned format `sectioned-v1` so the orchest
 <!-- section:delivery-subtask-<normalized-subtask-id> -->
 #### <subtask_id> — <title>
 
-- **domain**: <one of `declared_domains` from `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:domains -->` — single domain only; never a compound>
+- **domain**: <single domain from `declared_domains`; never compound>
 - **complexity**: low | medium | hard
-- **no_split_reason**: <required only when complexity=hard and the subtask cannot be split>
-- **turns_budget**: <3 for low, 6 for medium, 10 for hard>
+- **no_split_reason**: <required only when complexity=hard and not splittable>
+- **turns_budget**: 3 (low) | 6 (medium) | 10 (hard)
 - **depends_on**: <subtask_id list or "none">
-- **can_run_in_parallel**: yes | no (<if yes, note which siblings>)
+- **can_run_in_parallel**: yes | no
 - **triggers**: design-agent | lead | none
-- **target_files**: <target module path(s) or file(s); Lead verifies exact files in TEP>
-- **summary**: <detailed context the Lead needs to create a TEP — columns, endpoints, invariants, constraints. Multi-paragraph allowed.>
-- **out_of_scope**: <explicit list of what this subtask must NOT touch>
-- **acceptance_signals**: <observable outcomes — endpoint returns X, screen shows Y>
+- **target_files**: <module path(s); Lead verifies exact files in TEP>
+- **summary**: <enough context for Lead to TEP from this excerpt alone — see Rules>
+- **out_of_scope**: <what this subtask must NOT touch>
+- **acceptance_signals**: <observable outcomes>
 - **definition_of_done**:
   - [ ] <criterion>
   - [ ] tests pass

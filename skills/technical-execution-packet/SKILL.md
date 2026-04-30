@@ -30,9 +30,10 @@ Append inside `<!-- section:tep -->`:
 - **source_phase**: <phase label from Delivery Plan, e.g. A or C> <!-- optional audit traceability -->
 - **source_delivery_section**: <e.g. delivery-subtask-a-004>
 - **domain**: frontend | backend
-- **complexity**: low | medium | hard  <!-- carried forward, do not re-derive -->
+- **complexity**: low | medium | hard
 - **turns_budget**: <carried from Delivery Plan>
-- **shared_artifacts**: true | false  <!-- true when the subtask introduces or modifies constants, types, interfaces, config keys, or dependency declarations consumed by sibling subtasks; false when scope is self-contained. Reviewer uses this to decide whether the cross-subtask consistency grep is skip-eligible. When unsure, set true. -->
+- **shared_artifacts**: true | false  <!-- see Rules below; when unsure, set true -->
+
 - **created_at**: <ISO 8601 UTC>
 <!-- /section:tep-metadata -->
 
@@ -43,7 +44,7 @@ Append inside `<!-- section:tep -->`:
 
 <!-- section:tep-target-files -->
 ## Target Files
-- `<path>` — <reason it is in scope> <!-- each path MUST be verified to exist -->
+- `<path>` — <reason it is in scope>
 <!-- /section:tep-target-files -->
 
 <!-- section:tep-non-goals -->
@@ -58,11 +59,8 @@ Append inside `<!-- section:tep -->`:
 
 <!-- section:tep-context-bundle -->
 ## Context Bundle
-<!-- produced via context-minimizer skill. Paste the verbatim excerpts the executor
-     needs: function signatures, type defs, relevant API contract, schema lines.
-     This replaces "go read these files." -->
+<!-- Verbatim excerpts the executor needs (signatures, types, contracts) — replaces "go read these files." -->
 ```ts
-// frontend/src/features/auth/api.ts
 export type LoginResponse = { accessToken: string; refreshToken: string };
 ```
 <!-- /section:tep-context-bundle -->
@@ -118,19 +116,17 @@ Target line counts per complexity tier (TEP section only):
 - **hard**: ≤ 350 lines
 
 ## Rules
-- All `target_files` paths must be verified to exist before writing the TEP — use filesystem tools.
-- `complexity` and `turns_budget` are copied from the Delivery Plan, never re-derived.
-- `source_delivery_section` is the exact `delivery-subtask-*` tag from `task-data.md`.
-- `shared_artifacts` must be set deliberately. Set `true` when the subtask introduces or modifies any of: shared constants / config keys (storage keys, feature flags, env var names), shared types / interfaces, dependency manifest entries (`package.json`, `requirements.txt`, `Cargo.toml`, `go.mod`, `pyproject.toml`), or cross-subtask contract surfaces consumed by siblings in the Delivery Plan. Set `false` only when the subtask's scope is demonstrably self-contained (e.g. edits inside a single file's private helpers). When uncertain, set `true` — the reviewer will run the cross-subtask consistency check, which is cheap relative to missing a real cross-subtask break.
+
+- All `target_files` paths must be verified to exist before writing the TEP. If a path can't be confirmed, raise a blocker via `blocker-escalation-report`.
+- `complexity`, `turns_budget`, and `source_delivery_section` are copied from the Delivery Plan — never re-derived.
+- `shared_artifacts: true` when the subtask introduces or modifies any of: shared constants / config keys (storage keys, flags, env vars), shared types / interfaces, dependency manifest entries (`package.json`, `requirements.txt`, `Cargo.toml`, `go.mod`, `pyproject.toml`), or any contract surface consumed by sibling subtasks. `false` only when scope is demonstrably self-contained (e.g., private helpers inside one file). When uncertain, set `true` — the reviewer's consistency check is cheap relative to missing a real break.
+- `context_bundle` must carry every signature / type / contract the executor needs; if the executor would still need to open a non-target file, add it here. **No duplication across sections** — each fact appears once.
+- `implementation_steps` must be concrete enough for the executor to follow without further clarification.
+- When `<!-- section:exploration-notes -->` exists for this subtask, every `target_files` entry MUST be among `exploration-key-files`.
+- Emit `<!-- section:tep-clarifying-questions -->` ONLY for real ambiguity. The orchestrator treats a non-empty block as a hold — Executor dispatch pauses until the user answers. Do NOT use it for design discussion, wishlists, or deferring Lead decisions. Rationale belongs in `tep-risks` or the step itself.
 
 ## Related
 
-- Reviewer role contract (`${CLAUDE_PLUGIN_ROOT}/ai/agents/reviewer.md`) → "Skip clause (ultra-light subtasks)" — consumes `shared_artifacts` to decide whether to run the Cross-Subtask Consistency Check.
-- `context-minimizer` → "Ultra-light subtask bundle adjustment" — omits the cross-subtask scan protocol from the reviewer bundle when the subtask is skip-eligible.
-- `codebase-exploration`, `multi-approach-architecture` — pre-TEP skills whose output often determines whether a subtask carries shared artifacts.
-- `context_bundle` must contain the exact signatures/types/contracts the executor needs; if the executor would still need to open a non-target file, add it here.
-- When `<!-- section:exploration-notes -->` exists for this subtask, every `target_files` entry MUST be among the files listed in `exploration-key-files` — the exploration record is the audit trail.
-- **No duplication across sections.** Each fact appears exactly once.
-- `implementation_steps` must be concrete enough that an executor can follow them without further clarification.
-- If a required file path cannot be confirmed, raise a blocker via `blocker-escalation-report`.
-- Emit `<!-- section:tep-clarifying-questions -->` ONLY when real ambiguity exists. The orchestrator treats a non-empty block as a mandatory hold — Executor dispatch pauses until the user answers. Do NOT use this section as a design-discussion placeholder, a wishlist, or a way to defer decisions the Lead is supposed to make. If you would write "I chose X because...", the explanation belongs in `tep-risks` or the relevant step, not here.
+- Reviewer role contract → "Skip clause (ultra-light subtasks)" — consumes `shared_artifacts`.
+- `context-minimizer` → "Ultra-light subtask bundle adjustment" — omits the cross-subtask scan from the reviewer bundle when skip-eligible.
+- `codebase-exploration`, `multi-approach-architecture` — pre-TEP skills whose output often determines `shared_artifacts`.
