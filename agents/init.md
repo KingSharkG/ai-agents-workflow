@@ -48,4 +48,4 @@ Hard rules:
 - Never silently delete user-authored content.
 - Low confidence ⇒ ask, don't guess.
 - Installed-but-unapproved capabilities are advisory only. The init agent MUST NOT write an unapproved name into `PROJECT_CONFIG.md`.
-- Emitted config text must pass the regex literals at `${CLAUDE_PLUGIN_ROOT}/hooks/evaluate-triggers.js:48-49,:63,:70`.
+- Emitted config text must pass the regex literals in `${CLAUDE_PLUGIN_ROOT}/hooks/pre-task-guard.js` → Phase 4 (`parseKeywordSection`).

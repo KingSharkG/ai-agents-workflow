@@ -1,23 +1,25 @@
 ---
 name: context-minimizer
-description: Build and write a dispatch bundle file for a target agent role before every delegation. Replaces the six-step load order with a single pre-curated file that the agent reads on startup.
+description: Compose a dispatch bundle for a target agent role and embed it inline in the Task prompt before every delegation. Replaces the six-step load order with a single pre-curated payload the agent receives directly on dispatch.
 ---
 
 # Context Minimizer — Dispatch Bundle Producer
 
-Before every agent delegation the orchestrator MUST invoke this skill to produce a **dispatch bundle** — a single markdown file that contains everything the target agent needs. The agent reads this file instead of independently loading governance files, canonical contracts, and PROJECT_CONFIG.md sections.
+Before every agent delegation the orchestrator MUST invoke this skill to produce a **dispatch bundle** — a single markdown payload that contains everything the target agent needs. The agent receives this payload inline in its Task `prompt` parameter and works from it directly, instead of independently loading governance files, canonical contracts, and PROJECT_CONFIG.md sections.
 
 ## Dispatch Bundle Protocol
 
 1. Determine the target agent role and subtask context (domain, complexity, rework cycle if any).
-2. Assemble the bundle content per the role-specific rules below.
+2. Assemble the bundle content per the role-specific rules below — in memory, as a single markdown string.
 3. Verify the assembled governance/context excerpts stay within the token ceiling for the target role.
-4. Write the bundle file to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md`.
-5. Pass the bundle file path to the agent in the dispatch prompt.
+4. Embed the bundle text directly inside the Task `prompt` parameter when dispatching the agent. Do NOT write the bundle to disk; do NOT pass a file path.
+5. Append a one-line **bundle audit** to `summary.md` → `<!-- section:dispatch-bundles -->` (role, target id, cycle, token count, sections included, cache misses if any). The audit lives in the subtask's `summary.md` for subtask-level dispatches (lead, executor, reviewer, design-agent, integration-checker) and in the **task-level** `ai-workflow-data/tasks/<task_id>/summary.md` for delivery-pm (which operates at task level and has no subtask folder).
 
 If the assembled context exceeds the ceiling, re-excerpt until it fits — never silently exceed. Over-ceiling dispatch is an orchestration defect.
 
 The bundle composes whatever `plugins:` and `skills:` are listed in the consumer's `PROJECT_CONFIG.md` for the target domain. Workflow integrity is enforced at the artifact-acceptance gate (Reviewer reading `ai-work.md`), not by filtering the skill list.
+
+**Why inline.** Writing the bundle to `roles/<role>.md` and then telling the agent to `Read` it costs one extra disk write, one PostToolUse hook fire, and one extra Read in the subagent — for content the orchestrator already has in memory at dispatch time. Subagent system prompts already accept multi-KB payloads; inlining is the platform-idiomatic delivery. The bundle audit line in `summary.md` preserves the only data future review actually needs (what was sent, how big, which sections). Old `roles/` directories from pre-inline tasks are vestigial and may be deleted.
 
 ## Project-Level Context Cache (consumption protocol)
 
@@ -56,8 +58,10 @@ Per-role bundle assembly needs the same `PROJECT_CONFIG.md` sections repeatedly 
 
 ## Bundle Format
 
+The bundle is delivered inline as the body of the Task `prompt` parameter. Wrap the payload in stable boundary markers so the agent can locate sections deterministically:
+
 ```markdown
-# Dispatch Bundle — <role> for <subtask_id>
+<!-- dispatch-bundle:start role=<role> subtask=<subtask_id> cycle=<n> -->
 
 ## Role Contract
 [read `${CLAUDE_PLUGIN_ROOT}/ai/agents/<role>.md` and copy the `<!-- role-contract:<role> -->` … `<!-- /role-contract:<role> -->` block verbatim — only this marker block, not the surrounding human documentation]
@@ -70,9 +74,14 @@ Per-role bundle assembly needs the same `PROJECT_CONFIG.md` sections repeatedly 
 
 ## Artifact Input
 [specific ai-work.md sections this role needs — spec, tep, review-findings, etc.]
+
+<!-- dispatch-bundle:end -->
+
+[After the closing marker, append the role-specific instruction line — e.g. for executor:
+"Implement the TEP above and append <!-- section:implementation --> to ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md."]
 ```
 
-The agent reads ONLY this bundle (plus its own stub for tool/model config). It does NOT independently read canonical contracts, PROJECT_CONFIG.md, or governance files.
+The agent works from the inline payload (plus its own stub for tool/model config). It does NOT independently read canonical contracts, PROJECT_CONFIG.md, or governance files. It MUST still read the `ai-work.md` artifact for the subtask in order to append its own section — the bundle's `## Artifact Input` carries excerpts the agent needs at dispatch time, not the full artifact.
 
 ---
 
@@ -116,8 +125,8 @@ Per-role bundle blocks above name the `<!-- section:<tag> -->` to extract from e
 - Never include all subtask TEPs when only one subtask is being worked.
 - For sectioned Delivery Plans, default to `delivery-subtask-*` only.
 - If in doubt, exclude and note it — the agent can request more context via `blocker-escalation-report`.
-- The bundle file path convention is `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md`.
-- Bundle files are retained after agent completion. Their key data (role, token ceiling used, sections included) is summarized into `<subtask_id>/summary.md` by the orchestrator. Bundle files may then be deleted.
+- Bundles are NEVER written to disk. The audit line in `summary.md` → `<!-- section:dispatch-bundles -->` is the only on-disk record. Format: `- <role> for <subtask_id> (cycle <n>): <token_count> tokens; sections: <list>; cache_misses: <list-or-none>`.
+- Any pre-existing `roles/<role>.md` files from before this change are vestigial and may be deleted by the orchestrator at task close.
 - Always consult the Project-Level Context Cache (`ai-workflow-data/config/domain-contexts.cache.manifest.json`) before extracting any PROJECT_CONFIG.md section. Live extraction from PROJECT_CONFIG.md is the fallback path, not the default — silently re-extracting when a cached copy exists wastes the work the init / mutate skills did. Record every cache miss as `cache_miss: <tag>` in the subtask's `summary.md` so repeat misses surface in retrospective.
 
 ## Related skills

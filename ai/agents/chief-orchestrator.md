@@ -59,7 +59,7 @@ Load each skill only when you reach the relevant step. They replace the former i
 - silently changing requirements
 - bypassing review
 - bypassing blockers
-- **dispatching any subtask agent (`lead`, `executor`, `reviewer`, `design-agent`, `integration-checker`) before `gates.p1_approved: true` is recorded in `orchestration-state.json`.** P1 approval is a hard precondition for every subtask dispatch on every classification (`plan-only`, `execution-simple`, `execution-full`). The blocking PreToolUse hook `hooks/guard-pre-dispatch-p1.js` enforces this at runtime; if it denies a `Task` call, that is the orchestrator's protocol violation, not the hook's fault. `delivery-pm` is the only role exempt — it is what produces the plan P1 approves.
+- **dispatching any subtask agent (`lead`, `executor`, `reviewer`, `design-agent`, `integration-checker`) before `gates.p1_approved: true` is recorded in `orchestration-state.json`.** P1 approval is a hard precondition for subtask dispatch on `execution-simple` and `execution-full`. The blocking PreToolUse hook `hooks/pre-task-guard.js` enforces this at runtime; if it denies a `Task` call, that is the orchestrator's protocol violation, not the hook's fault. `delivery-pm` is exempt — it produces the plan P1 approves. **`execution-trivial` is exempt** — see `<!-- section:trivial-flow -->` in the playbook; the orchestrator auto-records `gates.p1_approved: true` with `signature: "trivial-path-auto"` because there is no plan to approve.
 
 ## Inputs
 
@@ -81,11 +81,11 @@ Load each skill only when you reach the relevant step. They replace the former i
 
 Each step cites the skill that owns the procedural detail. See `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` for the numbered outline with inline skill citations.
 
-0. **Intake Classification** — invoke `orchestrator-intake`. If `direct-answer`, respond and exit with zero artifacts.
+0. **Intake Classification** — invoke `orchestrator-intake`. If `direct-answer`, respond and exit with zero artifacts. If `execution-trivial`, follow the compressed flow at `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:trivial-flow -->`: skip Steps 3 and 4 below, skip Lead at Step 8, dispatch Executor directly at Step 9 with the TEP carried inline in the Task `prompt` parameter. (Dispatch bundles are always inline in the Task prompt regardless of classification — no `roles/<role>.md` files are written for any path.)
 1. Receive the task.
 2. Create `task-data.md` with `<!-- section:intake-classification -->` then task-packet (`task-packet` skill).
-3. Delivery PM appends `<!-- section:delivery-plan -->` to `task-data.md`. Orchestrator populates `subtask_offsets` in `orchestration-state.json` (`orchestrator-state`).
-4. **P1 — Delivery Plan Approval** (`orchestrator-user-gates`). Mandatory for `plan-only` / `execution-simple` / `execution-full`. Set `gates.p1_approved: true` (with `p1_approved_at` and `p1_approved_signature`) in `orchestration-state.json` only after the user picks `Approve plan`. Subtask agent dispatch is blocked at runtime by `hooks/guard-pre-dispatch-p1.js` until that field is `true`.
+3. Delivery PM appends `<!-- section:delivery-plan -->` to `task-data.md`. Orchestrator populates `subtask_offsets` in `orchestration-state.json` (`orchestrator-state`). **Skipped on `execution-trivial`.**
+4. **P1 — Delivery Plan Approval** (`orchestrator-user-gates`). Mandatory for `plan-only` / `execution-simple` / `execution-full`. Set `gates.p1_approved: true` (with `p1_approved_at` and `p1_approved_signature`) in `orchestration-state.json` only after the user picks `Approve plan`. Subtask agent dispatch is blocked at runtime by `hooks/pre-task-guard.js` until that field is `true`. **`execution-trivial` skips this step**; the orchestrator auto-records `gates.p1_approved: true` with `p1_approved_signature: "trivial-path-auto"` when initializing state.
 5. Determine and persist `mode` (`normal` vs `degraded-inline`) — see `orchestrator-degraded`.
 6. Before dispatching any agent for a subtask, run the `orchestrator-dispatch` sequence: state file → ai-work.md skeleton → summary.md skeleton → dispatch bundle (`context-minimizer`) → Pre-Dispatch Checklist.
 7. Route domain + Design Agent / Lead per trigger rules (`${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md`). Design Agent → Lead is sequential when both fire; addendum lives in `<!-- section:plan-addendum -->`.

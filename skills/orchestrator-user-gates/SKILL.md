@@ -11,7 +11,7 @@ The orchestrator MUST pause for user input at these checkpoints. Use `AskUserQue
 
 **When:** After Delivery PM appends `<!-- section:delivery-plan -->` to `task-data.md`, before dispatching any subtask agent.
 
-**Hard constraint:** No subtask agent may be dispatched before P1 approval. Applies to **plan-only**, **execution-simple**, AND **execution-full** — there is no shortcut path that skips P1. The blocking PreToolUse hook `hooks/guard-pre-dispatch-p1.js` enforces this at runtime: any `Task` dispatch with `subagent_type ∈ {lead, executor, reviewer, design-agent, integration-checker}` is refused unless the active task's `orchestration-state.json` has `gates.p1_approved: true`. Treat hook denial as an orchestration defect, not an obstacle to work around.
+**Hard constraint:** No subtask agent may be dispatched before P1 approval. Applies to **plan-only**, **execution-simple**, AND **execution-full** — there is no shortcut path that skips P1. (`execution-trivial` is the lone exception — it skips P1 by design and the orchestrator auto-records `gates.p1_approved: true` with `signature: "trivial-path-auto"`.) The blocking PreToolUse hook `hooks/pre-task-guard.js` (Phase 3) enforces this at runtime: any `Task` dispatch with `subagent_type ∈ {lead, executor, reviewer, design-agent, integration-checker}` is refused unless the active task's `orchestration-state.json` has `gates.p1_approved: true` (or `classification: "execution-trivial"`). Treat hook denial as an orchestration defect, not an obstacle to work around.
 
 ### Presentation format (4 blocks, in order)
 
@@ -77,7 +77,19 @@ Pull from each subtask's `target_files` field in the delivery plan and de-duplic
 
 If every `completed_subtasks[]` entry satisfies its expected set, the artifact chain is validated — proceed to the approval question without re-reading subtask files. This map-based validation replaces the prior pattern of re-opening every subtask's `ai-work.md` at P4 (which cost ~200–400 KB of reads on large tasks).
 
-**Fallback.** If the map is incomplete — missing `sections` arrays (legacy pre-F5 history), missing entries for listed subtasks, or a subtask's actual `ai-work.md` contradicts the map — fall back to per-subtask grep: `grep -oE '<!-- section:[a-z0-9-]+ -->' <ai-work.md>` for each subtask. Record the fallback as a `cache_miss: artifact-chain-<subtask_id>` telemetry line in the task-level `summary.md` so retrospective captures repeated misses.
+**History consistency check.** Cross-check `orchestration-history.json` against `orchestration-state.json` before reading the map:
+
+- `history.completed_subtasks.length` MUST equal `state.last_completed_seq` (see `orchestrator-state` skill → "History consistency contract").
+- Every entry in `history.completed_subtasks[]` MUST have a non-empty `sections` array.
+- The set of `subtask_id` values in `history.completed_subtasks[]` MUST be disjoint from `state.pending_subtasks[]`.
+
+If ANY of those checks fail, do NOT silently fall back to per-subtask grep. The history file is the authoritative completion record; an inconsistency means the orchestrator skipped a `subtask_complete` write or wrote a partial entry — either way, P4 cannot honestly say the task is complete. Emit a `blocker-escalation-report` with `blocker_type: state-history-inconsistency` naming the missing/malformed entries and present a **recovery prompt** to the user via `AskUserQuestion`:
+
+- `Repair history from ai-work.md` — re-derive the missing `sections` arrays by re-grepping the surviving subtask `ai-work.md` files, write them back to history, then re-run the consistency check
+- `Reopen the unfinished subtask <id>` — treat the inconsistency as evidence the subtask never actually closed; re-enter the execution loop
+- `Abort task` — leave the task in an inconsistent state for manual cleanup
+
+Legacy pre-F5 history (no `last_completed_seq` in state, no `sections` arrays in history) is the one allowed silent path: fall back to per-subtask grep `grep -oE '<!-- section:[a-z0-9-]+ -->' <ai-work.md>` for each subtask AND emit a `legacy-history` telemetry line in `summary.md` so retrospective captures the migration debt. New tasks (state with `schema_version >= 2`) MUST satisfy the consistency contract — there is no silent fallback for them.
 
 **Action:** Present the full task summary (subtask outcomes table, open items, blockers carried forward, deferred items) and ask via `AskUserQuestion`:
 

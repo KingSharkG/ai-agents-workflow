@@ -231,7 +231,7 @@ Only **confidence-filtered findings** (those inside `<!-- section:review-finding
 
 ## Trigger Keywords (Observation Hook)
 
-Stack-agnostic keyword lists consumed by `.claude/hooks/evaluate-triggers.js`. The hook substring-matches these (case-insensitive) against the current artifact text and emits a non-blocking "recommended to run" hint before an agent dispatch. Authoritative routing still lives in the trigger sections above — this is only a heuristic surface hint.
+Stack-agnostic keyword lists consumed by `${CLAUDE_PLUGIN_ROOT}/hooks/pre-task-guard.js` (Phase 4 — trigger evaluation). The hook substring-matches these (case-insensitive) against the current artifact text and emits a non-blocking "recommended to run" hint before an agent dispatch. Authoritative routing still lives in the trigger sections above — this is only a heuristic surface hint.
 
 Keys are canonical agent names (same as `.claude/agents/<name>.md`). Values are keyword arrays. A project may add stack-specific keywords without editing this file by populating `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:extra-trigger-keywords -->` (optional; the hook unions both). If this section is missing or malformed, the hook exits 0 with no hint.
 

@@ -19,20 +19,22 @@ Before dispatching any agent for subtask `<subtask_id>`, run these file-existenc
 
 ```bash
 test -f ai-workflow-data/tasks/<task_id>/<subtask_id>/ai-work.md && echo "ai-work.md: OK" || echo "MISSING: ai-work.md"
-test -f ai-workflow-data/tasks/<task_id>/<subtask_id>/roles/<role>.md && echo "bundle: OK" || echo "MISSING: dispatch bundle"
 test -f ai-workflow-data/tasks/<task_id>/orchestration-state.json && echo "state: OK" || echo "MISSING: orchestration-state.json"
 ```
 
-The Pre-Dispatch Checklist only tests `orchestration-state.json` (hot state). It does NOT require `orchestration-history.json` to exist — the history file is created on the first subtask completion, not at task start, and is only read at gates/resume. See the `orchestrator-state` skill for the hot/history split.
+The Pre-Dispatch Checklist only tests `orchestration-state.json` (hot state). It does NOT require `orchestration-history.json` to exist — the history file is created on the first subtask completion, not at task start, and is only read at gates/resume. See the `orchestrator-state` skill for the hot/history split. Bundles are inline in the Task prompt and not on disk; the `context-minimizer` invocation that produces them is a separate obligation enforced at the role-contract level (see "Bundle composition obligation" below).
 
 If ANY check prints "MISSING":
 
 1. **STOP** — do NOT dispatch the agent.
-2. Create the missing file(s) using the appropriate protocol:
+2. Create the missing file using the appropriate protocol:
    - `ai-work.md` → write skeleton from `ARTIFACT_DISCIPLINE.md` → `<!-- section:ai-work-skeleton -->`
-   - `roles/<role>.md` → invoke the `context-minimizer` skill for the target role
    - `orchestration-state.json` → write initial hot state per `orchestrator-state` skill
 3. Re-run the checklist to confirm all files now exist.
 4. Only then proceed with the agent dispatch.
 
 This checklist applies to ALL agent dispatches including Lead, Executor, Reviewer, Design Agent, and Integration Checker. It does NOT apply to Delivery PM (which operates at task level, not subtask level).
+
+## Bundle composition obligation
+
+Even though the bundle is no longer a file, the orchestrator MUST still invoke `context-minimizer` before each dispatch and embed the resulting payload inline in the Task `prompt`. After dispatch returns, the orchestrator MUST append a one-line audit entry to `<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->` capturing role, subtask, cycle, token count, sections included, and any cache misses. Reviewer reads these audit lines to verify the bundle obligation was honored. Skipping `context-minimizer` and dispatching with an unstructured prompt is an orchestration defect — Reviewer will reject the work as out-of-protocol.

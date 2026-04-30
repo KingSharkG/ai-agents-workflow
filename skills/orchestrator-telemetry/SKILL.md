@@ -44,7 +44,7 @@ Each agent appends a named subsection:
 ### <role>
 | path                                    | bucket     | bytes |
 | --------------------------------------- | ---------- | ----- |
-| roles/lead.md (dispatch bundle)         | governance | 1240  |
+| inline dispatch bundle                  | governance | 1240  |
 | ai-work.md (section:spec)               | artifact   | 890   |
 | apps/api/src/modules/bookings/svc.ts    | source     | 3244  |
 
@@ -53,7 +53,7 @@ Totals: governance 1240 | artifact 890 | source 3244 | schema 0 | docs 0
 
 ### Rules
 
-- **One row per file opened**, whether read via `Read`, filesystem MCP, or received inline via prompt excerpt. The dispatch bundle counts as one `governance` row.
+- **One row per file opened**, whether read via `Read`, filesystem MCP, or received inline via prompt excerpt. The inline dispatch bundle (delivered in the Task prompt, not a file) counts as one `governance` row labeled `inline dispatch bundle`.
 - **`bytes`** = bytes the agent consumed, not total file size. Approximation is acceptable (lines × 80 is fine).
 - **Buckets are exhaustive — pick exactly one per row:**
   - `governance` — dispatch bundle, anything under `ai/`, plus files under `docs/requirements/`

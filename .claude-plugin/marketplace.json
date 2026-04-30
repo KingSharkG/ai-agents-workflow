@@ -6,7 +6,7 @@
       "name": "ai-agents-workflow",
       "source": { "source": "github", "repo": "KingSharkG/ai-agents-workflow" },
       "description": "Multi-agent governance layer",
-      "version": "1.4.0"
+      "version": "1.5.0"
     }
   ]
 }

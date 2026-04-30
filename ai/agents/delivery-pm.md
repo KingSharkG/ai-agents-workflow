@@ -26,7 +26,7 @@ Convert requirements into ordered, non-conflicting delivery subtasks.
 
 **Success:** subtasks sequential or explicitly parallel-safe; paired fe/be subtasks ordered per `cross-domain-rules`; DoD per subtask; telemetry + context-manifest footers.
 
-**Bundle path convention:** `ai-workflow-data/tasks/<task_id>/roles/delivery-pm.md`
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:delivery-pm -->
 
 ## Skills & Plugins
@@ -42,7 +42,7 @@ Convert requirements into ordered, non-conflicting delivery subtasks.
 
 ## Dispatch Bundle Protocol
 
-The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+The orchestrator composes the dispatch bundle in memory and embeds it inline in the Task `prompt` parameter. The bundle contains:
 - Role contract excerpts (mission, decomposition rules, domain tagging rules) from this file
 - Pre-extracted PROJECT_CONFIG.md sections (domains, cross-domain rules)
 - Governance excerpts (trigger rules)
@@ -50,10 +50,10 @@ The orchestrator writes a dispatch bundle file before each invocation. The bundl
 
 **Startup sequence:**
 1. Harness reads the stub (`.claude/agents/delivery-pm.md`) — spins up with tools, model, permissionMode.
-2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/roles/delivery-pm.md`).
+2. Agent receives the inline dispatch bundle as the body of its Task prompt, wrapped in `<!-- dispatch-bundle:start ... -->` … `<!-- dispatch-bundle:end -->` markers.
 3. Agent produces the Delivery Plan and appends to `task-data.md`.
 
-Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files; do NOT search for a `roles/<role>.md` file (none exists in current tasks). All necessary context is pre-curated in the inline bundle by the orchestrator via the `context-minimizer` skill.
 
 ## Domain Tagging & Handoff Note
 

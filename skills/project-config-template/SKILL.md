@@ -1,6 +1,6 @@
 ---
 name: project-config-template
-description: Canonical skeleton for ai-workflow-data/config/PROJECT_CONFIG.md. Use when init writes the initial file or update refreshes owned sections. Emitted text must pass the hooks/evaluate-triggers.js regex.
+description: Canonical skeleton for ai-workflow-data/config/PROJECT_CONFIG.md. Use when init writes the initial file or update refreshes owned sections. Emitted text must pass the hooks/pre-task-guard.js regex (Phase 4 — trigger evaluation).
 ---
 
 # Project Config Template Skill
@@ -34,7 +34,7 @@ The canonical PROJECT_CONFIG.md skeleton (all required `<!-- section:* -->` anch
 
 ## Validation Rules (MANDATORY before the init agent writes)
 
-The emitted text must parse under these exact regex literals from `${CLAUDE_PLUGIN_ROOT}/hooks/evaluate-triggers.js`:
+The emitted text must parse under these exact regex literals from `${CLAUDE_PLUGIN_ROOT}/hooks/pre-task-guard.js` → Phase 4 (`parseKeywordSection`):
 
 - **Section regex** (line 48-49): `<!--\s*section:([a-z0-9-]+)\s*-->([\s\S]*?)<!--\s*/section:\1\s*-->`
 - **Agent-map line** (line 63): `^([A-Za-z][A-Za-z0-9_-]*):\s*(\[\s*\])?\s*$`

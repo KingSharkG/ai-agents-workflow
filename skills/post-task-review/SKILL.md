@@ -17,8 +17,7 @@ Produce a structured Retrospective Report after a task reaches `phase: complete`
 
 - `ai-workflow-data/tasks/<task_id>/orchestration-state.json` — subtask ledger
 - `ai-workflow-data/tasks/<task_id>/summary.md` — task-level telemetry
-- Each `<subtask_id>/summary.md` — per-subtask telemetry, context manifest, dispatch bundle data
-- Each `<subtask_id>/roles/` directory — dispatch bundle files
+- Each `<subtask_id>/summary.md` — per-subtask telemetry, context manifest, and `<!-- section:dispatch-bundles -->` audit lines (one per dispatch — bundles themselves are inline in the Task prompt and not persisted)
 
 ## Output
 
@@ -40,17 +39,16 @@ Root cause categories: `contract-gap`, `pre-existing-code`, `cross-subtask-consi
 Check each subtask for:
 
 - ai-work.md exists and has all expected sections filled (not placeholder)
-- summary.md exists with verdict, telemetry, context manifest, and dispatch bundle data
-- roles/ directory exists with dispatch bundle files for each agent that was dispatched
+- summary.md exists with verdict, telemetry, context manifest, and `<!-- section:dispatch-bundles -->` audit lines
 
 Report: `<subtask_id>: <complete | missing: [list of missing artifacts]>`
 
 ### Dispatch Bundle Coverage
 
-- Count of expected dispatch bundles (one per agent dispatch)
-- Count of actual `roles/<role>.md` files found
+- Count of expected dispatches (Lead, Executor, Reviewer per cycle, plus Design Agent / Integration Checker when triggered)
+- Count of audit lines found across each `<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`
 - Coverage percentage
-- List of missing bundles
+- List of dispatches missing an audit entry (these indicate the orchestrator skipped the `context-minimizer` invocation)
 
 ### Telemetry Gaps
 

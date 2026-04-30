@@ -45,6 +45,7 @@ Then append rows to Detail, update Context Breakdown, and recalculate Totals. At
 ## Changes by Phase
 
 ### Phase A
+
 - <subtask_id>: <one-liner from subtask summary.md Notes field>
 - <subtask_id>: <one-liner>
 
@@ -64,9 +65,9 @@ Then append rows to Detail, update Context Breakdown, and recalculate Totals. At
 
 ## Detail
 
-| #   | Agent  | Model              | Subtask           | Turns           | Tokens (in/out) | Skills | Plugins | Status                       |
-| --- | ------ | ------------------ | ----------------- | --------------- | --------------- | ------ | ------- | ---------------------------- |
-| 1   | <role> | <model>            | <subtask_id or —> | <used>/<budget> | ~<in>/~<out>    | <low>  | <low>   | <ok | warning | escalated> |
+| #   | Agent  | Model   | Subtask           | Turns           | Tokens (in/out) | Skills | Plugins | Status |
+| --- | ------ | ------- | ----------------- | --------------- | --------------- | ------ | ------- | ------ | ------- | ---------- |
+| 1   | <role> | <model> | <subtask_id or —> | <used>/<budget> | ~<in>/~<out>    | <low>  | <low>   | <ok    | warning | escalated> |
 
 ## Totals
 
@@ -79,12 +80,27 @@ Then append rows to Detail, update Context Breakdown, and recalculate Totals. At
 
 ## Context Breakdown
 
-| Agent  | Governance | Artifact | Source | Schema | Docs | Total |
-| ------ | ---------- | -------- | ------ | ------ | ---- | ----- |
-| <role> | <bytes>    | <bytes>  | <bytes>| <bytes>| <bytes> | <sum> |
+| Agent  | Governance | Artifact | Source  | Schema  | Docs    | Total |
+| ------ | ---------- | -------- | ------- | ------- | ------- | ----- |
+| <role> | <bytes>    | <bytes>  | <bytes> | <bytes> | <bytes> | <sum> |
 
 - **Task totals**: governance <sum> | artifact <sum> | source <sum> | schema <sum> | docs <sum>
 - **Repeat reads**: <path> read by <N> agents | none
+
+## Dispatch Bundles
+
+<!-- section:dispatch-bundles -->
+<!-- Task-level audit. Delivery-pm bundle (task-level dispatch) is recorded here directly.
+     Subtask-level bundles (lead/executor/reviewer/design-agent/integration-checker) live in each
+     <subtask_id>/summary.md → <!-- section:dispatch-bundles -->; this skill aggregates a one-line
+
+     summary per subtask after closure rather than copying every audit line.
+     Format per line:
+       - <role> for <id> (cycle <n>): <token_count> tokens; sections: <list>; cache_misses: <list-or-none>
+
+-->
+
+<!-- /section:dispatch-bundles -->
 ```
 
 ## Rules

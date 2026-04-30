@@ -206,8 +206,11 @@ The Chief Orchestrator MUST create `<subtask_id>/summary.md` alongside `ai-work.
 - none yet
 
 ## Dispatch Bundles
-| Role | Token Ceiling | Sections Included |
-| ---- | ------------- | ----------------- |
+<!-- section:dispatch-bundles -->
+<!-- One line per dispatch (orchestrator appends after each successful dispatch):
+- <role> for <subtask_id> (cycle <n>): <token_count> tokens; sections: <list>; cache_misses: <list-or-none>
+-->
+<!-- /section:dispatch-bundles -->
 
 ## Telemetry
 <!-- one line per agent -->
@@ -244,7 +247,7 @@ When the Reviewer finalizes `<subtask_id>/summary.md`, ALL of the following fiel
 | `updated_at` | `## Status` | ISO 8601 UTC timestamp |
 | Acceptance signals table | `## Acceptance Signals` | All rows with `State` and `Evidence` filled (not `pending`) |
 | Files changed list | `## Files Changed` | At least one entry, or `- none (audit-only subtask)` with rationale |
-| Dispatch bundle data | `## Dispatch Bundles` | One row per agent dispatched (role, token ceiling, sections included) |
+| Dispatch bundle audit | `## Dispatch Bundles` → `<!-- section:dispatch-bundles -->` | One audit line per agent dispatch in format: `- <role> for <subtask_id> (cycle <n>): <token_count> tokens; sections: <list>; cache_misses: <list-or-none>` |
 | Telemetry lines | `## Telemetry` | One line per agent in format: `<role> \| <model> \| <turns>/<budget> turns \| tokens: ~<in>/~<out> \| skills: <bucket> \| plugins: <bucket> \| <status>` |
 | Context manifest | `## Context Manifest` | One `### <role>` subsection per agent with bucket totals |
 | Findings taxonomy | `## Notes` | Summary of findings by severity: `H:<n> M:<n> L:<n> N:<n> I:<n>` (may be `H:0 M:0 L:0 N:0 I:0` for clean passes) |

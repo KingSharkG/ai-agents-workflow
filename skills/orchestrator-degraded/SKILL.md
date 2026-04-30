@@ -11,8 +11,8 @@ When agent dispatch fails or is blocked, this skill decides whether the orchestr
 
 Before concluding that agent dispatch is unavailable, inspect the error:
 
-- If the `Agent` call was blocked with a `[guard-subtask-skeleton] BLOCKED:` message, this is a **recoverable pre-condition failure** — NOT tool unavailability. The hook is telling you that a required artifact is missing. Correct action:
-  1. Read the BLOCKED message to identify the missing file (`ai-work.md`, `roles/<role>.md`, or `orchestration-state.json`).
+- If the `Agent` call was blocked with a `[pre-task-guard] BLOCKED:` message, this is a **recoverable pre-condition failure** — NOT tool unavailability. The hook is telling you that a required artifact is missing. Correct action:
+  1. Read the BLOCKED message to identify the missing file (`ai-work.md` or `orchestration-state.json`).
   2. Create the missing artifact using the appropriate protocol (see `orchestrator-dispatch` skill → Subtask Skeleton / Pre-Dispatch Checklist).
   3. Re-run the Pre-Dispatch Checklist to confirm all files exist.
   4. Retry the dispatch. Do NOT enter `degraded-inline` for this case.

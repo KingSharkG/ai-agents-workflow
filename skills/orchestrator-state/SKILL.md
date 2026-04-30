@@ -14,12 +14,14 @@ Splitting the two prevents the history growth (O(N) in subtasks) from inflating 
 
 ## State Management Rhythm
 
-**After completing each subtask:**
+**After completing each subtask (transactional sequence):**
 
-1. **Hot file update** — clear `current_subtask` to `null`, remove the completed subtask from `pending_subtasks`, update `phase` / `blocked_gates` / `pending_user_actions` as applicable. Write `orchestration-state.json` atomically.
-2. **History file append** — append the completed subtask entry to `completed_subtasks[]` and update `trigger_decisions[<subtask_id>]` in `orchestration-history.json`. Write atomically.
+1. **History file append** — append the completed subtask entry (with non-empty `sections[]`) to `completed_subtasks[]` and update `trigger_decisions[<subtask_id>]` in `orchestration-history.json`. Write atomically (temp-file + `fsync` + `rename`).
+2. **Hot file update** — clear `current_subtask` to `null`, remove the completed subtask from `pending_subtasks`, increment `last_completed_seq` by 1, and update `phase` / `blocked_gates` / `pending_user_actions` as applicable. Write `orchestration-state.json` atomically.
 3. Extend task-level `summary.md` with subtask telemetry (via `telemetry-summary` skill).
 4. Summarize dispatch bundle data (role, token ceiling used, sections included) into `<subtask_id>/summary.md`.
+
+**Order is load-bearing**: history is written *before* the hot-state increment of `last_completed_seq`. If the orchestrator crashes between step 1 and step 2, the next P4 consistency check will detect `history.length > state.last_completed_seq` and prompt for repair (see "History consistency contract" below). The reverse order would silently lose completion data — never write hot state first.
 
 **Before starting the next subtask:**
 
@@ -48,12 +50,23 @@ Both files use JSON. The exact schemas (hot state, history state, the `task_id` 
 - **`current_subtask`** is set to the active subtask ID when the **first** agent for that subtask is dispatched (Design Agent, Lead, or Executor — whichever runs first). It persists through the entire subtask agent chain (Design Agent → Lead → Executor → Reviewer, including rework cycles) and is cleared to `null` only after the subtask reaches `approved` or `needs-replan` verdict. This field is the primary signal for `RESUME_SUBTASK` detection by the resume-orchestrator.
   - **Example lifecycle**: `null` → set to `"TP-042-E2"` when Lead is dispatched → remains `"TP-042-E2"` through Executor dispatch → remains through Reviewer cycle 1 → remains through Executor rework → remains through Reviewer cycle 2 (approved) → cleared to `null`.
 - **`classification`** records the intake classification determined at Step 0. Set once during classification, immutable unless the user explicitly overrides it at a P1 gate (e.g., `plan-only` → "Approve plan and execute" promotes to `execution-simple` or `execution-full`).
-- **`gates.p1_approved`** is the runtime-enforced "Delivery Plan approved" flag. Set to `true` only after the user picks `Approve plan` at the P1 gate; any `Revise plan` resets it to `false` along with `p1_approved_at` (cleared) and `p1_approved_signature` (cleared) before re-presenting the revised plan. The `hooks/guard-pre-dispatch-p1.js` blocking PreToolUse hook reads this field on every `Task` dispatch and refuses to allow `lead`, `executor`, `reviewer`, `design-agent`, or `integration-checker` invocations when it is not `true`. `delivery-pm`, `chief-orchestrator`, and `init` are explicitly allowed regardless.
+- **`gates.p1_approved`** is the runtime-enforced "Delivery Plan approved" flag. Set to `true` only after the user picks `Approve plan` at the P1 gate; any `Revise plan` resets it to `false` along with `p1_approved_at` (cleared) and `p1_approved_signature` (cleared) before re-presenting the revised plan. The `hooks/pre-task-guard.js` blocking PreToolUse hook (Phase 3 — P1 gate) reads this field on every `Task` dispatch and refuses to allow `lead`, `executor`, `reviewer`, `design-agent`, or `integration-checker` invocations when it is not `true`. `delivery-pm`, `chief-orchestrator`, and `init` are explicitly allowed regardless. Tasks with `classification: "execution-trivial"` also bypass this gate (the orchestrator auto-records `p1_approved: true` with `signature: "trivial-path-auto"` when initializing state).
 - **`gates.p1_approved_signature`** is a sha256 hex digest of the bytes the user actually saw and approved (the rendered Block 1 classification line + Block 2 subtasks table + Block 3 files-likely-to-change list, normalized). Recompute on every dispatch to detect "the plan changed since approval" — mismatch forces re-presenting the gate.
 - **`gates.p1_revise_count`** is the cumulative count of `Revise plan` selections at P1 across the task's lifetime (resume-safe — incremented in state, not in memory). The `orchestrator-user-gates` skill enforces the 5-iteration revise cap from this field. Increment on every `Revise plan`; never reset on `Approve plan`. At `>= 5`, surface a continue-or-abort prompt before re-presenting.
 - **`schema_version`** marks the state-file format version (currently `2`). Files without this field are legacy v1 (pre-P1-enforcement) and are upgraded in place on first orchestrator touch per `references/state-schemas.md` → "Migration". The hook treats legacy-without-`schema_version` as approved (warns to stderr) so in-flight tasks are not stranded when this change lands.
 - **`phase: planned`** is the terminal state for `plan-only` tasks that completed P1 approval without proceeding to execution. Tasks in this phase are resumable via `/continue` (resume code `EXECUTE_PLAN`).
 - **`phase: answered`** is the terminal state for `direct-answer` tasks. Not resumable — no artifacts exist. Note: for `direct-answer`, the orchestrator does NOT create `orchestration-state.json` at all (zero-artifact path). This phase value exists only for documentation completeness; it will never appear in a persisted state file.
+- **`last_completed_seq`** is a monotonically increasing integer that mirrors `orchestration-history.json` → `completed_subtasks.length`. Initialized to `0` when state is first written. Incremented by exactly 1 in step 2 of the post-subtask transactional sequence — *after* the history write succeeds. The P4 consistency check requires `state.last_completed_seq === history.completed_subtasks.length` and that every history entry has a non-empty `sections[]` array. A mismatch is NOT silently repaired — the orchestrator emits a `blocker-escalation-report` with `blocker_type: state-history-inconsistency` and prompts the user via `AskUserQuestion` to repair, reopen, or abort. See `orchestrator-user-gates` → P4 → "History consistency check". Legacy state without `last_completed_seq` (pre-F6) is allowed the silent fallback for one task lifecycle and emits a `legacy-history` telemetry line.
+
+## History consistency contract
+
+The contract between `orchestration-state.json` and `orchestration-history.json` has three invariants. P4 (and resume) MUST verify all three before honoring the history map:
+
+1. **Length parity:** `state.last_completed_seq === history.completed_subtasks.length`.
+2. **Sections completeness:** every entry in `history.completed_subtasks[]` has a non-empty `sections[]` array.
+3. **Disjointness:** the set of `subtask_id`s in `history.completed_subtasks[]` is disjoint from `state.pending_subtasks[]` (a subtask cannot be both pending and completed).
+
+A failure on any invariant is a real bug — the orchestrator either skipped a `subtask_complete` write, wrote partially, or duplicated. The `orchestrator-user-gates` P4 step does not silently fall back to per-subtask grep for tasks created under `schema_version >= 2`; it surfaces a recovery prompt. Legacy tasks (no `last_completed_seq` field at all) are the one exception — one-shot grep fallback is allowed and the migration debt is logged.
 
 ## Phase Transition Table
 

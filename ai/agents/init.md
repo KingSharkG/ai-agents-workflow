@@ -127,7 +127,7 @@ Low confidence triggers when any of:
 - Never silently delete user-authored content.
 - Low confidence ⇒ ask; do not guess.
 - Installed-but-unapproved capabilities are advisory only. The init agent MUST NOT write an unapproved name into `PROJECT_CONFIG.md`. Unknown names fail validation in `project-config-mutate`.
-- Emitted config text must pass the regex literals at `${CLAUDE_PLUGIN_ROOT}/hooks/evaluate-triggers.js:48-49,:63,:70`:
+- Emitted config text must pass the regex literals in `${CLAUDE_PLUGIN_ROOT}/hooks/pre-task-guard.js` → Phase 4 (`parseKeywordSection`):
   - section regex: `<!--\s*section:([a-z0-9-]+)\s*-->([\s\S]*?)<!--\s*/section:\1\s*-->`
   - agent-map line: `^([A-Za-z][A-Za-z0-9_-]*):\s*(\[\s*\])?\s*$`
   - list-item line: `^\s*-\s+(.+?)\s*$`
@@ -174,7 +174,7 @@ Low confidence triggers when any of:
 
 ## Success Criteria
 
-- The generated config parses under the regex literals in `evaluate-triggers.js`.
+- The generated config parses under the regex literals in `pre-task-guard.js` → Phase 4.
 - Every recommendation traces to a catalog entry.
 - User-editable sections and inter-section prose are byte-identical before and after any mode except `init`.
 - The review gate was run and explicitly approved before any write.

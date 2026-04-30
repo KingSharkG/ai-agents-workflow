@@ -29,22 +29,22 @@ This role does NOT produce an executor-facing plan and does NOT modify productio
 
 **Success:** flow coherent; UX risks surfaced early; mandatory states not forgotten; addendum specific enough for Lead merge; telemetry + context manifest written.
 
-**Bundle path convention:** `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/design-agent.md`
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:design-agent -->
 
 ## Dispatch Bundle Protocol
 
-The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+The orchestrator composes the dispatch bundle in memory and embeds it inline in the Task `prompt` parameter. The bundle contains:
 - Role contract excerpts (mission, addendum output rules, domain interaction rules) from this file
 - Pre-extracted PROJECT_CONFIG.md sections (FE baseline)
 - Artifact input (spec, optional tep for revisions)
 
 **Startup sequence:**
 1. Harness reads the stub (`.claude/agents/design-agent.md`) — spins up with tools, model, permissionMode.
-2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/design-agent.md`).
+2. Agent receives the inline dispatch bundle as the body of its Task prompt, wrapped in `<!-- dispatch-bundle:start ... -->` … `<!-- dispatch-bundle:end -->` markers.
 3. Agent produces the Design Review Addendum and appends to `ai-work.md`.
 
-Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files; do NOT search for a `roles/<role>.md` file (none exists in current tasks). All necessary context is pre-curated in the inline bundle by the orchestrator via the `context-minimizer` skill.
 
 ## Skills & Plugins
 | Trigger | Skill |

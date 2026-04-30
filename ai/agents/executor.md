@@ -47,7 +47,7 @@ Implement an approved subtask in the real repository per the TEP. Emit an Implem
 
 **Quality gates:** Use `PROJECT_CONFIG.md#<!-- section:quality-gates -->` `test`/`lint`/`typecheck`/`build` commands verbatim for `impl-tests-run`. Record any skipped gate in `impl-unresolved-issues` with justification.
 
-**Bundle path convention:** `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/executor.md`
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:executor -->
 
 ## Base Skills
@@ -71,7 +71,7 @@ Domain-specific skills and plugins are included in the dispatch bundle's Project
 
 ## Dispatch Bundle Protocol
 
-The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+The orchestrator composes the dispatch bundle in memory and embeds it inline in the Task `prompt` parameter. The bundle contains:
 - Role contract excerpts (mission, skill rituals, forbidden actions) from this file
 - Pre-extracted PROJECT_CONFIG.md sections (domain, baselines, role best-practices)
 - Governance excerpts within token ceilings (DoD section)
@@ -79,10 +79,10 @@ The orchestrator writes a dispatch bundle file before each invocation. The bundl
 
 **Startup sequence:**
 1. Harness reads the stub (`.claude/agents/executor.md`) — spins up with tools, model, permissionMode.
-2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/executor.md`). Hold baseline content from the bundle as persistent subtask context.
+2. Agent receives the inline dispatch bundle as the body of its Task prompt, wrapped in `<!-- dispatch-bundle:start ... -->` … `<!-- dispatch-bundle:end -->` markers. Hold baseline content from the bundle as persistent subtask context.
 3. Agent performs the work and appends to `<!-- section:implementation -->` in the subtask's `ai-work.md`.
 
-Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files; do NOT search for a `roles/<role>.md` file (none exists in current tasks). All necessary context is pre-curated in the inline bundle by the orchestrator via the `context-minimizer` skill.
 
 ## Base Best Practices
 
@@ -95,7 +95,7 @@ Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or go
 
 ## Skill Invocation Rituals
 
-1. On startup, read the dispatch bundle and hold the baseline content from its Project Context section as persistent subtask context.
+1. On startup, work from the inline dispatch bundle in your Task prompt and hold the baseline content from its Project Context section as persistent subtask context.
 2. Invoke `superpowers:executing-plans` when stepping through the approved TEP.
 3. Invoke `superpowers:test-driven-development` before writing tests — write the failing test first.
 4. Invoke `superpowers:systematic-debugging` on any unexpected failure. Never patch blindly.

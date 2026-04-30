@@ -31,7 +31,7 @@ Shape an approved subtask into an executor-ready Technical Execution Packet (TEP
 
 **Forbidden:** writing final production code by default; invoking skills/plugins outside the merged menu; any git operation; changing contracts in another domain; silent scope widening.
 
-**Bundle path convention:** `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/lead.md`
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:lead -->
 
 ## Base Skills
@@ -53,7 +53,7 @@ Domain-specific skills and plugins are included in the dispatch bundle's Project
 
 ## Dispatch Bundle Protocol
 
-The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+The orchestrator composes the dispatch bundle in memory and embeds it inline in the Task `prompt` parameter. The bundle contains:
 - Role contract excerpts (mission, skill rituals, forbidden actions) from this file
 - Pre-extracted PROJECT_CONFIG.md sections (domain, baselines, role best-practices)
 - Governance excerpts within token ceilings
@@ -61,10 +61,10 @@ The orchestrator writes a dispatch bundle file before each invocation. The bundl
 
 **Startup sequence:**
 1. Harness reads the stub (`.claude/agents/lead.md`) — spins up with tools, model, permissionMode.
-2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/lead.md`).
+2. Agent receives the inline dispatch bundle as the body of its Task prompt, wrapped in `<!-- dispatch-bundle:start ... -->` … `<!-- dispatch-bundle:end -->` markers.
 3. Agent performs the work and appends to `<!-- section:tep -->` in the subtask's `ai-work.md`.
 
-Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files; do NOT search for a `roles/<role>.md` file (none exists in current tasks). All necessary context is pre-curated in the inline bundle by the orchestrator via the `context-minimizer` skill.
 
 ## Base Best Practices
 
@@ -78,7 +78,7 @@ Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or go
 
 ## Skill Invocation Rituals
 
-1. At subtask start, read the dispatch bundle — it contains `<!-- section:spec -->` and any existing design addendum body sections.
+1. At subtask start, work from the inline dispatch bundle in your Task prompt — it contains `<!-- section:spec -->` and any existing design addendum body sections.
 2. Invoke `codebase-exploration` before drafting the TEP when `complexity ∈ {medium, hard}` OR the subtask touches unfamiliar territory. It appends `<!-- section:exploration-notes -->` with entry points, architecture layers, similar-feature patterns, and the 5–10 key files the subsequent TEP `target_files` list must come from. Skip only when a sibling subtask's exploration-notes already covers the same area.
 3. Invoke `multi-approach-architecture` when `complexity ∈ {medium, hard}` AND the approach is non-trivial. It appends `<!-- section:architecture-options -->` with 2–3 trade-off approaches; the chosen approach becomes the TEP's guidance.
 4. Invoke `technical-execution-packet` when emitting the `<!-- section:tep -->` block. Include `<!-- section:tep-clarifying-questions -->` when you identify ambiguity the Delivery Plan did not resolve — the orchestrator will pause Executor dispatch until the user answers.

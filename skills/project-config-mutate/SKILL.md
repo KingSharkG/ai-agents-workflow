@@ -50,7 +50,7 @@ Apply a single `add` or `remove` to an existing `ai-workflow-data/config/PROJECT
 - Only after `project-config-review` returns `Approve and write`.
 - Compute final file contents (target section replaced; all other sections byte-identical).
 - Write to `<path>.tmp`, `fsync`, then `rename` over `<path>`.
-- Re-run the `evaluate-triggers.js` regex against the written file to confirm the hook can still parse it. On parse failure: restore the previous file from in-memory cache, log a diagnostic, and error.
+- Re-run the `pre-task-guard.js` Phase 4 regex against the written file to confirm the hook can still parse it. On parse failure: restore the previous file from in-memory cache, log a diagnostic, and error.
 - **Regenerate the derived context cache.** Immediately after a successful `PROJECT_CONFIG.md` write, regenerate `ai-workflow-data/config/domain-contexts.cache.md` and `domain-contexts.cache.manifest.json` following the `project-config-template` skill → "Derived Context Cache" protocol (single combined cache file plus sibling manifest; remove any legacy `domain-contexts/` directory as part of the same regeneration). Cache regeneration MUST complete in the same invocation as the mutation — leaving a stale cache visible to `context-minimizer` is an orchestration defect. If cache regeneration fails after the PROJECT_CONFIG.md write succeeded, delete `domain-contexts.cache.manifest.json` so `context-minimizer` falls back to live extraction, and surface the failure to the user.
 
 ## Rules

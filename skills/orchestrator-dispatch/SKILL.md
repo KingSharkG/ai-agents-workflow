@@ -9,35 +9,31 @@ Every agent dispatch MUST be preceded by the Pre-Dispatch Checklist and followed
 
 ## Dispatch Bundle Model
 
-All agents (Lead, Executor, Reviewer, Delivery PM, Design Agent, Integration Checker) receive their context via a **dispatch bundle** — a single markdown file written by the orchestrator before each dispatch. Agents do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files.
+All agents (Lead, Executor, Reviewer, Delivery PM, Design Agent, Integration Checker) receive their context via a **dispatch bundle** — a single markdown payload composed in memory by the orchestrator and embedded inline in the Task `prompt` parameter at dispatch time. Bundles are NOT written to disk. Agents do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files.
 
-Dispatch bundles are valid only in `mode: normal`. In `mode: degraded-inline`, the orchestrator MUST NOT create `roles/<role>.md` files or record synthetic dispatch outcomes for those roles.
-
-**Bundle path convention:**
-- Subtask agents: `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md`
-- Delivery PM: `ai-workflow-data/tasks/<task_id>/roles/delivery-pm.md`
+Dispatch bundles are valid only in `mode: normal`. In `mode: degraded-inline`, the orchestrator MUST NOT compose synthetic bundles or record synthetic dispatch outcomes for those roles.
 
 **Startup sequence:**
 1. Harness reads the stub (`agents/<role>.md`) — spins up with tools, model, permissionMode.
-2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt.
-3. Agent performs the work and appends its artifact section.
+2. Agent receives the inline dispatch bundle as the body of its Task prompt (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers).
+3. Agent performs the work and appends its artifact section to `ai-work.md`.
 
-Bundle contents are assembled by the `context-minimizer` skill — see `${CLAUDE_PLUGIN_ROOT}/skills/context-minimizer/SKILL.md` → "Bundle Format" for the section list (role contract, project context, governance, artifact input).
+Bundle contents are assembled by the `context-minimizer` skill — see `${CLAUDE_PLUGIN_ROOT}/skills/context-minimizer/SKILL.md` → "Bundle Format" for the section list (role contract, project context, governance, artifact input) and the inline-delivery rules.
 
 Menu guard rail: the agent's allowed skills for the subtask are `base_skills ∪ domain.skills`; allowed plugins are `base_plugins ∪ domain.plugins`. Both lists are included in the dispatch bundle's Project Context section.
 
-**Retention:** Bundles persist after agent completion. Their key data (role, token ceiling used, sections included) is summarized into `<subtask_id>/summary.md` by the orchestrator. Bundle files may then be deleted.
+**Audit trail:** The only on-disk record of a bundle is a one-line entry in `<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`: `- <role> for <subtask_id> (cycle <n>): <token_count> tokens; sections: <list>; cache_misses: <list-or-none>`. Reviewer reads these lines as part of the rollup.
 
 ## Dispatch Bundle Protocol (MANDATORY)
 
 Before every agent dispatch, the orchestrator MUST:
 
-1. Run the `context-minimizer` skill for the target agent role to assemble the bundle content.
-2. Write the bundle file to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md` (for delivery-pm: `ai-workflow-data/tasks/<task_id>/roles/delivery-pm.md`).
-3. Verify the assembled governance/context excerpts stay within the ceiling defined in the `context-minimizer` skill's "Token Ceilings per Role" table. If exceeded, re-excerpt until it fits — never silently exceed.
-4. Pass the bundle file path in the agent's dispatch prompt.
+1. Run the `context-minimizer` skill for the target agent role to assemble the bundle content in memory.
+2. Verify the assembled governance/context excerpts stay within the ceiling defined in the `context-minimizer` skill's "Token Ceilings per Role" table. If exceeded, re-excerpt until it fits — never silently exceed.
+3. Embed the bundle text inline in the Task `prompt` parameter when dispatching the agent (wrapped in the `<!-- dispatch-bundle:start ... -->` / `<!-- dispatch-bundle:end -->` markers). Append the role-specific instruction line after the closing marker.
+4. Append a one-line bundle audit to `<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->` capturing role, target subtask, cycle, token count, sections included, and any cache misses.
 
-Agents read ONLY the dispatch bundle (plus their own stub for tool/model config). Violation of this protocol is an orchestration defect.
+Agents work from the inline bundle (plus their own stub for tool/model config). Violation of this protocol is an orchestration defect.
 
 ## Subtask Skeleton + Pre-Dispatch Checklist (MANDATORY)
 
@@ -116,7 +112,7 @@ After accepting a subtask completion, read `<subtask_id>/summary.md` (written by
 
 ## Token-saving rules
 
-- Dispatch bundles replace direct governance reads — agents receive only pre-curated excerpts within token ceilings
+- Dispatch bundles replace direct governance reads — agents receive only pre-curated excerpts within token ceilings, delivered inline in the Task prompt (no extra disk read)
 - Only send the relevant section from `ai-work.md`, not the full file
 - Only send target files/modules, not the whole repo
 - For `task-data.md`, send only the matching `delivery-subtask-*` section by default

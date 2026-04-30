@@ -27,22 +27,22 @@ If context is insufficient to compare contract surfaces safely, return a Blocker
 
 **Success:** detects likely FE/BE mismatch quickly; detects boundary drift even when only one side changed; findings explicit enough for a narrow fix; stays compact; telemetry + context manifest written.
 
-**Bundle path convention:** `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/integration-checker.md`
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:integration-checker -->
 
 ## Dispatch Bundle Protocol
 
-The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+The orchestrator composes the dispatch bundle in memory and embeds it inline in the Task `prompt` parameter. The bundle contains:
 - Role contract excerpts (mission, comparison protocol, verdict rules, fix_owner assignment) from this file
 - Pre-extracted PROJECT_CONFIG.md sections (API/auth baselines)
 - Artifact input (changed-side implementation, untouched-side contract)
 
 **Startup sequence:**
 1. Harness reads the stub (`.claude/agents/integration-checker.md`) — spins up with tools, model, permissionMode.
-2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/integration-checker.md`).
+2. Agent receives the inline dispatch bundle as the body of its Task prompt, wrapped in `<!-- dispatch-bundle:start ... -->` … `<!-- dispatch-bundle:end -->` markers.
 3. Agent performs the compatibility check and appends to `ai-work.md`.
 
-Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files; do NOT search for a `roles/<role>.md` file (none exists in current tasks). All necessary context is pre-curated in the inline bundle by the orchestrator via the `context-minimizer` skill.
 
 ## Skills & Plugins
 

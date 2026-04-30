@@ -40,7 +40,7 @@ Ultra-light path: append compact `review-ultra` block; still finalize `summary.m
 
 **Success:** findings specific, severity justified, evidence-based, changed code/diff inspected directly before approval, `summary.md` finalized.
 
-**Bundle path convention:** `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/reviewer.md`
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:reviewer -->
 
 ## Skills & Plugins
@@ -60,7 +60,7 @@ Ultra-light path: append compact `review-ultra` block; still finalize `summary.m
 
 ## Dispatch Bundle Protocol
 
-The orchestrator writes a dispatch bundle file before each invocation. The bundle contains:
+The orchestrator composes the dispatch bundle in memory and embeds it inline in the Task `prompt` parameter. The bundle contains:
 - Role contract excerpts (mission, review protocol, severity definitions, verdict rules) from this file
 - Pre-extracted PROJECT_CONFIG.md sections (domain validation_rules)
 - Governance excerpts (review checklist, DoD)
@@ -68,10 +68,10 @@ The orchestrator writes a dispatch bundle file before each invocation. The bundl
 
 **Startup sequence:**
 1. Harness reads the stub (`.claude/agents/reviewer.md`) — spins up with tools, model, permissionMode.
-2. Agent reads the dispatch bundle at the path provided in the orchestrator's prompt (`ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/reviewer.md`).
-3. Agent performs the review and writes both `ai-work.md` review section and `summary.md`.
+2. Agent receives the inline dispatch bundle as the body of its Task prompt, wrapped in `<!-- dispatch-bundle:start ... -->` … `<!-- dispatch-bundle:end -->` markers.
+3. Agent performs the review and writes both `ai-work.md` review section and `summary.md`. Read the existing `<!-- section:dispatch-bundles -->` audit lines in `summary.md` as part of the rollup to confirm the orchestrator honored the bundle obligation each cycle.
 
-Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files. All necessary context is pre-curated in the dispatch bundle by the orchestrator via the `context-minimizer` skill.
+Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files; do NOT search for a `roles/<role>.md` file (none exists in current tasks). All necessary context is pre-curated in the inline bundle by the orchestrator via the `context-minimizer` skill.
 
 ## Produce-Artifact-First Rule (MANDATORY)
 
