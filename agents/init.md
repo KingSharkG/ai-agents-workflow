@@ -25,7 +25,7 @@ Mode-dependent catalog load (see the full Load Order table in `${CLAUDE_PLUGIN_R
 - `init` → full catalog (governance + all SKILL.md / agent stubs + PROJECT_CONSTITUTION).
 - `update` → governance only; skip SKILL.md / agent stubs / PROJECT_CONSTITUTION.
 - `add` → governance + only the one SKILL.md matching `<value>` when `target-type == skill`.
-- `remove` → `FORBIDDEN_WORKFLOWS.md` only.
+- `remove` → governance only.
 
 Determine the mode before loading any catalog files. `add`/`remove` skip Steps 1–4 (discovery) entirely — they operate on an already-initialized config.
 
@@ -36,7 +36,6 @@ Operating sequence (init / update only; add / remove jump to Step 7):
 3. Classify the repo: `fe` / `be` / `mixed` / `new-domain`.
 4. Map evidence to the plugin's catalog (scope per the mode-dependent table above; in `update` mode, consult `RESOLUTION_POLICY.md` / `TRIGGER_RULES.md` only — do NOT re-enumerate every SKILL.md).
 4a. Cross-reference `installed_capabilities` against the registry. For each entry from `project-discovery`, look it up in `RESOLUTION_POLICY.md` → `<!-- section:registry -->` or `<!-- section:external-skills -->`. Recommend only rows with `status ∈ {approved, trial}`. Installed-but-unapproved capabilities are advisory only — surface via `AskUserQuestion` with options `Do not use (not yet governed)` / `Skip and propose a registry PR separately`. Never auto-add unapproved capabilities. For `consumer_marketplaces`, ask via `AskUserQuestion` to enumerate (no reliable API).
-4b. **Apply the forbidden-workflows filter.** Before presenting plugin or skill options to the user, drop every candidate that matches an entry in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` → `<!-- section:denylist -->`. For each dropped entry, log a one-line skip reason to stderr naming the replacement (e.g. `[init] skipped feature-dev — denylisted; use codebase-exploration + multi-approach-architecture`). Never write a denylisted name into `PROJECT_CONFIG.md`; the `context-minimizer` filter and `guard-forbidden-workflows` hook would strip and block it at runtime anyway, and carrying it in config just pollutes the file.
 5. Identify ambiguities and missing intent.
 6. Ask the minimum necessary user questions via `AskUserQuestion`, each with 2–4 predefined options. On low confidence, the last question is always the catch-all "Is there anything else I should know about this project?" with options `No, proceed` / `Yes, I'd like to add notes`.
 7. Assemble the proposal (for `init` the full file; for other modes a unified diff scoped to owned sections) and run the `project-config-review` review-and-comment loop — user must choose `Approve and write` or `Revise with comments`. Loop until approved.
@@ -49,5 +48,4 @@ Hard rules:
 - Never silently delete user-authored content.
 - Low confidence ⇒ ask, don't guess.
 - Installed-but-unapproved capabilities are advisory only. The init agent MUST NOT write an unapproved name into `PROJECT_CONFIG.md`.
-- Entries listed in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` MUST NEVER appear in any generated `PROJECT_CONFIG.md` — regardless of install status. Log a skip reason instead.
 - Emitted config text must pass the regex literals at `${CLAUDE_PLUGIN_ROOT}/hooks/evaluate-triggers.js:48-49,:63,:70`.

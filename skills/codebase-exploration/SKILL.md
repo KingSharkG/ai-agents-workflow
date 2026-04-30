@@ -82,7 +82,7 @@ The Executor's TEP `target_files` list should be drawn from this set.
 
 - **No code dumps.** One-line annotations per file; paste actual code only inside the TEP's `tep-context-bundle` when it's truly needed for the Executor.
 - **At least one similar-feature reference when the subtask is a new instance of an existing pattern** (new CRUD entity, new auth strategy variant, new list screen, etc.). If none exists, state `similar-features: none found — treat as greenfield` and flag in `open-questions`.
-- **Never** launch parallel sub-Task dispatches from inside this skill; Lead owns exploration directly. `superpowers:dispatching-parallel-agents` is denylisted for Lead per `FORBIDDEN_WORKFLOWS.md`.
-- **Never** invoke `feature-dev:code-explorer`, `feature-dev:code-architect`, or any other workflow-orchestrator skill to satisfy exploration — those are denylisted and would short-circuit the pipeline. This skill IS the ai-agents-workflow replacement.
+- **Never** launch parallel sub-Task dispatches from inside this skill; Lead owns exploration directly. Output from spawned dispatchers does not flow back into `ai-work.md` and Reviewer will reject the subtask.
+- **This skill IS the ai-agents-workflow exploration entry point.** `feature-dev:code-explorer` / `feature-dev:code-architect` may be invoked as helpers, but their output must be reformatted into the `<!-- section:exploration-notes -->` shape and recorded in `ai-work.md` — output that does not flow back through the artifact chain will be rejected at review.
 - **Every `target_files` path in the subsequent TEP MUST appear in `exploration-key-files`** with `In TEP? = yes`. The Executor, the Reviewer, and the orchestrator rollup all treat this mapping as the audit trail.
 - If exploration reveals the subtask is infeasible as planned (missing dependency, conflicting invariant, scope gap), **stop** and emit a `blocker-escalation-report` routed to `delivery-pm` — do not proceed to TEP drafting.

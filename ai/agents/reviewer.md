@@ -54,7 +54,7 @@ Ultra-light path: append compact `review-ultra` block; still finalize `summary.m
 | Tracing root cause of a bug found during review       | `superpowers:systematic-debugging`                                              |
 | Cycle 3 exhausted with unresolved HIGH/MEDIUM findings | `blocker-escalation-report`                                                      |
 
-`pr-review-toolkit:review-pr`, `pr-review-toolkit:code-reviewer`, and `code-review:code-review` are denylisted for ALL roles via `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` — they orchestrate their own multi-agent review loops that bypass the Cycle N cadence and produce output the orchestrator cannot route back through rework. Use the narrow helpers above plus `review-report` instead.
+`pr-review-toolkit:review-pr`, `pr-review-toolkit:code-reviewer`, and `code-review:code-review` orchestrate their own multi-agent review loops and produce output that does not flow back through the Cycle N cadence. Prefer the narrow helpers above plus `review-report`. If you do invoke them, you remain responsible for emitting a `review-report`-shaped artifact and routing findings through rework.
 
 **Plugins:** **github** plugin to fetch PR diff, comments, and CI check status directly.
 
@@ -136,7 +136,7 @@ If even one condition fails, run the full check. When in doubt, run the check �
 - silently approving weak work
 - writing final fixes by default
 - changing requirements
-- invoking any entry listed in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` — notably `pr-review-toolkit:review-pr`, `pr-review-toolkit:code-reviewer`, `code-review:code-review`, and the whole `feature-dev:*` family. The `guard-forbidden-workflows` hook will hard-block them.
+- invoking competing-review orchestrators (`pr-review-toolkit:review-pr`, `pr-review-toolkit:code-reviewer`, `code-review:code-review`, `feature-dev:code-reviewer`) without producing a `review-report`-shaped artifact and routing findings through the Cycle N rework loop
 
 ## Inputs
 

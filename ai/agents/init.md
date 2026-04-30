@@ -29,10 +29,10 @@ Every invocation follows this sequence before doing work:
 
    | Mode | Always load | Skill frontmatters (`skills/*/SKILL.md`) | Agent stubs (`agents/*.md`) | PROJECT_CONSTITUTION |
    |------|-------------|-------------------------------------------|-----------------------------|----------------------|
-   | `init` | `RESOLUTION_POLICY.md`, `TRIGGER_RULES.md`, `FORBIDDEN_WORKFLOWS.md` | **all** | **all** | **yes** |
-   | `update` | `RESOLUTION_POLICY.md`, `TRIGGER_RULES.md`, `FORBIDDEN_WORKFLOWS.md` | skip (already-initialized projects have validated skill lists) | skip | skip (refresh scope is detection rules + baselines, not DoD) |
-   | `add` | `RESOLUTION_POLICY.md`, `FORBIDDEN_WORKFLOWS.md` | **only** the SKILL.md matching the `<value>` being added, if `target-type == skill` | skip | skip |
-   | `remove` | `FORBIDDEN_WORKFLOWS.md` | skip — value must already be present in PROJECT_CONFIG.md to remove | skip | skip |
+   | `init` | `RESOLUTION_POLICY.md`, `TRIGGER_RULES.md` | **all** | **all** | **yes** |
+   | `update` | `RESOLUTION_POLICY.md`, `TRIGGER_RULES.md` | skip (already-initialized projects have validated skill lists) | skip | skip (refresh scope is detection rules + baselines, not DoD) |
+   | `add` | `RESOLUTION_POLICY.md` | **only** the SKILL.md matching the `<value>` being added, if `target-type == skill` | skip | skip |
+   | `remove` | (governance only) | skip — value must already be present in PROJECT_CONFIG.md to remove | skip | skip |
 
    Mode is determined from the invocation prompt/argument before the catalog load begins. When in doubt between `init` and `update`, inspect `ai-workflow-data/config/PROJECT_CONFIG.md` — if it exists, the mode is not `init`.
 

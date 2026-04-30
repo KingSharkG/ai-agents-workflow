@@ -4,7 +4,7 @@ Canonical policy for how agents resolve skills and plugins. Covers the resolutio
 
 Any plugin not listed in `<!-- section:registry -->` with `status: approved` (or `trial`) MAY NOT be invoked. Using an unlisted or `deprecated` plugin is a hard blocker.
 
-Plugins and skills that orchestrate competing end-to-end workflows are tracked separately in `ai/governance/FORBIDDEN_WORKFLOWS.md`. An entry appearing there is a hard blocker regardless of its status here. `RESOLUTION_POLICY.md` governs *which helpers agents may use*; `FORBIDDEN_WORKFLOWS.md` governs *which orchestrators agents may not become*.
+Some skills and plugins (e.g. `feature-dev:*`, `pr-review-toolkit:review-pr`, `superpowers:writing-plans`) orchestrate their own end-to-end workflows. They are not blocked, but invoking them is a Reviewer-enforced responsibility: any work whose artifact trail (TEP / `ai-work.md` / `review-report`) is missing or routed around the Cycle N rework loop will be rejected at review.
 
 ## Fixed Before Dynamic
 
@@ -47,13 +47,14 @@ The following skills are referenced in agent contracts but provided by the tool 
 
 | Prefix               | Skills                                                                                                                                                                                                          | Source                   |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| `superpowers:`       | `test-driven-development`, `verification-before-completion`, `finishing-a-development-branch`, `systematic-debugging`, `receiving-code-review` (plus `brainstorming`, `writing-plans`, `dispatching-parallel-agents`, `executing-plans`, `subagent-driven-development` — role-scoped; see `FORBIDDEN_WORKFLOWS.md`) | `claude-builtin`         |
+| `superpowers:`       | `test-driven-development`, `verification-before-completion`, `finishing-a-development-branch`, `systematic-debugging`, `receiving-code-review`, `brainstorming`, `writing-plans`, `dispatching-parallel-agents`, `executing-plans`, `subagent-driven-development` | `claude-builtin`         |
 | `frontend-design:`   | `frontend-design`                                                                                                                                                                                               | `claude-builtin`         |
 | `figma:`             | `figma-use`, `figma-implement-design`, `figma-generate-library`, `figma-code-connect`                                                                                                                           | `mcp-server` (`figma`)   |
-| `pr-review-toolkit:` | `silent-failure-hunter`, `pr-test-analyzer` (plus `review-pr`, `code-reviewer` — role-scoped; see `FORBIDDEN_WORKFLOWS.md`)                                                                                     | `claude-builtin`         |
-| `code-review:`       | `code-review` (role-scoped; see `FORBIDDEN_WORKFLOWS.md`)                                                                                                                                                       | `claude-builtin`         |
+| `pr-review-toolkit:` | `silent-failure-hunter`, `pr-test-analyzer`, `review-pr`, `code-reviewer`                                                                                                                                       | `claude-builtin`         |
+| `code-review:`       | `code-review`                                                                                                                                                                                                   | `claude-builtin`         |
+| `feature-dev:`       | `code-explorer`, `code-architect`, `code-reviewer`, `feature-dev`                                                                                                                                               | `claude-builtin`         |
 
-The `feature-dev:` prefix is intentionally absent — it is denylisted in `FORBIDDEN_WORKFLOWS.md` because it orchestrates a competing end-to-end workflow. Consumers who want codebase-aware exploration or multi-option architecture should use ai-agents-workflow's `codebase-exploration` and `multi-approach-architecture` skills invoked by Lead.
+For codebase-aware exploration and multi-option architecture, prefer ai-agents-workflow's `codebase-exploration` and `multi-approach-architecture` skills — they integrate directly with the TEP / `ai-work.md` artifact chain. `feature-dev:*` may still be invoked as a helper, but its output must be routed back through the artifact chain or Reviewer will reject the subtask.
 
 If an agent references one of these and the environment does not provide it, the agent MUST emit a `blocker-escalation-report` (`blocker_type: environment-capability-gap`) rather than silently skipping.
 

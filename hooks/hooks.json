@@ -6,11 +6,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-forbidden-workflows.js\"",
-            "blocking": true
-          },
-          {
-            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-subtask-skeleton.js\"",
             "blocking": true
           },
@@ -23,16 +18,6 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/evaluate-triggers.js\" \"$CLAUDE_TOOL_INPUT_SUBAGENT_TYPE\"",
             "blocking": false
-          }
-        ]
-      },
-      {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-forbidden-workflows.js\"",
-            "blocking": true
           }
         ]
       },

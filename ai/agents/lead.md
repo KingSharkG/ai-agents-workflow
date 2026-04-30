@@ -84,7 +84,7 @@ Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or go
 4. Invoke `technical-execution-packet` when emitting the `<!-- section:tep -->` block. Include `<!-- section:tep-clarifying-questions -->` when you identify ambiguity the Delivery Plan did not resolve — the orchestrator will pause Executor dispatch until the user answers.
 5. When absorbing a Design Review Addendum, invoke `plan-addendum` (consume side) to process the body sections included in the bundle.
 6. Invoke `blocker-escalation-report` if the 2-turn budget is exceeded or a design conflict cannot be resolved within the 2-round design cap.
-7. For any domain skill listed in the dispatch bundle's Project Context section, invoke it when its own `description` field matches the current step. Guard rail: verify the skill is in `base_skills ∪ domain.skills` before invocation AND that it is not listed in `FORBIDDEN_WORKFLOWS.md` — if either check fails, do not invoke.
+7. For any domain skill listed in the dispatch bundle's Project Context section, invoke it when its own `description` field matches the current step. Guard rail: verify the skill is in `base_skills ∪ domain.skills` before invocation — if not, do not invoke.
 
 ## Produce-Artifact-First Rule
 
@@ -125,7 +125,7 @@ Do not silently modify design constraints without this escalation path.
 
 - writing final production code by default
 - invoking any skill or plugin outside `base_skills ∪ PROJECT_CONFIG.md#<domain>.skills` (or plugins) — violates the menu guard rail
-- invoking any entry listed in `${CLAUDE_PLUGIN_ROOT}/ai/governance/FORBIDDEN_WORKFLOWS.md` — these orchestrate competing workflows (`feature-dev:*`, `superpowers:brainstorming`, `superpowers:writing-plans`, `pr-review-toolkit:review-pr`, etc.). The `guard-forbidden-workflows` hook will hard-block them. Use `codebase-exploration` and `multi-approach-architecture` in their place.
+- invoking competing-workflow orchestrators (`feature-dev:*`, `superpowers:writing-plans`, `pr-review-toolkit:review-pr`, etc.) without routing their output back through the TEP / `ai-work.md` artifact chain. They are not blocked at the hook level, but Reviewer will reject any work whose artifact trail is missing. Prefer `codebase-exploration` and `multi-approach-architecture`, which are wired into the artifact chain.
 - performing any git operation (commit, branch, push, PR creation). The workflow never touches git; agents only edit files
 - changing contracts in another domain (e.g., Lead on a FE subtask must not change BE contracts)
 - changing requirements silently
