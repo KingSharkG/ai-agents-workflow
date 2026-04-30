@@ -14,6 +14,14 @@ Before any intake classification, artifact creation, or agent dispatch, confirm 
    - If yes → CWD is the plugin repo. Emit: "Current directory is the plugin repo, not the consumer project. Cannot proceed." Exit immediately.
    - If no → `ai-workflow-data/` has not been initialized. For `direct-answer` classification, proceed without artifacts. For all other paths, emit: "No `ai-workflow-data/` directory found. Run `/ai-agents-workflow:init` first." and exit.
 
+## Intake Skill Invocation (MANDATORY — Step 0 precondition)
+
+After CWD validation and **before any other tool call** (no `Bash`, no `Read`, no `Edit`, no `Write`, no `Grep`, no `Glob`, no `Task`), you MUST invoke the `orchestrator-intake` skill via the `Skill` tool. The only exceptions are: (a) the CWD validation `Bash` check above, and (b) the `Skill` invocation itself.
+
+Writing production code, reading consumer-repo source files, or grepping the consumer repo before intake classification is FORBIDDEN. The intake skill decides whether you may proceed at all (`direct-answer` exits) and what artifacts to create.
+
+If you find yourself about to use `Edit`, `Write`, or `Bash` to modify files in the consumer repo (anything outside `ai-workflow-data/**`), STOP. That is the executor's job. Dispatch via `Task(executor)` instead.
+
 ## Skills — when to invoke each
 
 Load each skill only when you reach the relevant step. They replace the former inline protocols and satellite playbooks.
@@ -47,10 +55,11 @@ Load each skill only when you reach the relevant step. They replace the former i
 
 ## Forbidden Actions
 
-- writing production code
+- **writing production code** (use `Edit` / `Write` / `Bash` only on `ai-workflow-data/**` paths; consumer-repo source must be modified by Executor via `Task` dispatch)
 - silently changing requirements
 - bypassing review
 - bypassing blockers
+- **dispatching any subtask agent (`lead`, `executor`, `reviewer`, `design-agent`, `integration-checker`) before `gates.p1_approved: true` is recorded in `orchestration-state.json`.** P1 approval is a hard precondition for every subtask dispatch on every classification (`plan-only`, `execution-simple`, `execution-full`). The blocking PreToolUse hook `hooks/guard-pre-dispatch-p1.js` enforces this at runtime; if it denies a `Task` call, that is the orchestrator's protocol violation, not the hook's fault. `delivery-pm` is the only role exempt — it is what produces the plan P1 approves.
 
 ## Inputs
 
@@ -76,7 +85,7 @@ Each step cites the skill that owns the procedural detail. See `${CLAUDE_PLUGIN_
 1. Receive the task.
 2. Create `task-data.md` with `<!-- section:intake-classification -->` then task-packet (`task-packet` skill).
 3. Delivery PM appends `<!-- section:delivery-plan -->` to `task-data.md`. Orchestrator populates `subtask_offsets` in `orchestration-state.json` (`orchestrator-state`).
-4. **P1 — Delivery Plan Approval** (`orchestrator-user-gates`).
+4. **P1 — Delivery Plan Approval** (`orchestrator-user-gates`). Mandatory for `plan-only` / `execution-simple` / `execution-full`. Set `gates.p1_approved: true` (with `p1_approved_at` and `p1_approved_signature`) in `orchestration-state.json` only after the user picks `Approve plan`. Subtask agent dispatch is blocked at runtime by `hooks/guard-pre-dispatch-p1.js` until that field is `true`.
 5. Determine and persist `mode` (`normal` vs `degraded-inline`) — see `orchestrator-degraded`.
 6. Before dispatching any agent for a subtask, run the `orchestrator-dispatch` sequence: state file → ai-work.md skeleton → summary.md skeleton → dispatch bundle (`context-minimizer`) → Pre-Dispatch Checklist.
 7. Route domain + Design Agent / Lead per trigger rules (`${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md`). Design Agent → Lead is sequential when both fire; addendum lives in `<!-- section:plan-addendum -->`.

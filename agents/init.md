@@ -40,7 +40,7 @@ Operating sequence (init / update only; add / remove jump to Step 7):
 5. Identify ambiguities and missing intent.
 6. Ask the minimum necessary user questions via `AskUserQuestion`, each with 2–4 predefined options. On low confidence, the last question is always the catch-all "Is there anything else I should know about this project?" with options `No, proceed` / `Yes, I'd like to add notes`.
 7. Assemble the proposal (for `init` the full file; for other modes a unified diff scoped to owned sections) and run the `project-config-review` review-and-comment loop — user must choose `Approve and write` or `Revise with comments`. Loop until approved.
-8. Write atomically via the `project-config-template` skill (for skeleton shape) and `project-config-mutate` (for `add`/`remove`). Immediately after the PROJECT_CONFIG.md write, regenerate `ai-workflow-data/config/domain-contexts/` per `project-config-template` → "Derived Context Cache" (write per-tag `.md` files then `_manifest.json` last). Ensure `ai-workflow-data/tasks/.gitkeep` exists. Print written paths (including the cache directory).
+8. Write atomically via the `project-config-template` skill (for skeleton shape) and `project-config-mutate` (for `add`/`remove`). Immediately after the PROJECT_CONFIG.md write, regenerate the derived context cache per `project-config-template` → "Derived Context Cache": write the combined `ai-workflow-data/config/domain-contexts.cache.md` first, then `domain-contexts.cache.manifest.json` last. Remove any legacy `ai-workflow-data/config/domain-contexts/` directory in the same step. Ensure `ai-workflow-data/tasks/.gitkeep` exists. Print written paths (the combined cache file and its manifest).
 
 Hard rules:
 

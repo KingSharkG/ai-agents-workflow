@@ -65,7 +65,7 @@ Extract from `section:escalation-N` in `ai-work.md`:
 
 ## Baseline sections in `PROJECT_CONFIG.md`
 
-Resolved via the Project-Level Context Cache protocol (see SKILL.md → "Project-Level Context Cache (consumption protocol)") — read `domain-contexts/<tag>.md` first, fall back to live extraction.
+Resolved via the Project-Level Context Cache protocol (see SKILL.md → "Project-Level Context Cache (consumption protocol)") — grep the `<tag>` anchor block out of `domain-contexts.cache.md` first (when listed in `domain-contexts.cache.manifest.json`), fall back to live extraction from `PROJECT_CONFIG.md` otherwise.
 
 - FE executor/lead → `<!-- section:fe-baseline -->`
 - BE executor/lead → `<!-- section:be-baseline -->`

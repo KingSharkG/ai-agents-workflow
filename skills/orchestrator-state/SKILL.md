@@ -48,6 +48,10 @@ Both files use JSON. The exact schemas (hot state, history state, the `task_id` 
 - **`current_subtask`** is set to the active subtask ID when the **first** agent for that subtask is dispatched (Design Agent, Lead, or Executor — whichever runs first). It persists through the entire subtask agent chain (Design Agent → Lead → Executor → Reviewer, including rework cycles) and is cleared to `null` only after the subtask reaches `approved` or `needs-replan` verdict. This field is the primary signal for `RESUME_SUBTASK` detection by the resume-orchestrator.
   - **Example lifecycle**: `null` → set to `"TP-042-E2"` when Lead is dispatched → remains `"TP-042-E2"` through Executor dispatch → remains through Reviewer cycle 1 → remains through Executor rework → remains through Reviewer cycle 2 (approved) → cleared to `null`.
 - **`classification`** records the intake classification determined at Step 0. Set once during classification, immutable unless the user explicitly overrides it at a P1 gate (e.g., `plan-only` → "Approve plan and execute" promotes to `execution-simple` or `execution-full`).
+- **`gates.p1_approved`** is the runtime-enforced "Delivery Plan approved" flag. Set to `true` only after the user picks `Approve plan` at the P1 gate; any `Revise plan` resets it to `false` along with `p1_approved_at` (cleared) and `p1_approved_signature` (cleared) before re-presenting the revised plan. The `hooks/guard-pre-dispatch-p1.js` blocking PreToolUse hook reads this field on every `Task` dispatch and refuses to allow `lead`, `executor`, `reviewer`, `design-agent`, or `integration-checker` invocations when it is not `true`. `delivery-pm`, `chief-orchestrator`, and `init` are explicitly allowed regardless.
+- **`gates.p1_approved_signature`** is a sha256 hex digest of the bytes the user actually saw and approved (the rendered Block 1 classification line + Block 2 subtasks table + Block 3 files-likely-to-change list, normalized). Recompute on every dispatch to detect "the plan changed since approval" — mismatch forces re-presenting the gate.
+- **`gates.p1_revise_count`** is the cumulative count of `Revise plan` selections at P1 across the task's lifetime (resume-safe — incremented in state, not in memory). The `orchestrator-user-gates` skill enforces the 5-iteration revise cap from this field. Increment on every `Revise plan`; never reset on `Approve plan`. At `>= 5`, surface a continue-or-abort prompt before re-presenting.
+- **`schema_version`** marks the state-file format version (currently `2`). Files without this field are legacy v1 (pre-P1-enforcement) and are upgraded in place on first orchestrator touch per `references/state-schemas.md` → "Migration". The hook treats legacy-without-`schema_version` as approved (warns to stderr) so in-flight tasks are not stranded when this change lands.
 - **`phase: planned`** is the terminal state for `plan-only` tasks that completed P1 approval without proceeding to execution. Tasks in this phase are resumable via `/continue` (resume code `EXECUTE_PLAN`).
 - **`phase: answered`** is the terminal state for `direct-answer` tasks. Not resumable — no artifacts exist. Note: for `direct-answer`, the orchestrator does NOT create `orchestration-state.json` at all (zero-artifact path). This phase value exists only for documentation completeness; it will never appear in a persisted state file.
 
@@ -57,8 +61,8 @@ Only the following transitions are valid. Any transition not listed here is a pr
 
 | From | To | Trigger |
 |------|----|---------|
-| `planning` | `planned` | P1 gate: user selects "Approve plan and stop" (plan-only tasks) |
-| `planning` | `execution` | P1 gate: user approves plan for execution |
+| `planning` | `planned` | P1 gate: user selects "Approve plan and stop" (plan-only tasks). Sets `gates.p1_approved: true`. |
+| `planning` | `execution` | P1 gate: user approves plan for execution. Sets `gates.p1_approved: true` and records `p1_approved_at` + `p1_approved_signature`. |
 | `planned` | `execution` | `/continue` with `EXECUTE_PLAN`: user chooses to execute a previously planned task |
 | `execution` | `execution` | Subtask completes, next subtask begins (no phase change needed) |
 | `execution` | `blocked` | `blocked_gates` or `pending_user_actions` becomes non-empty |

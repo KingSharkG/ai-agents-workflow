@@ -31,19 +31,21 @@ Helper plugins (e.g. `context7`, `figma:*`, `supabase:*`) are not on the denylis
 
 ## Project-Level Context Cache (consumption protocol)
 
-Per-role bundle assembly needs the same `PROJECT_CONFIG.md` sections repeatedly — the domain block, baselines, best-practices sub-blocks — and re-grepping PROJECT_CONFIG.md on every dispatch is wasted work. The init / update / mutate skills write a pre-extracted cache under `ai-workflow-data/config/domain-contexts/`; this skill reads that cache instead of extracting live whenever possible.
+Per-role bundle assembly needs the same `PROJECT_CONFIG.md` sections repeatedly — the domain block, baselines, best-practices sub-blocks — and re-grepping PROJECT_CONFIG.md on every dispatch is wasted work. The init / update / mutate skills write a pre-extracted cache as a single combined file at `ai-workflow-data/config/domain-contexts.cache.md`; this skill reads that file instead of extracting live whenever possible.
 
-**Cache directory:** `ai-workflow-data/config/domain-contexts/`
-- `_manifest.json` — completion marker + `sections` list of cached tags.
-- `<tag>.md` — one file per cached section tag. Contents are the raw bytes of `<!-- section:<tag> -->...<!-- /section:<tag> -->` from PROJECT_CONFIG.md (byte-for-byte identical to what live extraction produces).
+**Cache files:**
+- `ai-workflow-data/config/domain-contexts.cache.md` — combined file containing every cached section block back-to-back, each wrapped in its original `<!-- section:<tag> -->...<!-- /section:<tag> -->` anchors. Section bodies are byte-for-byte identical to what live extraction from PROJECT_CONFIG.md produces.
+- `ai-workflow-data/config/domain-contexts.cache.manifest.json` — completion marker + `sections` list of cached tags + `cache_path`.
+
+(Legacy `ai-workflow-data/config/domain-contexts/` directory with one file per tag is no longer written. If it still exists in a repo, the next `init` / `update` / `add` / `remove` removes it as part of regeneration.)
 
 **Read protocol for any PROJECT_CONFIG.md section the bundle needs:**
 
-1. Check `_manifest.json` first. If missing or unreadable, skip to step 3 (fallback).
-2. If the needed `<tag>` appears in `manifest.sections`, read `ai-workflow-data/config/domain-contexts/<tag>.md` and use its bytes directly.
-3. **Fallback** — if the manifest is missing, the tag is absent from `manifest.sections`, or the cache file is unreadable: extract the section live from `ai-workflow-data/config/PROJECT_CONFIG.md` as this skill has always done. Emit a telemetry warning (`cache_miss: <tag>`) into the subtask's `summary.md` → Context Manifest so the reviewer rollup captures the miss. Never block dispatch on a cache miss.
+1. Check `domain-contexts.cache.manifest.json` first. If missing or unreadable, skip to step 3 (fallback).
+2. If the needed `<tag>` appears in `manifest.sections`, read `domain-contexts.cache.md` and grep the bytes between `<!-- section:<tag> -->` and `<!-- /section:<tag> -->` — same anchor-based extraction this skill applies on the fallback path, just against a smaller file. Use those bytes directly.
+3. **Fallback** — if the manifest is missing, the tag is absent from `manifest.sections`, the cache file is unreadable, or the anchor pair is not found: extract the section live from `ai-workflow-data/config/PROJECT_CONFIG.md` as this skill has always done. Emit a telemetry warning (`cache_miss: <tag>`) into the subtask's `summary.md` → Context Manifest so the reviewer rollup captures the miss. Never block dispatch on a cache miss.
 
-**Cache freshness.** The cache is regenerated atomically by `project-config-template` / `project-config-mutate` after every PROJECT_CONFIG.md write, and `_manifest.json` is always written last. If `_manifest.json` is older than `PROJECT_CONFIG.md` (mtime comparison), treat the cache as stale and fall back to live extraction. Do not attempt to regenerate the cache from this skill — only the config-writing skills own cache regeneration.
+**Cache freshness.** The cache is regenerated atomically by `project-config-template` / `project-config-mutate` after every PROJECT_CONFIG.md write, and the manifest is always written last. If `domain-contexts.cache.manifest.json` is older than `PROJECT_CONFIG.md` (mtime comparison), treat the cache as stale and fall back to live extraction. Do not attempt to regenerate the cache from this skill — only the config-writing skills own cache regeneration.
 
 **What is cached** (authoritative list — kept in sync with `project-config-template` → "Derived Context Cache"):
 
@@ -53,7 +55,7 @@ Per-role bundle assembly needs the same `PROJECT_CONFIG.md` sections repeatedly 
 - `<domain>-baseline` — one per declared domain
 - `api-baseline`, `auth-baseline`
 - `project-best-practices`
-- `agent-best-practices-<role>` — split into `agent-best-practices-lead.md`, `agent-best-practices-executor.md`, `agent-best-practices-reviewer.md`
+- `agent-best-practices-<role>` — split into three anchor blocks (`agent-best-practices-lead`, `agent-best-practices-executor`, `agent-best-practices-reviewer`) within the combined cache file
 - `quality-gates`
 
 **What is not cached** (always extracted live):
@@ -94,7 +96,7 @@ Role contracts live inline in each canonical `${CLAUDE_PLUGIN_ROOT}/ai/agents/<r
 
 > **Role Contract for every role below.** Read `${CLAUDE_PLUGIN_ROOT}/ai/agents/<role>.md` and copy the `<!-- role-contract:<role> -->` marker block verbatim into the bundle's `## Role Contract` section. Do not include the surrounding prose. This rule is identical for all roles per `## Role Contract Blocks` above and is not repeated per-section.
 
-> **Cache resolution.** Every `Project Context from PROJECT_CONFIG.md` bullet below that names a `<!-- section:<tag> -->` resolves via the Project-Level Context Cache protocol above: read `ai-workflow-data/config/domain-contexts/<tag>.md` when the tag is in `_manifest.json`, otherwise extract live from `PROJECT_CONFIG.md`. The per-role lists below describe **what** to include; the cache protocol describes **how** to read it.
+> **Cache resolution.** Every `Project Context from PROJECT_CONFIG.md` bullet below that names a `<!-- section:<tag> -->` resolves via the Project-Level Context Cache protocol above: grep the tag's anchor block out of `ai-workflow-data/config/domain-contexts.cache.md` when the tag is in `domain-contexts.cache.manifest.json`, otherwise extract live from `PROJECT_CONFIG.md`. The per-role lists below describe **what** to include; the cache protocol describes **how** to read it.
 
 ### delivery-pm
 
@@ -281,11 +283,11 @@ Per-role bundle blocks above name the `<!-- section:<tag> -->` to extract from e
 - If in doubt, exclude and note it — the agent can request more context via `blocker-escalation-report`.
 - The bundle file path convention is `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/roles/<role>.md`.
 - Bundle files are retained after agent completion. Their key data (role, token ceiling used, sections included) is summarized into `<subtask_id>/summary.md` by the orchestrator. Bundle files may then be deleted.
-- Always consult the Project-Level Context Cache (`ai-workflow-data/config/domain-contexts/_manifest.json`) before extracting any PROJECT_CONFIG.md section. Live extraction from PROJECT_CONFIG.md is the fallback path, not the default — silently re-extracting when a cached copy exists wastes the work the init / mutate skills did. Record every cache miss as `cache_miss: <tag>` in the subtask's `summary.md` so repeat misses surface in retrospective.
+- Always consult the Project-Level Context Cache (`ai-workflow-data/config/domain-contexts.cache.manifest.json`) before extracting any PROJECT_CONFIG.md section. Live extraction from PROJECT_CONFIG.md is the fallback path, not the default — silently re-extracting when a cached copy exists wastes the work the init / mutate skills did. Record every cache miss as `cache_miss: <tag>` in the subtask's `summary.md` so repeat misses surface in retrospective.
 
 ## Related skills
 
-- `project-config-template` → "Derived Context Cache" — authoritative definition of the cache directory layout, `_manifest.json` format, and generation protocol (consumer repo gets the cache written here on every `init` / `update`).
+- `project-config-template` → "Derived Context Cache" — authoritative definition of the combined cache file layout, manifest format, and generation protocol (consumer repo gets the cache written on every `init` / `update`).
 - `project-config-mutate` — regenerates the cache after `add` / `remove` mutations. Read this when debugging a stale cache.
 - `review-report` → "Stable Finding IDs" — the finding-ID contract that the Executor rework delta (cycle N > 2) relies on.
 - `orchestrator-state` — schemas for the hot and history state files that the orchestrator reads to determine which subtask bundle to assemble.

@@ -37,7 +37,9 @@ const pluginResolved = path.resolve(PLUGIN_ROOT);
 // 3. Playbooks:           ${PLUGIN_ROOT}/ai/playbooks/*.md
 // 4. Canonical contracts:  ${PLUGIN_ROOT}/ai/agents/*.md
 // 5. PROJECT_CONFIG.md:   ai-workflow-data/config/PROJECT_CONFIG.md
-// 6. Derived config cache: ai-workflow-data/config/domain-contexts/*
+// 6. Derived config cache: ai-workflow-data/config/domain-contexts.cache.md
+//                          ai-workflow-data/config/domain-contexts.cache.manifest.json
+//                          ai-workflow-data/config/domain-contexts/*  (legacy fan-out, still warned)
 
 const restrictedPluginDirs = [
   path.join(pluginResolved, 'ai', 'governance'),
@@ -53,8 +55,13 @@ const isRestrictedPluginFile = restrictedPluginDirs.some(
 const isProjectConfig =
   resolved.endsWith(path.join('ai-workflow-data', 'config', 'PROJECT_CONFIG.md'));
 
-const domainContextsDir = path.join('ai-workflow-data', 'config', 'domain-contexts');
-const isDerivedContextCache = resolved.includes(domainContextsDir + path.sep);
+const cacheFile = path.join('ai-workflow-data', 'config', 'domain-contexts.cache.md');
+const cacheManifest = path.join('ai-workflow-data', 'config', 'domain-contexts.cache.manifest.json');
+const legacyDomainContextsDir = path.join('ai-workflow-data', 'config', 'domain-contexts');
+const isDerivedContextCache =
+  resolved.endsWith(cacheFile) ||
+  resolved.endsWith(cacheManifest) ||
+  resolved.includes(legacyDomainContextsDir + path.sep);
 
 if (!isRestrictedPluginFile && !isProjectConfig && !isDerivedContextCache) {
   process.exit(0);
@@ -65,7 +72,7 @@ let category;
 if (isProjectConfig) {
   category = 'PROJECT_CONFIG.md';
 } else if (isDerivedContextCache) {
-  category = 'derived config cache (domain-contexts/)';
+  category = 'derived config cache (domain-contexts.cache.md)';
 } else if (resolved.startsWith(path.join(pluginResolved, 'ai', 'governance') + path.sep)) {
   category = 'governance file';
 } else if (resolved.startsWith(path.join(pluginResolved, 'ai', 'core') + path.sep)) {

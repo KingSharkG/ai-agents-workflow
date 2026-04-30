@@ -51,7 +51,7 @@ Read only the excerpts you need. Prefer section anchors over full files.
 5. **Identify ambiguities.** Flag: (a) multi-framework conflicts, (b) multiple equal-confidence catalog matches, (c) detected domain absent from the repo's declared domains (update mode only), (d) no evidence at all.
 6. **Ask minimum questions.** Use `AskUserQuestion` with 2–4 labeled options per question (tool auto-appends "Other" for free-form). Group related questions into a single call (up to 4 per call). On low confidence, the last question is always the catch-all: *"Is there anything else I should know about this project?"* with options `No, proceed` / `Yes, I'd like to add notes`.
 7. **Review-and-comment loop.** Invoke `project-config-review` to present a change summary plus a full preview (`init`) or unified diff (`update` / `add` / `remove`). `AskUserQuestion` with `Approve and write` / `Revise with comments`. If `Revise`: collect free-form notes (second question), integrate, re-render, re-ask. Loop until approved.
-8. **Write.** Create `ai-workflow-data/` if missing. Write the config atomically (`tmp` path then rename). Regenerate the derived context cache under `ai-workflow-data/config/domain-contexts/` following the `project-config-template` skill → "Derived Context Cache" protocol (write per-tag `.md` files for cacheable sections present in PROJECT_CONFIG.md, then write `_manifest.json` last). Ensure `ai-workflow-data/tasks/.gitkeep` exists. Print paths written (including the cache directory) and a suggested `git add` command.
+8. **Write.** Create `ai-workflow-data/` if missing. Write the config atomically (`tmp` path then rename). Regenerate the derived context cache following the `project-config-template` skill → "Derived Context Cache" protocol: write the combined `ai-workflow-data/config/domain-contexts.cache.md` first, then `domain-contexts.cache.manifest.json` last (the manifest is the completion marker). Remove any legacy `ai-workflow-data/config/domain-contexts/` directory in the same step. Ensure `ai-workflow-data/tasks/.gitkeep` exists. Print paths written (combined cache file + manifest) and a suggested `git add` command.
 
 ## Mode Rules
 
@@ -137,7 +137,7 @@ Low confidence triggers when any of:
 
 - Create `ai-workflow-data/` in the consumer CWD if missing.
 - Write `ai-workflow-data/config/PROJECT_CONFIG.md` via temp file + atomic rename.
-- Regenerate `ai-workflow-data/config/domain-contexts/` per the `project-config-template` skill → "Derived Context Cache" protocol. `_manifest.json` is written last as the completion marker.
+- Regenerate the derived context cache per the `project-config-template` skill → "Derived Context Cache" protocol: write `ai-workflow-data/config/domain-contexts.cache.md` first (combined section blocks), then `domain-contexts.cache.manifest.json` last as the completion marker. Remove any legacy `domain-contexts/` directory in the same regeneration.
 - Ensure `ai-workflow-data/tasks/.gitkeep` exists (create empty if missing).
 - Print the full paths written (including the cache directory) and a suggested `git add ai-workflow-data/` command.
 - Never perform git operations directly.
@@ -168,7 +168,7 @@ Low confidence triggers when any of:
 ## Outputs
 
 - `ai-workflow-data/config/PROJECT_CONFIG.md` (created or updated).
-- `ai-workflow-data/config/domain-contexts/` (regenerated — one `<tag>.md` per cacheable section present in PROJECT_CONFIG.md, plus `_manifest.json` written last as the completion marker).
+- `ai-workflow-data/config/domain-contexts.cache.md` and `domain-contexts.cache.manifest.json` (regenerated — combined cache file with one anchor block per cacheable section present in PROJECT_CONFIG.md, plus the manifest written last as the completion marker).
 - `ai-workflow-data/tasks/.gitkeep` (created if missing).
 - Terminal summary with file paths and suggested `git add`.
 

@@ -11,22 +11,70 @@ The orchestrator MUST pause for user input at these checkpoints. Use `AskUserQue
 
 **When:** After Delivery PM appends `<!-- section:delivery-plan -->` to `task-data.md`, before dispatching any subtask agent.
 
-**Action:** Present a summary of the delivery plan (subtask count, phases, ordering, complexity sizing, integration gates) and ask via `AskUserQuestion`.
+**Hard constraint:** No subtask agent may be dispatched before P1 approval. Applies to **plan-only**, **execution-simple**, AND **execution-full** — there is no shortcut path that skips P1. The blocking PreToolUse hook `hooks/guard-pre-dispatch-p1.js` enforces this at runtime: any `Task` dispatch with `subagent_type ∈ {lead, executor, reviewer, design-agent, integration-checker}` is refused unless the active task's `orchestration-state.json` has `gates.p1_approved: true`. Treat hook denial as an orchestration defect, not an obstacle to work around.
 
-**Options depend on classification:**
+### Presentation format (4 blocks, in order)
+
+Render the gate as a single message containing these four blocks before invoking `AskUserQuestion`. Mirror the structure of `project-config-review` (change summary → preview → approval question → comment loop).
+
+**Block 1 — Classification line (one line):**
+
+```
+Classified as: <execution-simple | execution-full | plan-only> (confidence: <high | medium | low>)
+```
+
+Pull the values from `orchestration-state.json.classification` and the confidence the intake skill recorded. This makes the routing decision visible — users have reported execution starting without ever seeing what path was chosen.
+
+**Block 2 — Subtasks table (one row per subtask):**
+
+```
+| id | title | domain | complexity | phase | depends_on |
+|----|-------|--------|------------|-------|------------|
+| TP-042-A1 | add login screen | fe | medium | A | none |
+| TP-042-A2 | wire auth endpoint | be | medium | A | none |
+| TP-042-B1 | session cookie storage | be | low | B | TP-042-A2 |
+```
+
+Source from `<!-- section:delivery-subtask-* -->` blocks in `task-data.md`. Keep the title to the heading text only — do not unfold `summary` here.
+
+**Block 3 — Files likely to change (flat de-duplicated list):**
+
+```
+Files likely to change (best-effort, refined at TEP time):
+- apps/web/src/screens/login/LoginScreen.tsx
+- apps/web/src/api/auth.ts
+- services/api/src/routes/auth/session.ts
+```
+
+Pull from each subtask's `target_files` field in the delivery plan and de-duplicate. If a subtask's `target_files` is empty, omit it. If **every** subtask has empty `target_files`, render a single line: `Files likely to change: (determined at TEP time)`. Lead refines exact files in the TEP regardless — this block is purposefully best-effort.
+
+**Block 4 — Approval menu** (`AskUserQuestion`, options below).
+
+### Options depend on classification
 
 - For `plan-only`:
-  - `Approve plan and stop` — sets `phase: planned` in `orchestration-state.json` and exits; resumable via `/continue`
-  - `Approve plan and execute` — overrides classification to `execution-simple` or `execution-full` (ask which if ambiguous), continues to Step 5
-  - `Revise plan` — collect free-form notes, route revisions back to Delivery PM, re-present
-  - `Abort task` — mark task as aborted
+  - `Approve plan and stop` — sets `phase: planned`, `gates.p1_approved: true`, records `gates.p1_approved_at` and `gates.p1_approved_signature` in `orchestration-state.json`, then exits; resumable via `/continue`. Leave `gates.p1_revise_count` untouched (it is a lifetime counter, not a consecutive one).
+  - `Approve plan and execute` — overrides classification to `execution-simple` or `execution-full` (ask which if ambiguous), sets `gates.p1_approved: true`, records timestamp + signature, continues to Step 5.
+  - `Revise plan` — collect free-form notes via a follow-up `AskUserQuestion`, reset `gates.p1_approved: false` (clear timestamp + signature), increment `gates.p1_revise_count` by 1, route notes back to Delivery PM, re-present.
+  - `Abort task` — mark task as aborted.
 
 - For `execution-simple` / `execution-full`:
-  - `Approve plan` — proceed to execution
-  - `Revise plan` — collect notes, route revisions back to Delivery PM, re-present. Loop until approved
-  - `Abort task` — mark task as aborted
+  - `Approve plan` — set `gates.p1_approved: true`, record `gates.p1_approved_at: <ISO-8601 UTC>` and `gates.p1_approved_signature: <sha256 of normalized Block 1 + Block 2 + Block 3 bytes>`, then proceed to execution. Leave `gates.p1_revise_count` untouched.
+  - `Revise plan` — collect notes via a follow-up `AskUserQuestion`, reset `gates.p1_approved: false` (clear timestamp + signature), increment `gates.p1_revise_count` by 1, route notes back to Delivery PM, re-present. Loop until approved.
+  - `Abort task` — mark task as aborted.
 
-**Hard constraint:** No subtask agent may be dispatched before P1 approval.
+### Signature semantics
+
+Compute `gates.p1_approved_signature` as the sha256 hex digest of the concatenated bytes the user just saw and approved: Block 1 line + Block 2 markdown table + Block 3 file list, normalized (trim trailing whitespace per line, single `\n` line separators, no trailing blank line). Persist alongside `gates.p1_approved_at`. Before any subtask dispatch, the orchestrator recomputes the signature against the current delivery plan; mismatch means the plan was revised after approval and the gate must be re-presented (reset `gates.p1_approved: false` and loop).
+
+### Loop cap (5 iterations)
+
+Mirror the cap in `project-config-review`, but persist the counter in state so it survives `/continue` resumes. The orchestrator reads `gates.p1_revise_count` from `orchestration-state.json` before presenting Block 4; if the value is `>= 5`, replace the standard menu with a continue-or-abort prompt:
+
+- `Continue iterating` — re-present the standard Approve / Revise / Abort menu (each subsequent `Revise plan` continues to increment the counter; the prompt repeats every 5 cycles).
+- `Abort task` — mark task as aborted.
+
+`gates.p1_revise_count` is incremented on every `Revise plan` and never reset by `Approve plan` (the cap bounds total churn, not just consecutive cycles). Defaults to `0` for new tasks; legacy v1 tasks upgrade to `0` per `orchestrator-state` → "Migration".
 
 ## P2 — Phase Boundary Checkpoint
 

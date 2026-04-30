@@ -39,6 +39,7 @@ If the orchestrator cannot confidently classify the request (e.g., "update the l
 
 - `direct-answer` MUST NOT create `task-data.md`, dispatch any agent, or invoke any governance skill.
 - `plan-only` MUST NOT auto-continue past the P1 gate into execution. If the user wants to execute after seeing the plan, they must explicitly choose "Approve plan and execute" at P1, or resume later via `/continue`.
+- `execution-simple` MUST go through the P1 gate the same way `execution-full` does. There is **no** fast path that skips Delivery PM or P1 approval. Low complexity affects bundle hints inside subtask dispatch (lightweight TEP, ultra-light tier where eligible) — it never bypasses planning or user approval. The runtime hook `hooks/guard-pre-dispatch-p1.js` blocks subtask agent dispatch on any task whose `orchestration-state.json` does not record `gates.p1_approved: true`, regardless of classification.
 - `degraded-inline` mode is strictly for dispatch/tooling failures. It MUST NOT be used for `direct-answer` or `plan-only` classification paths.
 - Classification is recorded in `orchestration-state.json` (for paths that create artifacts) and in `<!-- section:intake-classification -->` of `task-data.md`. For `direct-answer`, nothing is persisted.
 

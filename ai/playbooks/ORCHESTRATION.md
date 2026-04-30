@@ -10,7 +10,7 @@ Each step cites the skill that owns the procedural detail. Full step content liv
 1. Chief Orchestrator receives the task.
 2. Create `task-data.md` with `<!-- section:intake-classification -->` then task-packet → `task-packet` skill. Persist `classification` to `orchestration-state.json`.
 3. Delivery PM appends `<!-- section:delivery-plan -->` → `delivery-plan` skill. For `execution-simple`, bundle includes a low-complexity hint. Orchestrator then populates `subtask_offsets` in `orchestration-state.json` → `orchestrator-state` skill.
-4. **P1 — Delivery Plan Approval** → `orchestrator-user-gates` skill (menu varies by classification).
+4. **P1 — Delivery Plan Approval** → `orchestrator-user-gates` skill (menu varies by classification). **Always fires** for `plan-only`, `execution-simple`, and `execution-full` — there is no shortcut path. Enforced at runtime by `hooks/guard-pre-dispatch-p1.js`: any `Task` dispatch with `subagent_type ∈ {lead, executor, reviewer, design-agent, integration-checker}` is blocked until `gates.p1_approved: true` is recorded in `orchestration-state.json`.
 5. Determine and persist `mode` (`normal` vs `degraded-inline`) → `orchestrator-degraded` skill.
 6. Before every agent dispatch: write state → ai-work.md skeleton → summary.md skeleton → dispatch bundle → Pre-Dispatch Checklist → `orchestrator-dispatch` skill (bundle contents assembled via `context-minimizer`).
 7. Domain-tagged routing: Design Agent runs first when triggered; Lead receives addendum in `<!-- section:plan-addendum -->`. Triggers per `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md`.

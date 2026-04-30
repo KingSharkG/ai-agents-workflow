@@ -16,6 +16,11 @@
           },
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-pre-dispatch-p1.js\"",
+            "blocking": true
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/evaluate-triggers.js\" \"$CLAUDE_TOOL_INPUT_SUBAGENT_TYPE\"",
             "blocking": false
           }
@@ -38,6 +43,16 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-agent-reads.js\"",
             "blocking": false
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-orchestrator-source-writes.js\"",
+            "blocking": true
           }
         ]
       }
