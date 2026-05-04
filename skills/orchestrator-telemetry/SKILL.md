@@ -23,7 +23,7 @@ Every agent MUST write one telemetry line to the subtask's `<subtask_id>/summary
 
 The orchestrator creates the summary.md skeleton (with diagnostic section placeholders) alongside the ai-work.md skeleton. Each agent appends its telemetry line. The Reviewer finalizes summary.md with verdict and notes.
 
-The Chief Orchestrator maintains `ai-workflow-data/tasks/<task_id>/summary.md` as the centralized rollup:
+The Chief Orchestrator maintains `<artifact-root>/tasks/<task_id>/summary.md` as the centralized rollup:
 
 1. After each subtask completes, read the `## Telemetry` section from the subtask's `<subtask_id>/summary.md`.
 2. Append rows to the Detail table in the task-level `summary.md`.
@@ -66,7 +66,7 @@ Totals: governance 1240 | artifact 890 | source 3244 | schema 0 | docs 0
 
 ### Orchestrator aggregation
 
-After each subtask completes, the Chief Orchestrator extends `ai-workflow-data/tasks/<task_id>/summary.md` with a **Context Breakdown** section by reading all `### <role>` subsections from `## Context Manifest` in each subtask's `<subtask_id>/summary.md`:
+After each subtask completes, the Chief Orchestrator extends `<artifact-root>/tasks/<task_id>/summary.md` with a **Context Breakdown** section by reading all `### <role>` subsections from `## Context Manifest` in each subtask's `<subtask_id>/summary.md`:
 
 ```
 ## Context Breakdown

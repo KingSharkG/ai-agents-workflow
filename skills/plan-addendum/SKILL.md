@@ -5,7 +5,7 @@ description: Produce a structured Design Review Addendum for subtasks in design-
 
 # Plan Addendum Skill
 
-Use this skill to produce the Design Review Addendum for subtasks whose domain is listed in `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:domains -->` → `design_hook_domains`.
+Use this skill to produce the Design Review Addendum for subtasks whose domain is listed in `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:domains -->` → `design_hook_domains`.
 
 Domain validation no longer has its own addendum — it is absorbed by the Lead internally. See `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:domain-validation-note -->`.
 

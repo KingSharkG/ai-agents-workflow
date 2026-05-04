@@ -14,9 +14,9 @@ Every agent whose output is a structured artifact MUST work in this order, witho
 
 | Agent | Artifact | Target path |
 |-------|----------|-------------|
-| Chief Orchestrator (task intake) | task-data.md (task-packet section) | `ai-workflow-data/tasks/<task_id>/task-data.md` — create |
-| Delivery PM | task-data.md (delivery-plan section) | `ai-workflow-data/tasks/<task_id>/task-data.md` — append |
-| Chief Orchestrator (skeleton) | ai-work.md skeleton | `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — create |
+| Chief Orchestrator (task intake) | task-data.md (task-packet section) | `<artifact-root>/tasks/<task_id>/task-data.md` — create |
+| Delivery PM | task-data.md (delivery-plan section) | `<artifact-root>/tasks/<task_id>/task-data.md` — append |
+| Chief Orchestrator (skeleton) | ai-work.md skeleton | `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — create |
 | Design Agent | plan-addendum section | `ai-work.md` → append to `<!-- section:plan-addendum -->` |
 | Lead | tep section | `ai-work.md` → append to `<!-- section:tep -->` |
 | Executor | implementation section | `ai-work.md` → append to `<!-- section:implementation -->` |
@@ -93,7 +93,7 @@ The orchestrator evaluates ultra-light eligibility at **skeleton creation time**
 
 - Ultra-light does **not** apply if the single-file diff touches auth, migrations, contract types, or shared utilities with multiple callers.
 - Rework cap remains 1 cycle (consistent with `complexity: low` — see `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:rework-cap -->`).
-- The orchestrator records the ultra-light outcome in `ai-workflow-data/tasks/<task_id>/summary.md` as a `ul:` prefix row rather than a full agent row.
+- The orchestrator records the ultra-light outcome in `<artifact-root>/tasks/<task_id>/summary.md` as a `ul:` prefix row rather than a full agent row.
 - Telemetry lines are still required — the executor and reviewer each write their telemetry to `<subtask_id>/summary.md`.
 
 <!-- /section:ultra-light-tier -->
@@ -102,7 +102,7 @@ The orchestrator evaluates ultra-light eligibility at **skeleton creation time**
 
 ## ai-work.md Skeleton Templates
 
-The Chief Orchestrator MUST write the `ai-work.md` skeleton before dispatching any agent for a subtask. The skeleton is written at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md`. The `<!-- section:spec -->` is populated by copying the exact content of `<!-- section:delivery-subtask-<id> -->` from `task-data.md`.
+The Chief Orchestrator MUST write the `ai-work.md` skeleton before dispatching any agent for a subtask. The skeleton is written at `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md`. The `<!-- section:spec -->` is populated by copying the exact content of `<!-- section:delivery-subtask-<id> -->` from `task-data.md`.
 
 ### Standard skeleton (Lead path — Lead triggered)
 

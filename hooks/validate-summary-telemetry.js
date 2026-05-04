@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolveArtifactRoot, canonicalize } = require('./lib/artifact-root');
 
 const filePath = process.argv[2] || '';
 
@@ -21,14 +22,21 @@ if (fileName !== 'summary.md') {
   process.exit(0);
 }
 
-// Must be under ai-workflow-data/tasks/
-if (!filePath.includes('ai-workflow-data/tasks/')) {
+// Must be under <resolved-artifact-root>/tasks/. The check is rooted in the
+// resolver instead of a literal `aiaw-data-` prefix so a future override
+// mechanism (e.g. AIAW_DATA_ROOT env var) does not silently bypass telemetry
+// validation.
+const ARTIFACT = resolveArtifactRoot();
+if (!ARTIFACT.root) {
+  process.exit(0);
+}
+const tasksRoot = canonicalize(path.join(ARTIFACT.root, 'tasks'));
+const canonicalTarget = canonicalize(path.resolve(filePath));
+if (canonicalTarget !== tasksRoot && !canonicalTarget.startsWith(tasksRoot + path.sep)) {
   process.exit(0);
 }
 
-// Extract the portion after "ai-workflow-data/tasks/"
-const tasksIndex = filePath.indexOf('ai-workflow-data/tasks/');
-const relativePath = filePath.slice(tasksIndex + 'ai-workflow-data/tasks/'.length);
+const relativePath = canonicalTarget.slice(tasksRoot.length + 1);
 
 // relativePath examples:
 //   "TP-001/summary.md"                        — task-level (skip)

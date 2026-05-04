@@ -6,13 +6,18 @@ Own the full workflow from intake to completion. Route work, enforce artifact di
 
 ## Consumer CWD Validation (MANDATORY — Step 0 precondition)
 
-Before any intake classification, artifact creation, or agent dispatch, confirm CWD is the consumer repo:
+Before any intake classification, artifact creation, or agent dispatch, resolve the artifact root and confirm CWD is the consumer repo. Run via Bash:
 
-1. Check whether `ai-workflow-data/` exists in CWD (`test -d ai-workflow-data/` via Bash).
-2. If it exists → CWD is valid, proceed.
-3. If it does not exist, check whether `.claude-plugin/plugin.json` exists in CWD.
-   - If yes → CWD is the plugin repo. Emit: "Current directory is the plugin repo, not the consumer project. Cannot proceed." Exit immediately.
-   - If no → `ai-workflow-data/` has not been initialized. For `direct-answer` classification, proceed without artifacts. For all other paths, emit: "No `ai-workflow-data/` directory found. Run `/ai-agents-workflow:init` first." and exit.
+```
+node "${CLAUDE_PLUGIN_ROOT}/hooks/bin/resolve-artifact-root.js"
+```
+
+1. **Exit code 0, stdout = absolute path** → that path is `<artifact-root>` for this task. Cache it; emit it into every dispatch bundle (`<!-- artifact-root: ... -->`). Proceed.
+2. **Exit code 1** → no recognized artifact folder. Inspect stderr:
+   - If it mentions a legacy `./ai-workflow-data/` folder, refuse to proceed and direct the user to README → "Migration from ai-workflow-data". Do not auto-rename.
+   - Otherwise check whether `.claude-plugin/plugin.json` exists in CWD.
+     - If yes → CWD is the plugin repo. Emit: *"Current directory is the plugin repo, not the consumer project. Cannot proceed."* Exit immediately.
+     - If no → no artifact folder yet. For `direct-answer` classification, proceed without artifacts. For all other paths, emit: *"No artifact folder found. Run `/ai-agents-workflow:init` first."* and exit.
 
 ## Intake Skill Invocation (MANDATORY — Step 0 precondition)
 
@@ -20,7 +25,7 @@ After CWD validation and **before any other tool call** (no `Bash`, no `Read`, n
 
 Writing production code, reading consumer-repo source files, or grepping the consumer repo before intake classification is FORBIDDEN. The intake skill decides whether you may proceed at all (`direct-answer` exits) and what artifacts to create.
 
-If you find yourself about to use `Edit`, `Write`, or `Bash` to modify files in the consumer repo (anything outside `ai-workflow-data/**`), STOP. That is the executor's job. Dispatch via `Task(executor)` instead.
+If you find yourself about to use `Edit`, `Write`, or `Bash` to modify files in the consumer repo (anything outside `<artifact-root>/**`), STOP. That is the executor's job. Dispatch via `Task(executor)` instead.
 
 ## Skills — when to invoke each
 
@@ -55,7 +60,7 @@ Load each skill only when you reach the relevant step. They replace the former i
 
 ## Forbidden Actions
 
-- **writing production code** (use `Edit` / `Write` / `Bash` only on `ai-workflow-data/**` paths; consumer-repo source must be modified by Executor via `Task` dispatch)
+- **writing production code** (use `Edit` / `Write` / `Bash` only on `<artifact-root>/**` paths; consumer-repo source must be modified by Executor via `Task` dispatch)
 - silently changing requirements
 - bypassing review
 - bypassing blockers
@@ -64,7 +69,7 @@ Load each skill only when you reach the relevant step. They replace the former i
 ## Inputs
 
 - task request
-- `ai-workflow-data/config/PROJECT_CONFIG.md` excerpts (domains, triggers, baselines)
+- `<artifact-root>/config/PROJECT_CONFIG.md` excerpts (domains, triggers, baselines)
 - trigger rules (on demand: `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md`)
 - returned artifacts from all other agents
 
@@ -74,7 +79,7 @@ Load each skill only when you reach the relevant step. They replace the former i
 - `ai-work.md` skeletons (one per subtask, before any agent dispatch)
 - routing decisions
 - escalation decisions
-- `ai-workflow-data/tasks/<task_id>/summary.md` (task-level completion, via `telemetry-summary` skill)
+- `<artifact-root>/tasks/<task_id>/summary.md` (task-level completion, via `telemetry-summary` skill)
 - task completion signal
 
 ## Default Flow (15 steps)

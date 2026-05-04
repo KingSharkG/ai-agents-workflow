@@ -26,7 +26,7 @@ When skipping, Delivery PM MUST include a one-line justification in the `<!-- se
 
 ## Domain Validation
 
-There is no separate Domain Agent. Domain validation is absorbed by the Lead for the subtask's `domain`. The specific validation rules for each domain live in `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `validation_rules`.
+There is no separate Domain Agent. Domain validation is absorbed by the Lead for the subtask's `domain`. The specific validation rules for each domain live in `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `validation_rules`.
 
 Leads may escalate ambiguous domain rules via `blocker-escalation-report` when requirements are insufficient.
 
@@ -43,7 +43,7 @@ Run Lead (domain: fe) if:
 - business statuses, lifecycle transitions, permission/role changes, or auth-flow semantics affect FE behavior (domain validation — Lead absorbs; no separate Domain Agent)
 - navigation architecture changes
 - new shared hook or abstraction pattern
-- core data-layer architecture changes for the domain (per `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:fe-baseline -->` / domain `validation_rules`)
+- core data-layer architecture changes for the domain (per `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:fe-baseline -->` / domain `validation_rules`)
 - new frontend dependency introduced
 - large FE diff (5+ files or cross-feature)
 
@@ -233,7 +233,7 @@ Only **confidence-filtered findings** (those inside `<!-- section:review-finding
 
 Stack-agnostic keyword lists consumed by `${CLAUDE_PLUGIN_ROOT}/hooks/pre-task-guard.js` (Phase 4 — trigger evaluation). The hook substring-matches these (case-insensitive) against the current artifact text and emits a non-blocking "recommended to run" hint before an agent dispatch. Authoritative routing still lives in the trigger sections above — this is only a heuristic surface hint.
 
-Keys are canonical agent names (same as `.claude/agents/<name>.md`). Values are keyword arrays. A project may add stack-specific keywords without editing this file by populating `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:extra-trigger-keywords -->` (optional; the hook unions both). If this section is missing or malformed, the hook exits 0 with no hint.
+Keys are canonical agent names (same as `.claude/agents/<name>.md`). Values are keyword arrays. A project may add stack-specific keywords without editing this file by populating `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:extra-trigger-keywords -->` (optional; the hook unions both). If this section is missing or malformed, the hook exits 0 with no hint.
 
 Adding a new conditional agent = add a new key here; no hook code change required.
 

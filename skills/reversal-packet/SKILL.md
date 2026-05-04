@@ -20,7 +20,7 @@ Do **not** use when:
 
 ## Output Format
 
-Write to `ai-workflow-data/tasks/<task_id>/reversal-<subtask_id>-<NN>.md`:
+Write to `<artifact-root>/tasks/<task_id>/reversal-<subtask_id>-<NN>.md`:
 
 ```markdown
 # Reversal Packet

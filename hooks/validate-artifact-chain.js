@@ -389,7 +389,7 @@ const ARTIFACT_RULES = [
     required: ['task_id'],
     requiredSections: ['task-metadata'],
   },
-  // Task-level summary: lives at ai-workflow-data/tasks/<task_id>/summary.md
+  // Task-level summary: lives at <artifact-root>/tasks/<task_id>/summary.md
   // Detected by grandparent directory being named "tasks".
   // Written by the orchestrator via telemetry-summary skill — no verdict field.
   {

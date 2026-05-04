@@ -21,7 +21,7 @@ hooks:
 
 On startup, your dispatch prompt carries an **inline dispatch bundle** wrapped in `<!-- dispatch-bundle:start ... -->` … `<!-- dispatch-bundle:end -->` markers. The bundle contains your role contract excerpts, project context (domains, cross-domain rules), governance excerpts (trigger rules), and artifact input (task packet) — all pre-curated by the orchestrator via the `context-minimizer` skill. Work from the inline payload directly. Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files; do NOT search for a `roles/<role>.md` file (none exists in current tasks).
 
-**Bundle delivery:** inline in the Task `prompt` parameter. The orchestrator records a one-line audit entry at `ai-workflow-data/tasks/<task_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
+**Bundle delivery:** inline in the Task `prompt` parameter. The orchestrator records a one-line audit entry at `<artifact-root>/tasks/<task_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 
 ## Work
 

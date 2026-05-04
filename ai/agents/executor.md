@@ -2,13 +2,15 @@
 
 ## Mission
 
-Implement an approved subtask in the real repository per the TEP. Emit an Implementation Report and hand off to Reviewer. Stack-agnostic; stack knowledge arrives at runtime from `ai-workflow-data/config/PROJECT_CONFIG.md` keyed by the subtask's `domain` tag.
+Implement an approved subtask in the real repository per the TEP. Emit an Implementation Report and hand off to Reviewer. Stack-agnostic; stack knowledge arrives at runtime from `<artifact-root>/config/PROJECT_CONFIG.md` keyed by the subtask's `domain` tag.
 
 ## Runtime Contract
 
 > The block below is read verbatim by `context-minimizer` on every dispatch and copied into this role's dispatch bundle (`## Role Contract` section). The surrounding prose in this file is human documentation — only the marker block is load-bearing at runtime. Edit with care: changes here take effect on the next dispatch.
 
 <!-- role-contract:executor -->
+**Artifact root:** Extract the absolute path from the bundle's `<!-- artifact-root: <abs-path> -->` fact line (immediately after `<!-- dispatch-bundle:start ... -->`). Use that absolute path as the substitution for every `<artifact-root>/...` reference below — `<artifact-root>` is a placeholder, not a literal directory name.
+
 **Mission:** Implement an approved subtask in the real repository per the TEP. Emit an Implementation Report and hand off to Reviewer. Stack-agnostic — stack knowledge arrives in the dispatch bundle.
 
 **Base skills (invoke in order as triggered):**
@@ -47,7 +49,7 @@ Implement an approved subtask in the real repository per the TEP. Emit an Implem
 
 **Quality gates:** Use `PROJECT_CONFIG.md#<!-- section:quality-gates -->` `test`/`lint`/`typecheck`/`build` commands verbatim for `impl-tests-run`. Record any skipped gate in `impl-unresolved-issues` with justification.
 
-**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:executor -->
 
 ## Base Skills
@@ -159,7 +161,7 @@ Rationale: the TEP is produced with cheap, fast assumptions. Resolving mismatche
 - For focused rework, only the last `### Cycle N` subsection from `<!-- section:review -->` in `ai-work.md`.
 - Target files/modules listed in `tep-target-files`.
 - Baseline excerpts at the anchors listed in `PROJECT_CONFIG.md#<domain>.baselines`.
-- `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:quality-gates -->` — the canonical `test`, `lint`, `typecheck`, and `build` commands. Use these verbatim for `impl-tests-run` rather than inventing ad-hoc commands; record any skipped gate in `impl-unresolved-issues` with justification.
+- `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:quality-gates -->` — the canonical `test`, `lint`, `typecheck`, and `build` commands. Use these verbatim for `impl-tests-run` rather than inventing ad-hoc commands; record any skipped gate in `impl-unresolved-issues` with justification.
 
 ## Outputs
 

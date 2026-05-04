@@ -57,7 +57,7 @@ Five namespaced slash commands cover the plugin's surface:
 
 | Command                                                           | Purpose                                               |
 | ----------------------------------------------------------------- | ----------------------------------------------------- |
-| `/ai-agents-workflow:init`                                        | Bootstrap `ai-workflow-data/config/PROJECT_CONFIG.md` |
+| `/ai-agents-workflow:init`                                        | Bootstrap `<artifact-root>/config/PROJECT_CONFIG.md` |
 | `/ai-agents-workflow:add <target-type> <value> [--domain <d>]`    | Add a config entry                                    |
 | `/ai-agents-workflow:update`                                      | Refresh CLI-owned sections of the config              |
 | `/ai-agents-workflow:remove <target-type> <value> [--domain <d>]` | Remove a config entry                                 |
@@ -83,15 +83,59 @@ If the request is ambiguous, the orchestrator asks one clarifying question befor
 
 ## External sources
 
-The plugin's governance catalog (`ai/governance/RESOLUTION_POLICY.md`) is authoritative for every skill or plugin a consumer project may reference. See `<!-- section:external-sources -->` for the supported source taxonomy: `mcp-server`, `claude-builtin`, `github-marketplace`, `consumer-marketplace`, `npx-skills-find`, `local-plugin`. A consumer project references plugins/skills by bare name in `ai-workflow-data/config/PROJECT_CONFIG.md`; the governance file resolves each name to its source. Names absent from the catalog are rejected by `project-config-mutate`.
+The plugin's governance catalog (`ai/governance/RESOLUTION_POLICY.md`) is authoritative for every skill or plugin a consumer project may reference. See `<!-- section:external-sources -->` for the supported source taxonomy: `mcp-server`, `claude-builtin`, `github-marketplace`, `consumer-marketplace`, `npx-skills-find`, `local-plugin`. A consumer project references plugins/skills by bare name in `<artifact-root>/config/PROJECT_CONFIG.md`; the governance file resolves each name to its source. Names absent from the catalog are rejected by `project-config-mutate`.
 
 Note: `source_ref` is not version-pinned. If a referenced MCP server or Claude built-in plugin changes behavior upstream, consumer projects may observe drift. Pin via the consumer's own `/plugin` state, not via this registry.
 
 ## Target-repo expectations
 
-This plugin reads and writes files under `ai-workflow-data/` in the consumer repo. The main paths are:
+### Artifact root
 
-1. `ai-workflow-data/config/PROJECT_CONFIG.md` — per-project overlay. Sections used by the pipeline:
+Throughout this README, `<artifact-root>` is the absolute path resolved by `hooks/lib/artifact-root.js` for the current consumer repo. The plugin supports two layouts, picked at `/ai-agents-workflow:init`:
+
+| Layout         | Resolved path                                          | When to use                                                                 |
+|----------------|--------------------------------------------------------|-----------------------------------------------------------------------------|
+| **In-project** | `<cwd>/.claude/aiaw-data-<project>/`                   | Default. Lives under the project's `.claude/` directory. No permission grant needed. Add `.claude/aiaw-data-<project>/` to `.gitignore` if you want it untracked (or rely on your existing `.claude/` ignore). |
+| **Sibling**    | `<dirname(cwd)>/aiaw-data-<project>/`                  | Keeps the project tree completely free of artifacts. Requires a one-key entry in `<project>/.claude/settings.local.json` (auto-merged by `init`). |
+
+`<project>` is `path.basename(process.cwd())` — your project folder name, no slugification. The legacy `ai-workflow-data/` layout is no longer supported (see Migration below).
+
+### Migration from `ai-workflow-data/`
+
+If you used an earlier version of this plugin, your artifacts live at `./ai-workflow-data/`. That location is no longer recognized. Rename the folder before running any workflow command:
+
+```bash
+# In-project layout (artifacts stay inside the repo, under .claude/)
+mkdir -p .claude
+mv ai-workflow-data .claude/aiaw-data-<project>
+
+# OR — sibling layout (artifacts move out of the repo)
+mv ai-workflow-data ../aiaw-data-<project>
+```
+
+For the sibling layout, also merge a permission entry into `<project>/.claude/settings.local.json` (this file is gitignored by Claude Code default — never committed). The plugin ships a helper that does this safely:
+
+```bash
+node "$CLAUDE_PLUGIN_ROOT/hooks/bin/write-additional-dir.js" "../aiaw-data-<project>"
+```
+
+Or, if you prefer to edit by hand, the resulting JSON should look like:
+
+```json
+{
+  "permissions": {
+    "additionalDirectories": ["../aiaw-data-<project>"]
+  }
+}
+```
+
+Replace `<project>` with your project folder name. After renaming, resume any in-flight task with `/ai-agents-workflow:continue`. The hooks detect the legacy folder and refuse to dispatch agents until the rename is performed, so missing this step is loud, not silent.
+
+### Paths used by the plugin
+
+This plugin reads and writes files under `<artifact-root>/` in the consumer repo. The main paths are:
+
+1. `<artifact-root>/config/PROJECT_CONFIG.md` — per-project overlay. Sections used by the pipeline:
    - `<!-- section:domains -->`
    - `<!-- section:<domain> -->` / `<!-- section:<domain>-baseline -->`
    - `<!-- section:api-baseline -->` and `<!-- section:auth-baseline -->` for BE
@@ -100,16 +144,16 @@ This plugin reads and writes files under `ai-workflow-data/` in the consumer rep
    - `<!-- section:extra-trigger-keywords -->` (optional)
    - `<!-- section:cross-domain-rules -->` (read by delivery-pm)
    - `<!-- section:quality-gates -->` (read by reviewer and executor)
-2. `ai-workflow-data/config/domain-contexts.cache.md` + `domain-contexts.cache.manifest.json` — **derived cache** of the pre-extracted sections above. The `.md` file is the concatenation of every cached section block (anchors preserved); the manifest is written last as the completion marker. Regenerated automatically by `init` / `update` / `add` / `remove`; never hand-edit. `context-minimizer` reads from this cache instead of grepping PROJECT_CONFIG.md on every agent dispatch. Contents are project-dependent — a Python-only backend repo's cache will not contain an `fe-baseline` block. The legacy fan-out layout (`domain-contexts/<tag>.md` + `_manifest.json`) is no longer written and gets removed on next regeneration if present. See `skills/project-config-template/SKILL.md` → "Derived Context Cache" for the exact format.
-3. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — per-subtask artifact. The `pre-task-guard` hook blocks any non-exempt Task dispatch if this file is missing.
-4. `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` — per-subtask summary with diagnostics such as telemetry, context manifests, and dispatch-bundle audit details.
+2. `<artifact-root>/config/domain-contexts.cache.md` + `domain-contexts.cache.manifest.json` — **derived cache** of the pre-extracted sections above. The `.md` file is the concatenation of every cached section block (anchors preserved); the manifest is written last as the completion marker. Regenerated automatically by `init` / `update` / `add` / `remove`; never hand-edit. `context-minimizer` reads from this cache instead of grepping PROJECT_CONFIG.md on every agent dispatch. Contents are project-dependent — a Python-only backend repo's cache will not contain an `fe-baseline` block. The legacy fan-out layout (`domain-contexts/<tag>.md` + `_manifest.json`) is no longer written and gets removed on next regeneration if present. See `skills/project-config-template/SKILL.md` → "Derived Context Cache" for the exact format.
+3. `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — per-subtask artifact. The `pre-task-guard` hook blocks any non-exempt Task dispatch if this file is missing.
+4. `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` — per-subtask summary with diagnostics such as telemetry, context manifests, and dispatch-bundle audit details.
 5. Dispatch bundles are not persisted to disk. The orchestrator composes each bundle in memory via the `context-minimizer` skill and embeds it inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). A one-line audit per dispatch is appended to `<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
-6. `ai-workflow-data/tasks/<task_id>/orchestration-state.json` — **hot** orchestrator state (current cursor: phase, current_subtask, pending_subtasks, blocked_gates, pending_user_actions, subtask_offsets). Read before every subtask transition.
-7. `ai-workflow-data/tasks/<task_id>/orchestration-history.json` — **history** orchestrator state (`completed_subtasks[]` with validated sections, `trigger_decisions{}`). Written once per subtask completion; read only at P2/P4 gates, resume, and retrospective. Separated from hot state so task-history growth doesn't inflate per-dispatch read cost. See `skills/orchestrator-state/SKILL.md` for the schema.
+6. `<artifact-root>/tasks/<task_id>/orchestration-state.json` — **hot** orchestrator state (current cursor: phase, current_subtask, pending_subtasks, blocked_gates, pending_user_actions, subtask_offsets). Read before every subtask transition.
+7. `<artifact-root>/tasks/<task_id>/orchestration-history.json` — **history** orchestrator state (`completed_subtasks[]` with validated sections, `trigger_decisions{}`). Written once per subtask completion; read only at P2/P4 gates, resume, and retrospective. Separated from hot state so task-history growth doesn't inflate per-dispatch read cost. See `skills/orchestrator-state/SKILL.md` for the schema.
 
 The `pre-task-guard` hook reads the subtask's `ai-work.md` spec section for trigger keyword matching during its Phase 4 (trigger evaluation) step. It does NOT scan `.claude/plans/`.
 
-Run `/ai-agents-workflow:init` in a fresh consumer repo (or use natural language: "initialize project config") to generate `ai-workflow-data/config/PROJECT_CONFIG.md` and scaffold `ai-workflow-data/tasks/`. Modes: `init` | `update` | `add` | `remove`, each available as a corresponding `/ai-agents-workflow:<mode>` command.
+Run `/ai-agents-workflow:init` in a fresh consumer repo (or use natural language: "initialize project config") to generate `<artifact-root>/config/PROJECT_CONFIG.md` and scaffold `<artifact-root>/tasks/`. Modes: `init` | `update` | `add` | `remove`, each available as a corresponding `/ai-agents-workflow:<mode>` command.
 
 ## What's inside
 

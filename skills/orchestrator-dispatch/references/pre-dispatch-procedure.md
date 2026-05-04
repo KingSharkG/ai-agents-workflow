@@ -7,7 +7,7 @@ Procedural detail for the orchestrator's "before any dispatch" steps. Read once 
 Before dispatching any agent for a subtask, the orchestrator MUST write the `ai-work.md` skeleton using the template in `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:ai-work-skeleton -->`.
 
 1. Extract `<!-- section:delivery-subtask-<id> -->` from `task-data.md`.
-2. Write `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` with the spec copied into `<!-- section:spec -->` and all other section placeholders present.
+2. Write `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` with the spec copied into `<!-- section:spec -->` and all other section placeholders present.
 3. Write `<subtask_id>/summary.md` with placeholder sections for Status, Acceptance Signals, Files Changed, Dispatch Bundles, Telemetry, Context Manifest, Notes, and Open Gates (see `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:summary-skeleton -->`).
 4. The skeleton creation counts as the orchestrator's write before any agent is dispatched.
 
@@ -18,8 +18,8 @@ Ultra-light subtasks use the ultra-light skeleton template (no `section:tep` or 
 Before dispatching any agent for subtask `<subtask_id>`, run these file-existence checks via Bash. Do NOT skip this step — hooks may not fire on nested subagent dispatches, making this the primary enforcement mechanism.
 
 ```bash
-test -f ai-workflow-data/tasks/<task_id>/<subtask_id>/ai-work.md && echo "ai-work.md: OK" || echo "MISSING: ai-work.md"
-test -f ai-workflow-data/tasks/<task_id>/orchestration-state.json && echo "state: OK" || echo "MISSING: orchestration-state.json"
+test -f <artifact-root>/tasks/<task_id>/<subtask_id>/ai-work.md && echo "ai-work.md: OK" || echo "MISSING: ai-work.md"
+test -f <artifact-root>/tasks/<task_id>/orchestration-state.json && echo "state: OK" || echo "MISSING: orchestration-state.json"
 ```
 
 The Pre-Dispatch Checklist only tests `orchestration-state.json` (hot state). It does NOT require `orchestration-history.json` to exist — the history file is created on the first subtask completion, not at task start, and is only read at gates/resume. See the `orchestrator-state` skill for the hot/history split. Bundles are inline in the Task prompt and not on disk; the `context-minimizer` invocation that produces them is a separate obligation enforced at the role-contract level (see "Bundle composition obligation" below).

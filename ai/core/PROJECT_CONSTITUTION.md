@@ -8,13 +8,13 @@ v1.3
 
 - v1.3
   Changed from: constitution carried Project Scope, Primary Stack (fe-stack, be-stack, package manager), Auth and Security Baseline, and API Baseline inline.
-  To: all project-specific overlay (stack, domains, baselines, auth, API, commands, naming, environments, quality gates) lives in `ai-workflow-data/config/PROJECT_CONFIG.md`. The constitution holds only portable governance.
+  To: all project-specific overlay (stack, domains, baselines, auth, API, commands, naming, environments, quality gates) lives in `<artifact-root>/config/PROJECT_CONFIG.md`. The constitution holds only portable governance.
   Reason: Finish the portability consolidation started in v1.2. A new project or new domain requires zero edits to this file.
 
 - v1.2
   Changed from: four stack-specific role contracts (fe-lead, be-lead, fe-executor, be-executor) with stack knowledge baked in.
-  To: two generic role contracts (lead, executor) that are stack-agnostic; stack knowledge layers in at runtime from `ai-workflow-data/config/PROJECT_CONFIG.md` keyed by the subtask's `domain` tag.
-  Reason: Make the orchestration framework portable across projects (FE-only, BE-only, mixed). Adding a new domain is one new section in `ai-workflow-data/config/PROJECT_CONFIG.md` with zero changes to canonical contracts.
+  To: two generic role contracts (lead, executor) that are stack-agnostic; stack knowledge layers in at runtime from `<artifact-root>/config/PROJECT_CONFIG.md` keyed by the subtask's `domain` tag.
+  Reason: Make the orchestration framework portable across projects (FE-only, BE-only, mixed). Adding a new domain is one new section in `<artifact-root>/config/PROJECT_CONFIG.md` with zero changes to canonical contracts.
 
 - v1.1
   Changed from: artifact footer rules that specified only a minimal telemetry line.
@@ -27,7 +27,7 @@ Stable source of truth for project-wide engineering, orchestration, and governan
 
 ## Project-Specific Overlay
 
-All project-specific rules — stack, domains, baselines (fe, be, api, auth), commands, paths, naming conventions, environments, quality gates, and role overlays — live in `ai-workflow-data/config/PROJECT_CONFIG.md`. This document holds only portable governance; adding a new domain or swapping the stack must not require edits here.
+All project-specific rules — stack, domains, baselines (fe, be, api, auth), commands, paths, naming conventions, environments, quality gates, and role overlays — live in `<artifact-root>/config/PROJECT_CONFIG.md`. This document holds only portable governance; adding a new domain or swapping the stack must not require edits here.
 
 ## Global Workflow Rules
 
@@ -37,12 +37,12 @@ All project-specific rules — stack, domains, baselines (fe, be, api, auth), co
 - Review/rework cycle cap is complexity-tied — see `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:rework-cap -->`.
 - If FE and BE both change, run Integration Checker unless explicitly waived.
 - Every agent must write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md` — NOT to `ai-work.md`. Authoritative format and rules: `orchestrator-telemetry` skill → Telemetry + Context Manifest sections. Do not restate them elsewhere.
-- Chief Orchestrator aggregates per-subtask telemetry into `ai-workflow-data/tasks/<task_id>/summary.md`.
+- Chief Orchestrator aggregates per-subtask telemetry into `<artifact-root>/tasks/<task_id>/summary.md`.
 
 ## Repo Layout Rule
 
 - `ai/` holds governance and agent contracts only — never task-scoped reports, plans, or summaries.
-- Task-scoped artifacts live under `ai-workflow-data/tasks/<task_id>/` with this structure:
+- Task-scoped artifacts live under `<artifact-root>/tasks/<task_id>/` with this structure:
   - `task-data.md` — task packet + delivery plan (combined, two sections)
   - `summary.md` — task-level completion record (created after task done; replaces `telemetry_summary.md`)
   - `[phase-X/]<subtask_id>/ai-work.md` — all agent context transfer for that subtask, sectioned, append-only
@@ -80,7 +80,7 @@ Executors may not:
 
 ## Constitution Change Policy
 
-May be updated only when changing: portable architectural rules, review policy, handoff policy, or source-of-truth ownership rules. Stack, auth, and API specifics are overlay — edit `ai-workflow-data/config/PROJECT_CONFIG.md` instead.
+May be updated only when changing: portable architectural rules, review policy, handoff policy, or source-of-truth ownership rules. Stack, auth, and API specifics are overlay — edit `<artifact-root>/config/PROJECT_CONFIG.md` instead.
 Allowed updaters: Chief Orchestrator, Design Agent, Lead, Reviewer.
 Every change must include: version bump, what changed, why it changed.
 
@@ -89,7 +89,7 @@ Every change must include: version bump, what changed, why it changed.
 Agents must receive only the minimum context needed:
 
 - current artifact
-- relevant task excerpts from `ai-workflow-data/tasks/<task_id>/`
+- relevant task excerpts from `<artifact-root>/tasks/<task_id>/`
 - relevant governance excerpt
 - repo map or target file set
 

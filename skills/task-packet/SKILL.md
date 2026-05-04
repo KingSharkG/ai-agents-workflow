@@ -9,7 +9,7 @@ Create a compact artifact with the fields below. Use only information actually p
 
 ## Output Target
 
-Write to `ai-workflow-data/tasks/<task_id>/task-data.md` (create new file). Wrap the entire content in `<!-- section:task-packet -->` ... `<!-- /section:task-packet -->`. The Delivery PM will append `<!-- section:delivery-plan -->` to the same file in the next step — do not create a separate `task-packet.md`.
+Write to `<artifact-root>/tasks/<task_id>/task-data.md` (create new file). Wrap the entire content in `<!-- section:task-packet -->` ... `<!-- /section:task-packet -->`. The Delivery PM will append `<!-- section:delivery-plan -->` to the same file in the next step — do not create a separate `task-packet.md`.
 
 ## Output Template
 
@@ -69,7 +69,7 @@ Totals: governance 0 | artifact 0 | source 0 | schema 0 | docs 0
 ```
 
 ## Rules
-- `task_id` must be unique; use the next sequential number by scanning `ai-workflow-data/tasks/` folder names.
+- `task_id` must be unique; use the next sequential number by scanning `<artifact-root>/tasks/` folder names.
 - Do not invent requirements — only use what is explicitly stated.
 - `task_title`, Requirements Excerpt, and Scope Estimate are the workflow-driving body; `requested_by`, `priority`, Business Goal, Known Blockers, and Assumptions are audit metadata and may be omitted if genuinely unavailable.
 - If `requested_by` is unknown, prefer `user`; it remains optional audit metadata.

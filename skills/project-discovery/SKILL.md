@@ -64,7 +64,7 @@ ambiguities:
 | Monorepo markers | `pnpm-workspace.yaml`, `turbo.json`, `nx.json`, `lerna.json`, `rush.json`, `apps/` + `packages/` | recurse per workspace |
 | Infra / CI | `Dockerfile`, `docker-compose*.yml`, `terraform/`, `k8s/`, `.github/workflows/`, `.gitlab-ci.yml`, `CODEOWNERS` | emit `signals` only; no framework inference |
 | Quality-gate signals | `package.json` → `scripts.test`, `scripts.lint`, `scripts.typecheck`, `scripts.build`; `Makefile` targets; `.github/workflows/*.yml` run steps; `pytest.ini`, `tox.ini`, `ruff.toml`, `.eslintrc*`, `biome.json`, `rubocop.yml` | extract commands verbatim for `<!-- section:quality-gates -->` |
-| Installed capabilities | harness `/plugin` listing (for `mcp_plugins`); available-skills listing (for `builtin_prefixes`); `which npx` (for `npx_skills_available`) | populate `installed_capabilities`; never read `ai-workflow-data/` |
+| Installed capabilities | harness `/plugin` listing (for `mcp_plugins`); available-skills listing (for `builtin_prefixes`); `which npx` (for `npx_skills_available`) | populate `installed_capabilities`; never read `<artifact-root>/` |
 
 ## Classification Rule
 
@@ -81,4 +81,4 @@ ambiguities:
 - **Confidence levels.** `high` = ≥3 corroborating files; `medium` = 2; `low` = 1. A single file match for an ecosystem is low confidence — flag as ambiguous if it's the only hit.
 - **Missing evidence is evidence.** If no ecosystem hits, record `classification_hint: new-domain` and return — do not fabricate.
 - **Monorepo short-circuit.** If a monorepo marker is found, recurse into each workspace once and compose per-workspace evidence before rolling up a top-level classification_hint.
-- **Never read `ai-workflow-data/` during discovery** — that's the output surface, not input.
+- **Never read `<artifact-root>/` during discovery** — that's the output surface, not input. Concretely, when walking the consumer repo skip both `./.claude/aiaw-data-*/` (in-project layout) and `../aiaw-data-*/` (sibling layout). Discovery walks `.claude/` for settings and config evidence, so the artifact subdirectory must be excluded explicitly to avoid pulling pipeline outputs back in as project evidence.

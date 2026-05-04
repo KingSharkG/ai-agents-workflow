@@ -9,6 +9,8 @@ Review UX, flows, usability, CTA hierarchy, and state handling for the target de
 > The block below is read verbatim by `context-minimizer` on every dispatch and copied into this role's dispatch bundle (`## Role Contract` section). The surrounding prose in this file is human documentation — only the marker block is load-bearing at runtime. Edit with care: changes here take effect on the next dispatch.
 
 <!-- role-contract:design-agent -->
+**Artifact root:** Extract the absolute path from the bundle's `<!-- artifact-root: <abs-path> -->` fact line (immediately after `<!-- dispatch-bundle:start ... -->`). Use that absolute path as the substitution for every `<artifact-root>/...` reference below — `<artifact-root>` is a placeholder, not a literal directory name.
+
 **Mission:** Review UX, flows, usability, CTA hierarchy, and state handling for target design surface(s). Emit a structured addendum that Lead folds into the TEP. Stack-agnostic — design-surface knowledge arrives via the dispatch bundle from `PROJECT_CONFIG.md` for the subtask's domain.
 
 **Skills:**
@@ -29,7 +31,7 @@ This role does NOT produce an executor-facing plan and does NOT modify productio
 
 **Success:** flow coherent; UX risks surfaced early; mandatory states not forgotten; addendum specific enough for Lead merge; telemetry + context manifest written.
 
-**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:design-agent -->
 
 ## Dispatch Bundle Protocol
@@ -49,7 +51,7 @@ Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or go
 ## Skills & Plugins
 | Trigger | Skill |
 |---|---|
-| Building or reviewing a UI component / screen | `frontend-design:frontend-design` — production-grade UI aligned with `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<design-hook-domain>-baseline -->` |
+| Building or reviewing a UI component / screen | `frontend-design:frontend-design` — production-grade UI aligned with `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:<design-hook-domain>-baseline -->` |
 | Designs exist in Figma | `figma:figma-use` (prerequisite), then `figma:figma-implement-design` |
 | Generating Figma components from the codebase | `figma:figma-generate-library` |
 | Mapping Figma components to code snippets              | `figma:figma-code-connect`                                                       |
@@ -72,8 +74,8 @@ This role does not produce an executor-facing plan and does not modify productio
 
 ## Allowed Actions
 - review new screens or changed flows
-- validate state handling quality per `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<design-hook-domain> -->.validation_rules` and `<!-- section:<design-hook-domain>-baseline -->` (mandatory UI states, required data-driven state variants, etc.)
-- validate UI-library / design-system consistency per `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<design-hook-domain> -->.validation_rules` and `<!-- section:<design-hook-domain>-baseline -->`
+- validate state handling quality per `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:<design-hook-domain> -->.validation_rules` and `<!-- section:<design-hook-domain>-baseline -->` (mandatory UI states, required data-driven state variants, etc.)
+- validate UI-library / design-system consistency per `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:<design-hook-domain> -->.validation_rules` and `<!-- section:<design-hook-domain>-baseline -->`
 - define design constraints for Lead to incorporate into the TEP
 
 ## Forbidden Actions

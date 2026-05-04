@@ -1,6 +1,6 @@
 # Derived Context Cache — Format and Generation Protocol
 
-After atomically writing `ai-workflow-data/config/PROJECT_CONFIG.md`, regenerate the derived cache as a **single combined file** at `ai-workflow-data/config/domain-contexts.cache.md` plus its sibling `domain-contexts.cache.manifest.json`. The cache lets `context-minimizer` read pre-extracted section bytes instead of grepping PROJECT_CONFIG.md on every dispatch.
+After atomically writing `<artifact-root>/config/PROJECT_CONFIG.md`, regenerate the derived cache as a **single combined file** at `<artifact-root>/config/domain-contexts.cache.md` plus its sibling `domain-contexts.cache.manifest.json`. The cache lets `context-minimizer` read pre-extracted section bytes instead of grepping PROJECT_CONFIG.md on every dispatch.
 
 The cache used to fan out into ~13 per-tag files under `domain-contexts/`. That layout was collapsed to one file because every dispatch reads multiple sections anyway, and the per-file overhead was pure clutter (noisy git diffs, large directory listings, no perf benefit).
 
@@ -30,14 +30,14 @@ A leading line `# Derived context cache (auto-generated — do not edit)` is all
 
 ## Manifest
 
-Write `ai-workflow-data/config/domain-contexts.cache.manifest.json` after the combined `.md` file:
+Write `<artifact-root>/config/domain-contexts.cache.manifest.json` after the combined `.md` file:
 
 ```json
 {
   "generated_at": "<ISO-8601 UTC>",
-  "source_path": "ai-workflow-data/config/PROJECT_CONFIG.md",
+  "source_path": "<artifact-root>/config/PROJECT_CONFIG.md",
   "source_sha256": "<hex digest of PROJECT_CONFIG.md bytes>",
-  "cache_path": "ai-workflow-data/config/domain-contexts.cache.md",
+  "cache_path": "<artifact-root>/config/domain-contexts.cache.md",
   "sections": ["domains", "fe", "fe-baseline", "project-best-practices", "agent-best-practices-executor", ...]
 }
 ```
@@ -47,7 +47,7 @@ Write `ai-workflow-data/config/domain-contexts.cache.manifest.json` after the co
 ## Generation protocol
 
 1. After the atomic rename of `PROJECT_CONFIG.md`, compute its SHA-256.
-2. Remove the legacy `ai-workflow-data/config/domain-contexts/` directory if present (one-time migration; safe — it is fully derived). Remove any prior `domain-contexts.cache.md` and `domain-contexts.cache.manifest.json`.
+2. Remove the legacy `<artifact-root>/config/domain-contexts/` directory if present (one-time migration; safe — it is fully derived). Remove any prior `domain-contexts.cache.md` and `domain-contexts.cache.manifest.json`.
 3. For each tag in the cacheable set, check whether the just-written PROJECT_CONFIG.md contains `<!-- section:<tag> -->`:
    - Yes → append the section's bytes (between and including the anchor comments) to the in-memory combined buffer, separated from the previous block by a single blank line.
    - No → skip; tag is absent from the manifest.

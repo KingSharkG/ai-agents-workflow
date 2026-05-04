@@ -1,6 +1,6 @@
 # State File Schemas
 
-The orchestrator persists state across two files inside `ai-workflow-data/tasks/<task_id>/`. See SKILL.md → "State Management Rhythm" for when each is read/written.
+The orchestrator persists state across two files inside `<artifact-root>/tasks/<task_id>/`. See SKILL.md → "State Management Rhythm" for when each is read/written.
 
 ## `orchestration-state.json` (hot state)
 
@@ -25,7 +25,7 @@ The orchestrator persists state across two files inside `ai-workflow-data/tasks/
     "p1_approved_signature": null,
     "p1_revise_count": 0
   },
-  "task_summary_path": "ai-workflow-data/tasks/<task_id>/summary.md"
+  "task_summary_path": "<artifact-root>/tasks/<task_id>/summary.md"
 }
 ```
 

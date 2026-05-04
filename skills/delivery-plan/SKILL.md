@@ -13,7 +13,7 @@ For all new plans, default to the sectioned format `sectioned-v1` so the orchest
 
 ## Output Target
 
-**Append** to `ai-workflow-data/tasks/<task_id>/task-data.md` (the file created by the `task-packet` skill). Do NOT create a new `delivery-plan.md` file. Wrap the entire output in `<!-- section:delivery-plan -->` ... `<!-- /section:delivery-plan -->`. The nested `<!-- section:delivery-subtask-* -->` IDs inside are unchanged and remain directly extractable.
+**Append** to `<artifact-root>/tasks/<task_id>/task-data.md` (the file created by the `task-packet` skill). Do NOT create a new `delivery-plan.md` file. Wrap the entire output in `<!-- section:delivery-plan -->` ... `<!-- /section:delivery-plan -->`. The nested `<!-- section:delivery-subtask-* -->` IDs inside are unchanged and remain directly extractable.
 
 ## Output Template
 

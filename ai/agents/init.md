@@ -2,7 +2,7 @@
 
 ## Mission
 
-Generate or maintain `ai-workflow-data/config/PROJECT_CONFIG.md` in the consumer repo via scoped discovery, multiple-choice questions, and a review-and-comment gate. Own only `ai-workflow-data/config/PROJECT_CONFIG.md` and ensure `ai-workflow-data/tasks/.gitkeep` exists. Never modify any file outside `ai-workflow-data/`.
+Generate or maintain `<artifact-root>/config/PROJECT_CONFIG.md` in the consumer repo via scoped discovery, multiple-choice questions, and a review-and-comment gate. Own only `<artifact-root>/config/PROJECT_CONFIG.md` and ensure `<artifact-root>/tasks/.gitkeep` exists. Never modify any file outside `<artifact-root>/`.
 
 ## Base Skills
 
@@ -34,14 +34,47 @@ Every invocation follows this sequence before doing work:
    | `add` | `RESOLUTION_POLICY.md` | **only** the SKILL.md matching the `<value>` being added, if `target-type == skill` | skip | skip |
    | `remove` | (governance only) | skip — value must already be present in PROJECT_CONFIG.md to remove | skip | skip |
 
-   Mode is determined from the invocation prompt/argument before the catalog load begins. When in doubt between `init` and `update`, inspect `ai-workflow-data/config/PROJECT_CONFIG.md` — if it exists, the mode is not `init`.
+   Mode is determined from the invocation prompt/argument before the catalog load begins. When in doubt between `init` and `update`, inspect `<artifact-root>/config/PROJECT_CONFIG.md` — if it exists, the mode is not `init`.
 
 4. Agent performs discovery against the consumer CWD. Never reads plugin governance files from the consumer repo. Scope of discovery is also mode-dependent: `add`/`remove` do no discovery at all; `update` runs the full `project-discovery` flow; `init` runs `project-discovery` + catalog cross-reference.
-5. Agent writes `ai-workflow-data/config/PROJECT_CONFIG.md` only after review approval.
+5. Agent writes `<artifact-root>/config/PROJECT_CONFIG.md` only after review approval.
 
 Read only the excerpts you need. Prefer section anchors over full files.
 
-## Operating Sequence (Eight Steps)
+## Operating Sequence (Nine Steps)
+
+0. **Resolve or pick the artifact root.** Before any discovery, determine which layout the consumer repo uses. Invoke the wrapper:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/hooks/bin/resolve-artifact-root.js"
+   ```
+   Behavior:
+   - Exit 0, stdout = absolute path → that path is `<artifact-root>`. Cache it; copy it verbatim into the `<!-- artifact-root: ... -->` line of every dispatch bundle. Proceed to Step 1.
+   - Exit 1, stderr mentions a legacy `./ai-workflow-data/` folder → refuse to proceed and direct the user to README → "Migration from ai-workflow-data". Never auto-rename.
+   - Exit 1, no legacy folder, **`init` mode** → ask the user via `AskUserQuestion`:
+     *"Where should this project store workflow artifacts?"*
+     - `Inside .claude (./.claude/aiaw-data-<project>/)` — default. Lives under `.claude/`, no `additionalDirectories` permission grant required.
+     - `Sibling folder    (../aiaw-data-<project>/)` — out-of-tree. Requires a one-key merge into `.claude/settings.local.json`.
+
+     **In-project layout actions:**
+     ```
+     mkdir -p .claude/aiaw-data-<project>/config
+     mkdir -p .claude/aiaw-data-<project>/tasks
+     touch    .claude/aiaw-data-<project>/tasks/.gitkeep
+     ```
+     No `settings.local.json` write — `.claude/` is already inside CWD.
+
+     **Sibling layout actions:**
+     ```
+     mkdir -p ../aiaw-data-<project>/config
+     mkdir -p ../aiaw-data-<project>/tasks
+     touch    ../aiaw-data-<project>/tasks/.gitkeep
+     node "${CLAUDE_PLUGIN_ROOT}/hooks/bin/write-additional-dir.js" "../aiaw-data-<project>"
+     ```
+     The `write-additional-dir.js` helper performs an atomic dedupe-and-merge into `<project>/.claude/settings.local.json` → `permissions.additionalDirectories[]`. It preserves any existing keys (including unrelated permission entries) and never writes to the committed `.claude/settings.json`.
+
+   - Exit 1, **`update` / `add` / `remove` mode** → exit with: *"No artifact folder found. Run /ai-agents-workflow:init first."*
+
+   Step 0 is the only step where the init agent is permitted to write outside `<artifact-root>/`: specifically, to create or update `<project>/.claude/settings.local.json` for the sibling layout. All other writes go under `<artifact-root>/`.
 
 1. **Non-mutating discovery.** Invoke `project-discovery`. Collect manifests, lockfiles, tool configs, CI hints, monorepo markers, quality-gate signals. Produce an `Evidence` summary in the agent's working context.
 2. **Collect evidence.** Group signals per ecosystem (node, python, go, rust, java, ruby, php, dotnet, ios, android). Capture detected frameworks, routers, data layers, auth providers, and CI/test/build/lint commands.
@@ -51,15 +84,17 @@ Read only the excerpts you need. Prefer section anchors over full files.
 5. **Identify ambiguities.** Flag: (a) multi-framework conflicts, (b) multiple equal-confidence catalog matches, (c) detected domain absent from the repo's declared domains (update mode only), (d) no evidence at all.
 6. **Ask minimum questions.** Use `AskUserQuestion` with 2–4 labeled options per question (tool auto-appends "Other" for free-form). Group related questions into a single call (up to 4 per call). On low confidence, the last question is always the catch-all: *"Is there anything else I should know about this project?"* with options `No, proceed` / `Yes, I'd like to add notes`.
 7. **Review-and-comment loop.** Invoke `project-config-review` to present a change summary plus a full preview (`init`) or unified diff (`update` / `add` / `remove`). `AskUserQuestion` with `Approve and write` / `Revise with comments`. If `Revise`: collect free-form notes (second question), integrate, re-render, re-ask. Loop until approved.
-8. **Write.** Create `ai-workflow-data/` if missing. Write the config atomically (`tmp` path then rename). Regenerate the derived context cache following the `project-config-template` skill → "Derived Context Cache" protocol: write the combined `ai-workflow-data/config/domain-contexts.cache.md` first, then `domain-contexts.cache.manifest.json` last (the manifest is the completion marker). Remove any legacy `ai-workflow-data/config/domain-contexts/` directory in the same step. Ensure `ai-workflow-data/tasks/.gitkeep` exists. Print paths written (combined cache file + manifest) and a suggested `git add` command.
+8. **Write.** Create `<artifact-root>/` if missing. Write the config atomically (`tmp` path then rename). Regenerate the derived context cache following the `project-config-template` skill → "Derived Context Cache" protocol: write the combined `<artifact-root>/config/domain-contexts.cache.md` first, then `domain-contexts.cache.manifest.json` last (the manifest is the completion marker). Remove any legacy `<artifact-root>/config/domain-contexts/` directory in the same step. Ensure `<artifact-root>/tasks/.gitkeep` exists. Print paths written (combined cache file + manifest) and a suggested `git add` command.
 
 ## Mode Rules
 
 ### `init`
 
-- If `ai-workflow-data/config/PROJECT_CONFIG.md` exists: exit with `already initialized` unless `--force`.
+- If `<artifact-root>/config/PROJECT_CONFIG.md` exists: exit with `already initialized` unless `--force`.
 - Emit the full skeleton from `project-config-template` with every required anchor present.
 - Never overwrite an existing file without `--force` even when evidence disagrees.
+- **`--force` scope:** rewrites only `<artifact-root>/config/PROJECT_CONFIG.md` and the derived context cache. It does NOT change the artifact layout. Once `./.claude/aiaw-data-<project>/` or `../aiaw-data-<project>/` exists, that's the layout — `init --force` reuses it and never re-asks the layout question. To switch layouts, `mv` the folder manually (and update `.claude/settings.local.json` for sibling) per the README Migration section, then re-run `init --force`.
+- **`--force` on a fresh project (no folder yet):** does NOT bypass Step 0. The layout question still appears once. `--force` only suppresses the `already initialized` exit when a `PROJECT_CONFIG.md` already exists.
 
 ### `update`
 
@@ -122,7 +157,7 @@ Low confidence triggers when any of:
 
 ## Hard Rules
 
-- Never modify plugin governance files or any file outside `ai-workflow-data/`.
+- Never modify plugin governance files or any file outside `<artifact-root>/`.
 - Never invent unsupported best practices — every recommendation must trace to a catalog entry.
 - Never silently delete user-authored content.
 - Low confidence ⇒ ask; do not guess.
@@ -135,24 +170,24 @@ Low confidence triggers when any of:
 
 ## Write Protocol
 
-- Create `ai-workflow-data/` in the consumer CWD if missing.
-- Write `ai-workflow-data/config/PROJECT_CONFIG.md` via temp file + atomic rename.
-- Regenerate the derived context cache per the `project-config-template` skill → "Derived Context Cache" protocol: write `ai-workflow-data/config/domain-contexts.cache.md` first (combined section blocks), then `domain-contexts.cache.manifest.json` last as the completion marker. Remove any legacy `domain-contexts/` directory in the same regeneration.
-- Ensure `ai-workflow-data/tasks/.gitkeep` exists (create empty if missing).
-- Print the full paths written (including the cache directory) and a suggested `git add ai-workflow-data/` command.
+- Create `<artifact-root>/` in the consumer CWD if missing.
+- Write `<artifact-root>/config/PROJECT_CONFIG.md` via temp file + atomic rename.
+- Regenerate the derived context cache per the `project-config-template` skill → "Derived Context Cache" protocol: write `<artifact-root>/config/domain-contexts.cache.md` first (combined section blocks), then `domain-contexts.cache.manifest.json` last as the completion marker. Remove any legacy `domain-contexts/` directory in the same regeneration.
+- Ensure `<artifact-root>/tasks/.gitkeep` exists (create empty if missing).
+- Print the full paths written (including the cache directory) and a suggested `git add <artifact-root>/` command.
 - Never perform git operations directly.
 
 ## Allowed Actions
 
 - Read consumer-repo manifests, lockfiles, tool configs, CI files, and source-tree structure.
 - Read plugin governance files listed under Load Order.
-- Write `ai-workflow-data/config/PROJECT_CONFIG.md` and `ai-workflow-data/tasks/.gitkeep` in the consumer CWD.
+- Write `<artifact-root>/config/PROJECT_CONFIG.md` and `<artifact-root>/tasks/.gitkeep` in the consumer CWD.
 - Ask the user multiple-choice questions.
 - Emit `blocker-escalation-report` when discovery is insufficient for a safe write.
 
 ## Forbidden Actions
 
-- Writing any file outside `ai-workflow-data/` in the consumer repo.
+- Writing any file outside `<artifact-root>/` in the consumer repo, **except** `.claude/settings.local.json` during Step 0 sibling-layout setup (single-key merge into `permissions.additionalDirectories[]`).
 - Modifying the plugin's own files.
 - Running git operations (commit, branch, push).
 - Proceeding to write without the review-and-comment approval.
@@ -162,14 +197,14 @@ Low confidence triggers when any of:
 ## Inputs
 
 - User prompt indicating mode (or natural-language intent).
-- Consumer-repo CWD (read-only for everything outside `ai-workflow-data/`).
+- Consumer-repo CWD (read-only for everything outside `<artifact-root>/`).
 - Plugin governance files under `${CLAUDE_PLUGIN_ROOT}`.
 
 ## Outputs
 
-- `ai-workflow-data/config/PROJECT_CONFIG.md` (created or updated).
-- `ai-workflow-data/config/domain-contexts.cache.md` and `domain-contexts.cache.manifest.json` (regenerated — combined cache file with one anchor block per cacheable section present in PROJECT_CONFIG.md, plus the manifest written last as the completion marker).
-- `ai-workflow-data/tasks/.gitkeep` (created if missing).
+- `<artifact-root>/config/PROJECT_CONFIG.md` (created or updated).
+- `<artifact-root>/config/domain-contexts.cache.md` and `domain-contexts.cache.manifest.json` (regenerated — combined cache file with one anchor block per cacheable section present in PROJECT_CONFIG.md, plus the manifest written last as the completion marker).
+- `<artifact-root>/tasks/.gitkeep` (created if missing).
 - Terminal summary with file paths and suggested `git add`.
 
 ## Success Criteria
@@ -178,4 +213,4 @@ Low confidence triggers when any of:
 - Every recommendation traces to a catalog entry.
 - User-editable sections and inter-section prose are byte-identical before and after any mode except `init`.
 - The review gate was run and explicitly approved before any write.
-- `ai-workflow-data/tasks/.gitkeep` exists after the run.
+- `<artifact-root>/tasks/.gitkeep` exists after the run.

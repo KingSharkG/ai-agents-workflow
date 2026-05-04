@@ -9,7 +9,7 @@ Some skills and plugins (e.g. `feature-dev:*`, `pr-review-toolkit:review-pr`, `s
 ## Fixed Before Dynamic
 
 1. Agent-fixed skills (see `## Skills & Plugins` in each agent file, plus the role-generic sections below: `<!-- section:global-skills -->`, `<!-- section:reviewer-skills -->`).
-2. Domain-fixed skills from `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `skills`. Domain-fixed skills are not declared in this file — they live entirely in the project overlay, so adding a new domain requires no change here.
+2. Domain-fixed skills from `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `skills`. Domain-fixed skills are not declared in this file — they live entirely in the project overlay, so adding a new domain requires no change here.
 3. Registry plugins (`<!-- section:registry -->`) — the single entry point for all plugins, whether MCP servers, Claude built-ins, or marketplace-distributed.
 4. External skills (`<!-- section:external-skills -->`) — informational prefix-indexed mapping from skill prefix to provider plugin.
 5. `npx skills find` as last resort.
@@ -96,7 +96,7 @@ Intake rule: new rows with `source ∈ {consumer-marketplace, npx-skills-find}` 
 | `pr-review-toolkit` | `claude-builtin` | `pr-review-toolkit:`  | PR review tooling                                          | reviewer, chief-orchestrator                                                                               | low       | approved |
 | `code-review`     | `claude-builtin`  | `code-review:`        | Code-review skill                                          | reviewer                                                                                                   | low       | approved |
 
-**Role model:** `lead` and `executor` are generic. The `allowed_roles` column lists hard assignments (e.g., `chief-orchestrator` owns `github` regardless of project). Per-domain plugin assignments for lead/executor are declared in `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `plugins`. The merged allowlist for any subtask is `base_plugins ∪ PROJECT_CONFIG.<domain>.plugins`; invoking outside that union is a hard blocker.
+**Role model:** `lead` and `executor` are generic. The `allowed_roles` column lists hard assignments (e.g., `chief-orchestrator` owns `github` regardless of project). Per-domain plugin assignments for lead/executor are declared in `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `plugins`. The merged allowlist for any subtask is `base_plugins ∪ PROJECT_CONFIG.<domain>.plugins`; invoking outside that union is a hard blocker.
 
 <!-- /section:registry -->
 

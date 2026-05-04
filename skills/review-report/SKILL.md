@@ -25,7 +25,7 @@ Produce this report after reviewing an Implementation Report (and Integration Ch
 
 ### 1. summary.md
 
-Write to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` using the skeleton in `${CLAUDE_PLUGIN_ROOT}/skills/review-report/references/summary-skeleton.md`. The orchestrator pre-creates the skeleton (with empty placeholders for Dispatch Bundles, Telemetry, Context Manifest) alongside `ai-work.md`; each agent appends its telemetry line and context manifest subsection along the way; the Reviewer finalizes Status, Acceptance Signals, Files Changed, Notes, and Open Gates.
+Write to `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` using the skeleton in `${CLAUDE_PLUGIN_ROOT}/skills/review-report/references/summary-skeleton.md`. The orchestrator pre-creates the skeleton (with empty placeholders for Dispatch Bundles, Telemetry, Context Manifest) alongside `ai-work.md`; each agent appends its telemetry line and context manifest subsection along the way; the Reviewer finalizes Status, Acceptance Signals, Files Changed, Notes, and Open Gates.
 
 ### 2. Append inside `<!-- section:review -->`
 

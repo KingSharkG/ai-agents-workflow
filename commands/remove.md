@@ -1,12 +1,12 @@
 ---
-description: Remove an entry from ai-workflow-data/config/PROJECT_CONFIG.md.
+description: Remove an entry from <artifact-root>/config/PROJECT_CONFIG.md.
 argument-hint: "<target-type> <value> [--domain <d>]"
 allowed-tools: Task, AskUserQuestion
 ---
 
 Dispatch the `init` subagent in `remove` mode.
 
-Pre-flight: if CWD does not contain `ai-workflow-data/` and does contain `.claude-plugin/plugin.json`, surface: "You appear to be in the plugin directory. Run this command from your project repo instead." and exit without dispatching.
+Pre-flight: if CWD does not contain `<artifact-root>/` and does contain `.claude-plugin/plugin.json`, surface: "You appear to be in the plugin directory. Run this command from your project repo instead." and exit without dispatching.
 
 If `$ARGUMENTS` is empty, first use `AskUserQuestion` to collect:
 

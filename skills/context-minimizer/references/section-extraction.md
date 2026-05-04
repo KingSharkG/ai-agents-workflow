@@ -46,7 +46,7 @@ Extract from `section:review` in `ai-work.md` (multi-cycle: `### Cycle N` subsec
 
 ## Integration Check Report
 
-Standalone file: `ai-workflow-data/tasks/<task_id>/integration-check-<cycle>.md`
+Standalone file: `<artifact-root>/tasks/<task_id>/integration-check-<cycle>.md`
 - Metadata → `<!-- section:integration-metadata -->`
 - Surfaces → `<!-- section:integration-fe-surface -->`, `<!-- section:integration-be-surface -->`
 - Result → `<!-- section:integration-verdict -->`, `<!-- section:integration-findings -->`, `<!-- section:integration-recommended-fixes -->`

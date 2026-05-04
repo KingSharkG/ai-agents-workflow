@@ -1,11 +1,11 @@
 ---
 name: project-config-template
-description: Canonical skeleton for ai-workflow-data/config/PROJECT_CONFIG.md. Use when init writes the initial file or update refreshes owned sections. Emitted text must pass the hooks/pre-task-guard.js regex (Phase 4 — trigger evaluation).
+description: Canonical skeleton for <artifact-root>/config/PROJECT_CONFIG.md. Use when init writes the initial file or update refreshes owned sections. Emitted text must pass the hooks/pre-task-guard.js regex (Phase 4 — trigger evaluation).
 ---
 
 # Project Config Template Skill
 
-Produce the content for `ai-workflow-data/config/PROJECT_CONFIG.md`. All required anchors are present even when empty (per `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:produce-artifact-first -->`).
+Produce the content for `<artifact-root>/config/PROJECT_CONFIG.md`. All required anchors are present even when empty (per `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:produce-artifact-first -->`).
 
 **Helper preference.** When populating `<!-- section:<domain> -->` → `plugins:` and `skills:` lists, prefer narrow helpers (`context7`, `figma:*`, `supabase:*`, domain-specific MCP servers, `superpowers:test-driven-development`, `superpowers:systematic-debugging`, `pr-review-toolkit:silent-failure-hunter`, etc.) over end-to-end workflow orchestrators. Workflow orchestrators (`feature-dev:*`, `pr-review-toolkit:review-pr`, `pr-review-toolkit:code-reviewer`, `code-review:code-review`, `superpowers:writing-plans`, `superpowers:subagent-driven-development`) may still be listed if a domain genuinely needs them, but Lead/Executor/Reviewer must route their output back through the TEP / `ai-work.md` / `review-report` artifact chain or Reviewer will reject the work.
 
@@ -44,7 +44,7 @@ Before returning, the init agent must compile each emitted `<!-- section:... -->
 
 ## Derived Context Cache (MANDATORY after every PROJECT_CONFIG.md write)
 
-After every atomic write of `PROJECT_CONFIG.md`, regenerate the derived cache at `ai-workflow-data/config/domain-contexts.cache.md` plus its sibling `domain-contexts.cache.manifest.json`. The full format, cacheable section list, manifest schema, and step-by-step generation protocol live in `${CLAUDE_PLUGIN_ROOT}/skills/project-config-template/references/cache-generation.md`. Read once per session — content is stable.
+After every atomic write of `PROJECT_CONFIG.md`, regenerate the derived cache at `<artifact-root>/config/domain-contexts.cache.md` plus its sibling `domain-contexts.cache.manifest.json`. The full format, cacheable section list, manifest schema, and step-by-step generation protocol live in `${CLAUDE_PLUGIN_ROOT}/skills/project-config-template/references/cache-generation.md`. Read once per session — content is stable.
 
 Quick rules (full detail in the reference):
 

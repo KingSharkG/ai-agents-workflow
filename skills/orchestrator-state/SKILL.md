@@ -5,7 +5,7 @@ description: Orchestrator state file schema, phase transitions, post-approval cl
 
 # Orchestrator State — Schema, Transitions, Closure
 
-The orchestrator persists its state across two files inside `ai-workflow-data/tasks/<task_id>/`:
+The orchestrator persists its state across two files inside `<artifact-root>/tasks/<task_id>/`:
 
 - **`orchestration-state.json`** — hot state for the current execution cursor. Small (size bounded by `pending_subtasks` length, not by task history). Read at every subtask transition and written whenever `phase`, `current_subtask`, `pending_subtasks`, `blocked_gates`, or `pending_user_actions` changes.
 - **`orchestration-history.json`** — grows with task history: `completed_subtasks[]` and `trigger_decisions{}`. Written once per subtask completion; read only at P2 / P4 gates, post-task retrospective, and resume. Not read during routine dispatch between subtasks.
@@ -103,7 +103,7 @@ When the Reviewer returns a closed review outcome (signalled by `<subtask_id>/su
 5. Emit the task/subtask completion signal.
 6. For **task-level completion** (all subtasks done and no pending gates / user actions remain):
    a. Read `orchestration-history.json` plus EVERY `<subtask_id>/summary.md` file to populate the task-level summary. Do NOT reconstruct subtask descriptions from conversation context — always source from the written artifacts.
-   b. Finalize `ai-workflow-data/tasks/<task_id>/summary.md` with aggregate totals and `Changes by Phase`.
+   b. Finalize `<artifact-root>/tasks/<task_id>/summary.md` with aggregate totals and `Changes by Phase`.
    c. Execute the **P4 — Task Completion Review** gate (see `orchestrator-user-gates` skill) before setting `workflow_state: complete`.
    d. After P4 approval, optionally execute **P5 — Post-Task Retrospective** (see `orchestrator-user-gates` skill).
 7. Do NOT spawn a separate Summary Agent. This step replaces it.

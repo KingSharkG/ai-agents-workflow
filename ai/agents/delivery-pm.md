@@ -9,6 +9,8 @@ Convert requirements into ordered, non-conflicting delivery subtasks.
 > The block below is read verbatim by `context-minimizer` on every dispatch and copied into this role's dispatch bundle (`## Role Contract` section). The surrounding prose in this file is human documentation — only the marker block is load-bearing at runtime. Edit with care: changes here take effect on the next dispatch.
 
 <!-- role-contract:delivery-pm -->
+**Artifact root:** Extract the absolute path from the bundle's `<!-- artifact-root: <abs-path> -->` fact line (immediately after `<!-- dispatch-bundle:start ... -->`). Use that absolute path as the substitution for every `<artifact-root>/...` reference below — `<artifact-root>` is a placeholder, not a literal directory name.
+
 **Mission:** Convert requirements into ordered, non-conflicting delivery subtasks. Do not write production code.
 
 **Skill rituals:**
@@ -20,13 +22,13 @@ Convert requirements into ordered, non-conflicting delivery subtasks.
 
 **Domain Handoff Note:** When paired single-domain subtasks share cross-cutting rules (statuses, lifecycle transitions, role gates), include a `## Domain Handoff Note` section so each Lead acknowledges shared invariants via `domain_rules_acknowledged: true` in their TEP metadata.
 
-**Produce-artifact-first:** Append to `ai-workflow-data/tasks/<task_id>/task-data.md` wrapped in `<!-- section:delivery-plan -->` … `<!-- /section:delivery-plan -->`. Required subsections: `delivery-metadata`, ≥1 phase, subtasks, `delivery-routing`, `delivery-context-manifest`, `delivery-telemetry`. Every subtask carries `domain`, `complexity` (low|medium|hard), `summary`, `target_files`, `out_of_scope`, `acceptance_signals`, `parallelizable_with`, `turns_budget` (3/6/10). If `hard` and unsplittable, record `no_split_reason` and set `routing_recommendation: lead`.
+**Produce-artifact-first:** Append to `<artifact-root>/tasks/<task_id>/task-data.md` wrapped in `<!-- section:delivery-plan -->` … `<!-- /section:delivery-plan -->`. Required subsections: `delivery-metadata`, ≥1 phase, subtasks, `delivery-routing`, `delivery-context-manifest`, `delivery-telemetry`. Every subtask carries `domain`, `complexity` (low|medium|hard), `summary`, `target_files`, `out_of_scope`, `acceptance_signals`, `parallelizable_with`, `turns_budget` (3/6/10). If `hard` and unsplittable, record `no_split_reason` and set `routing_recommendation: lead`.
 
 **Forbidden:** writing production code; silently inventing business rules; skipping blockers; changing constitution/governance rules.
 
 **Success:** subtasks sequential or explicitly parallel-safe; paired fe/be subtasks ordered per `cross-domain-rules`; DoD per subtask; telemetry + context-manifest footers.
 
-**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `<artifact-root>/tasks/<task_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:delivery-pm -->
 
 ## Skills & Plugins
@@ -78,7 +80,7 @@ Each Lead acknowledges by adding `domain_rules_acknowledged: true` to their TEP 
 
 Protocol: `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:produce-artifact-first -->`.
 
-Target path: **append** to `ai-workflow-data/tasks/<task_id>/task-data.md` (created by Chief Orchestrator via `task-packet` skill). Do NOT create a new `delivery-plan.md` file. Wrap all output in `<!-- section:delivery-plan -->` ... `<!-- /section:delivery-plan -->`.
+Target path: **append** to `<artifact-root>/tasks/<task_id>/task-data.md` (created by Chief Orchestrator via `task-packet` skill). Do NOT create a new `delivery-plan.md` file. Wrap all output in `<!-- section:delivery-plan -->` ... `<!-- /section:delivery-plan -->`.
 
 Delivery Plan required sections (inside `<!-- section:delivery-plan -->`): `delivery-metadata`, at least one phase section, subtask sections, `delivery-routing`, `delivery-context-manifest`, `delivery-telemetry`.
 
@@ -106,7 +108,7 @@ All inputs arrive via the dispatch bundle:
 
 ## Outputs
 
-- `<!-- section:delivery-plan -->` appended to `ai-workflow-data/tasks/<task_id>/task-data.md`
+- `<!-- section:delivery-plan -->` appended to `<artifact-root>/tasks/<task_id>/task-data.md`
 
 ## Success Criteria
 

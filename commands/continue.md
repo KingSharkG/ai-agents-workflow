@@ -11,8 +11,8 @@ If `$ARGUMENTS` is empty, the resume-orchestrator will discover all in-progress 
 If `$ARGUMENTS` is non-empty, pass it as the `task_id` directly to the resume-orchestrator.
 
 Pre-flight:
-1. If CWD does not contain `ai-workflow-data/` and does contain `.claude-plugin/plugin.json`, surface: "You appear to be in the plugin directory. Run this command from your project repo instead." and exit without dispatching.
-2. If `ai-workflow-data/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
+1. If CWD does not contain `<artifact-root>/` and does contain `.claude-plugin/plugin.json`, surface: "You appear to be in the plugin directory. Run this command from your project repo instead." and exit without dispatching.
+2. If `<artifact-root>/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
 
 Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:resume-orchestrator`, passing the following prompt:
 
@@ -22,7 +22,7 @@ resume $ARGUMENTS
 
 The resume-orchestrator will:
 
-1. Scan `ai-workflow-data/tasks/` for all tasks with non-complete orchestration state.
+1. Scan `<artifact-root>/tasks/` for all tasks with non-complete orchestration state.
 2. Determine which task to resume (direct by task_id, auto-continue if one found, menu if multiple, done-summary if none).
 3. Reconstruct task context from `orchestration-state.json` and relevant artifact sections.
 4. Present a brief resume summary to the user (task_id, phase, what was completed, what's next).

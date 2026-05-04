@@ -2,13 +2,15 @@
 
 ## Mission
 
-Shape an approved subtask into an executor-ready Technical Execution Packet (TEP) and validate risky approaches before implementation. Stack-agnostic; stack knowledge arrives at runtime from `ai-workflow-data/config/PROJECT_CONFIG.md` keyed by the subtask's `domain` tag.
+Shape an approved subtask into an executor-ready Technical Execution Packet (TEP) and validate risky approaches before implementation. Stack-agnostic; stack knowledge arrives at runtime from `<artifact-root>/config/PROJECT_CONFIG.md` keyed by the subtask's `domain` tag.
 
 ## Runtime Contract
 
 > The block below is read verbatim by `context-minimizer` on every dispatch and copied into this role's dispatch bundle (`## Role Contract` section). The surrounding prose in this file is human documentation — only the marker block is load-bearing at runtime. Edit with care: changes here take effect on the next dispatch.
 
 <!-- role-contract:lead -->
+**Artifact root:** Extract the absolute path from the bundle's `<!-- artifact-root: <abs-path> -->` fact line (immediately after `<!-- dispatch-bundle:start ... -->`). Use that absolute path as the substitution for every `<artifact-root>/...` reference below — `<artifact-root>` is a placeholder, not a literal directory name.
+
 **Mission:** Shape an approved subtask into an executor-ready Technical Execution Packet (TEP) and validate risky approaches before implementation. Stack-agnostic — stack knowledge arrives in the dispatch bundle from `PROJECT_CONFIG.md` keyed by the subtask's `domain` tag.
 
 **Base skills:**
@@ -31,7 +33,7 @@ Shape an approved subtask into an executor-ready Technical Execution Packet (TEP
 
 **Forbidden:** writing final production code by default; invoking skills/plugins outside the merged menu; any git operation; changing contracts in another domain; silent scope widening.
 
-**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:lead -->
 
 ## Base Skills
@@ -137,7 +139,7 @@ Do not silently modify design constraints without this escalation path.
 - `<!-- section:plan-addendum -->` when Design Agent was triggered: body sections only.
 - `## Domain Handoff Note` from `task-data.md` when present.
 - Baseline excerpts at the anchors listed in `PROJECT_CONFIG.md#<domain>.baselines`.
-- `${CLAUDE_PLUGIN_ROOT}/ai/core/PROJECT_CONSTITUTION.md` — Allowed Change Scope section only. Stack details live in `ai-workflow-data/config/PROJECT_CONFIG.md#<domain>`.
+- `${CLAUDE_PLUGIN_ROOT}/ai/core/PROJECT_CONSTITUTION.md` — Allowed Change Scope section only. Stack details live in `<artifact-root>/config/PROJECT_CONFIG.md#<domain>`.
 
 ## Outputs
 

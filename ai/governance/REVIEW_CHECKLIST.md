@@ -22,10 +22,10 @@
 
 For the subtask's declared `domain`, apply all of:
 
-- `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `validation_rules`
-- `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `forbidden_actions`
-- `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:<domain>-baseline -->`
-- `ai-workflow-data/config/PROJECT_CONFIG.md#<!-- section:agent-best-practices -->` → `reviewer`
+- `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `validation_rules`
+- `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `forbidden_actions`
+- `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:<domain>-baseline -->`
+- `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:agent-best-practices -->` → `reviewer`
 
 For paired / cross-domain work (e.g. `fe` + `be` in the same feature), also apply `<!-- section:cross-domain-rules -->` and the integration-review section below.
 

@@ -22,7 +22,7 @@ Append inside `<!-- section:implementation -->`:
 ## Metadata
 - **task_id**: <from TEP or spec>
 - **subtask_id**: <from TEP or spec>
-- **domain**: <subtask domain from ai-workflow-data/config/PROJECT_CONFIG.md#declared_domains>
+- **domain**: <subtask domain from <artifact-root>/config/PROJECT_CONFIG.md#declared_domains>
 - **executor**: executor
 - **created_at**: <ISO 8601 UTC>
 <!-- /section:impl-metadata -->

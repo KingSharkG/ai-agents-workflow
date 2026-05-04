@@ -5,7 +5,7 @@ description: Maintain a per-task summary tracking turns, token usage, and delive
 
 # Telemetry Summary Skill
 
-Maintain `ai-workflow-data/tasks/<task_id>/summary.md` as the single source of truth for agent resource consumption and delivered changes across a task's lifecycle. The chief-orchestrator invokes this skill after each subtask completes and at task-level completion.
+Maintain `<artifact-root>/tasks/<task_id>/summary.md` as the single source of truth for agent resource consumption and delivered changes across a task's lifecycle. The chief-orchestrator invokes this skill after each subtask completes and at task-level completion.
 
 ## When to Use
 
@@ -105,7 +105,7 @@ Then append rows to Detail, update Context Breakdown, and recalculate Totals. At
 
 ## Rules
 
-- **File location**: `ai-workflow-data/tasks/<task_id>/summary.md`. Only the chief-orchestrator writes it.
+- **File location**: `<artifact-root>/tasks/<task_id>/summary.md`. Only the chief-orchestrator writes it.
 - **Append-only** for Detail and Context Breakdown — one row per agent invocation (rework cycles are separate rows). Never rewrite or remove rows.
 - **Tokens are approximate** (~20% variance ok); trend visibility, not accounting.
 - **Status values**: `ok` (within budget) | `warning` (exceeded turns) | `escalated` (blocker) | `ul:approved` (ultra-light).

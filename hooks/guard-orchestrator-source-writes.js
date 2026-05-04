@@ -4,8 +4,10 @@
  *
  * Prevents the chief-orchestrator from writing production code in the
  * consumer repo. The orchestrator's role contract forbids "writing
- * production code" — its Edit/Write/Bash tools are for ai-workflow-data/
- * artifacts only. Code changes must go through Task(executor).
+ * production code" — its Edit/Write/Bash tools are for the workflow
+ * artifact root only (resolved by hooks/lib/artifact-root.js, currently
+ * `aiaw-data-<project>` in either the in-project or sibling layout).
+ * Code changes must go through Task(executor).
  *
  * This hook is the structural backstop for that rule: even if the
  * orchestrator's prompt enforcement drifts, this hook denies the call.
@@ -19,11 +21,11 @@
  *
  * Decision logic:
  *   - Edit / Write: deny if CLAUDE_TOOL_INPUT_FILE_PATH targets anything
- *     outside ai-workflow-data/**.
- *   - Bash: deny if CLAUDE_TOOL_INPUT_COMMAND clearly writes outside
- *     ai-workflow-data/** (redirection to non-artifact paths, or known
+ *     outside the resolved artifact root.
+ *   - Bash: deny if CLAUDE_TOOL_INPUT_COMMAND clearly writes outside the
+ *     resolved artifact root (redirection to non-artifact paths, or known
  *     mutation commands targeting consumer-repo paths). Read-only and
- *     ai-workflow-data/-scoped commands pass.
+ *     artifact-scoped commands pass.
  *
  * Env vars read:
  *   CLAUDE_SUBAGENT_TYPE          — currently-running agent role
@@ -44,8 +46,7 @@
  */
 
 const path = require('path');
-
-const ARTIFACT_PREFIX = 'ai-workflow-data';
+const { resolveArtifactRoot, canonicalize } = require('./lib/artifact-root');
 
 const bareRole = (id) => {
   if (!id) return '';
@@ -62,31 +63,42 @@ if (callingRole !== 'chief-orchestrator') {
 
 const matcher = (process.env.CLAUDE_TOOL_MATCHER || '').trim();
 
-// Normalize a path (relative or absolute) and check whether it lives
-// inside ai-workflow-data/. We treat both `ai-workflow-data/...` and
-// `<cwd>/ai-workflow-data/...` as artifact paths.
+const ARTIFACT = resolveArtifactRoot();
+
+// Hard-stop: if the consumer repo still has the legacy ./ai-workflow-data/
+// folder (no current-format folder yet), the orchestrator must be told to
+// migrate before any artifact write is attempted.
+if (ARTIFACT.legacyDetected && !ARTIFACT.root) {
+  console.error(
+    `[guard-orchestrator-source-writes] BLOCKED: ${ARTIFACT.error}\n`,
+  );
+  process.exit(1);
+}
+
+// Canonicalize (resolve symlinks) and check whether the path lives inside the
+// resolved artifact root. Both sides are canonicalized so symlinked tmp dirs
+// (macOS `/var/folders` → `/private/var/folders`) compare correctly.
 function isArtifactPath(p) {
   if (!p) return false;
-  const normalized = path.normalize(p).replace(/\\/g, '/');
-  if (normalized.startsWith(`${ARTIFACT_PREFIX}/`) || normalized === ARTIFACT_PREFIX) {
-    return true;
-  }
-  // Absolute path: check whether the segment chain contains the prefix
-  // immediately under the CWD.
-  const cwd = process.cwd().replace(/\\/g, '/');
-  if (normalized.startsWith(`${cwd}/${ARTIFACT_PREFIX}/`)) return true;
-  if (normalized === `${cwd}/${ARTIFACT_PREFIX}`) return true;
+  if (!ARTIFACT.root) return false;
+  const root = ARTIFACT.root.replace(/\\/g, '/');
+  const abs = canonicalize(path.resolve(process.cwd(), p)).replace(/\\/g, '/');
+  if (abs === root) return true;
+  if (abs.startsWith(`${root}/`)) return true;
   return false;
 }
+
+const artifactHint = ARTIFACT.root || '<artifact-root>';
 
 function denyEditWrite(targetPath) {
   console.error(
     `[guard-orchestrator-source-writes] BLOCKED: chief-orchestrator may not ` +
-      `${matcher} files outside ai-workflow-data/.\n` +
-      `Path: ${targetPath}\n` +
+      `${matcher} files outside the artifact root.\n` +
+      `Path:          ${targetPath}\n` +
+      `Artifact root: ${artifactHint}\n` +
       `Consumer-repo source must be modified by Executor. Dispatch via:\n` +
       `  Task(subagent_type: ai-agents-workflow:executor, prompt: ...)\n` +
-      `If this write is for a workflow artifact, target an ai-workflow-data/** path instead.\n`,
+      `If this write is for a workflow artifact, target a path under ${artifactHint}/** instead.\n`,
   );
   process.exit(1);
 }
@@ -94,7 +106,7 @@ function denyEditWrite(targetPath) {
 function denyBash(command, reason) {
   console.error(
     `[guard-orchestrator-source-writes] BLOCKED: chief-orchestrator Bash ` +
-      `command appears to write outside ai-workflow-data/.\n` +
+      `command appears to write outside the artifact root (${artifactHint}).\n` +
       `Reason: ${reason}\n` +
       `Command: ${command}\n` +
       `Consumer-repo code changes must be performed by Executor via Task dispatch.\n`,
@@ -126,7 +138,7 @@ if (matcher === 'Bash') {
   while ((m = redirRegex.exec(command)) !== null) {
     const target = m[2].replace(/^["']|["']$/g, '');
     if (!isArtifactPath(target)) {
-      denyBash(command, `redirection "${m[1]} ${target}" writes outside ai-workflow-data/`);
+      denyBash(command, `redirection "${m[1]} ${target}" writes outside the artifact root`);
     }
   }
 
@@ -165,7 +177,7 @@ if (matcher === 'Bash') {
       if (!usesInPlace) continue;
       const fileArg = tokens.slice(1).find((t) => !t.startsWith('-') && t !== 'sed');
       if (fileArg && !isArtifactPath(fileArg)) {
-        denyBash(command, `"sed -i" target "${fileArg}" is outside ai-workflow-data/`);
+        denyBash(command, `"sed -i" target "${fileArg}" is outside the artifact root`);
       }
       continue;
     }
@@ -176,7 +188,7 @@ if (matcher === 'Bash') {
       if (positional.length < 2) continue;
       const dest = positional[positional.length - 1];
       if (!isArtifactPath(dest)) {
-        denyBash(command, `"cp" destination "${dest}" is outside ai-workflow-data/`);
+        denyBash(command, `"cp" destination "${dest}" is outside the artifact root`);
       }
       continue;
     }
@@ -188,7 +200,7 @@ if (matcher === 'Bash') {
       if (positional.length < 2) continue;
       const dest = positional[positional.length - 1];
       if (!isArtifactPath(dest)) {
-        denyBash(command, `"mv" destination "${dest}" is outside ai-workflow-data/`);
+        denyBash(command, `"mv" destination "${dest}" is outside the artifact root`);
       }
       continue;
     }
@@ -202,7 +214,7 @@ if (matcher === 'Bash') {
       // Skip glob/wildcard args we cannot statically resolve — fail-open.
       if (arg.includes('*') || arg.includes('?')) continue;
       if (!isArtifactPath(arg)) {
-        denyBash(command, `"${cmd}" target "${arg}" is outside ai-workflow-data/`);
+        denyBash(command, `"${cmd}" target "${arg}" is outside the artifact root`);
       }
     }
   }

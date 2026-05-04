@@ -5,7 +5,7 @@ Lookup table for the per-role contents of a dispatch bundle. Read the role block
 The two upstream rules from `SKILL.md` → `## Context Bundle by Role` apply to every block below and are not repeated per-role:
 
 1. **Role Contract.** Read `${CLAUDE_PLUGIN_ROOT}/ai/agents/<role>.md` and copy the `<!-- role-contract:<role> -->` marker block verbatim into the bundle's `## Role Contract` section. Surrounding prose is human documentation only.
-2. **Cache resolution.** Every `<!-- section:<tag> -->` listed below resolves via the Project-Level Context Cache: grep the tag's anchor block out of `ai-workflow-data/config/domain-contexts.cache.md` when the tag is in `domain-contexts.cache.manifest.json`, otherwise extract live from `PROJECT_CONFIG.md`.
+2. **Cache resolution.** Every `<!-- section:<tag> -->` listed below resolves via the Project-Level Context Cache: grep the tag's anchor block out of `<artifact-root>/config/domain-contexts.cache.md` when the tag is in `domain-contexts.cache.manifest.json`, otherwise extract live from `PROJECT_CONFIG.md`.
 
 ---
 

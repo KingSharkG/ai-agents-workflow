@@ -9,6 +9,8 @@ Perform a lightweight machine-oriented FE/BE compatibility check, including drif
 > The block below is read verbatim by `context-minimizer` on every dispatch and copied into this role's dispatch bundle (`## Role Contract` section). The surrounding prose in this file is human documentation — only the marker block is load-bearing at runtime. Edit with care: changes here take effect on the next dispatch.
 
 <!-- role-contract:integration-checker -->
+**Artifact root:** Extract the absolute path from the bundle's `<!-- artifact-root: <abs-path> -->` fact line (immediately after `<!-- dispatch-bundle:start ... -->`). Use that absolute path as the substitution for every `<artifact-root>/...` reference below — `<artifact-root>` is a placeholder, not a literal directory name.
+
 **Mission:** Perform a lightweight machine-oriented FE/BE compatibility check, including drift checks when only one side changed but the shared contract boundary may have moved.
 
 **Skills:**
@@ -27,7 +29,7 @@ If context is insufficient to compare contract surfaces safely, return a Blocker
 
 **Success:** detects likely FE/BE mismatch quickly; detects boundary drift even when only one side changed; findings explicit enough for a narrow fix; stays compact; telemetry + context manifest written.
 
-**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:integration-checker -->
 
 ## Dispatch Bundle Protocol

@@ -45,11 +45,11 @@ A bullet list of adds / changes / removes, grouped by owned section. Format:
 
 ```
 AskUserQuestion:
-  question: "Apply these changes to ai-workflow-data/config/PROJECT_CONFIG.md?"
+  question: "Apply these changes to <artifact-root>/config/PROJECT_CONFIG.md?"
   header: "Config review"
   options:
     - label: "Approve and write"
-      description: "Write the file now. Creates ai-workflow-data/ and ai-workflow-data/tasks/.gitkeep if missing."
+      description: "Write the file now. Creates <artifact-root>/ and <artifact-root>/tasks/.gitkeep if missing."
     - label: "Revise with comments"
       description: "Keep iterating — describe what to change next."
 ```

@@ -47,7 +47,7 @@ After the Lead returns, but BEFORE dispatching Executor (or Integration Checker 
 
 ```bash
 awk '/<!-- section:tep-clarifying-questions -->/,/<!-- \/section:tep-clarifying-questions -->/' \
-  ai-workflow-data/tasks/<task_id>/<subtask_id>/ai-work.md \
+  <artifact-root>/tasks/<task_id>/<subtask_id>/ai-work.md \
   | grep -E '^\s*[0-9]+\.\s+\*\*' | head -1
 ```
 
@@ -87,7 +87,7 @@ Reject any dispatch result that:
 | after-integration-checker | + `section:integration-check` non-empty (if triggered) |
 | after-reviewer | + `section:review` non-empty; `<subtask_id>/summary.md` exists |
 | escalation | + `section:escalation-N` matching count |
-| task-done | task-root `ai-workflow-data/tasks/<task_id>/summary.md` exists AND `## Task Status` says `workflow_state: complete` with zero open gates and zero pending user actions |
+| task-done | task-root `<artifact-root>/tasks/<task_id>/summary.md` exists AND `## Task Status` says `workflow_state: complete` with zero open gates and zero pending user actions |
 
 **Escalation-N assignment rule:** Before appending an escalation section, count all existing `<!-- section:escalation-* -->` blocks in the subtask's `ai-work.md` and set N = count + 1. Always recount from the file — never rely on in-memory state.
 
@@ -98,8 +98,8 @@ On rejection for reason (1), do NOT re-dispatch the same agent. Inspect `ai-work
 After every agent dispatch returns, run:
 
 ```bash
-ls ai-workflow-data/tasks/<task_id>/<subtask_id>/
-head -20 ai-workflow-data/tasks/<task_id>/<subtask_id>/summary.md
+ls <artifact-root>/tasks/<task_id>/<subtask_id>/
+head -20 <artifact-root>/tasks/<task_id>/<subtask_id>/summary.md
 ```
 
 Verify:
@@ -108,7 +108,7 @@ Verify:
 2. `summary.md` contains diagnostic headings (`## Telemetry`, `## Context Manifest`).
 3. If `ai-work.md` is missing entirely, this indicates the Pre-Dispatch Checklist was skipped — flag as an orchestration defect and do NOT proceed to the next agent in the chain.
 
-After accepting a subtask completion, read `<subtask_id>/summary.md` (written by Reviewer) and extend `ai-workflow-data/tasks/<task_id>/summary.md` with a new row in the **Context Breakdown** table using the manifest totals from `<!-- section:context-manifest -->`, and refresh the **Repeat reads** line. Use the `telemetry-summary` skill for the exact template.
+After accepting a subtask completion, read `<subtask_id>/summary.md` (written by Reviewer) and extend `<artifact-root>/tasks/<task_id>/summary.md` with a new row in the **Context Breakdown** table using the manifest totals from `<!-- section:context-manifest -->`, and refresh the **Repeat reads** line. Use the `telemetry-summary` skill for the exact template.
 
 ## Token-saving rules
 

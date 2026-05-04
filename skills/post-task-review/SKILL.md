@@ -5,7 +5,7 @@ description: Produce a structured Retrospective Report after task completion —
 
 # Post-Task Review Skill
 
-Produce a structured Retrospective Report after a task reaches `phase: complete`. The retrospective is appended as a `## Retrospective` section to the existing task-level `ai-workflow-data/tasks/<task_id>/summary.md`. It synthesizes rework patterns, artifact completeness, dispatch-bundle coverage, telemetry gaps, and actionable recommendations.
+Produce a structured Retrospective Report after a task reaches `phase: complete`. The retrospective is appended as a `## Retrospective` section to the existing task-level `<artifact-root>/tasks/<task_id>/summary.md`. It synthesizes rework patterns, artifact completeness, dispatch-bundle coverage, telemetry gaps, and actionable recommendations.
 
 ## When to Use
 
@@ -15,8 +15,8 @@ Produce a structured Retrospective Report after a task reaches `phase: complete`
 
 ## Input
 
-- `ai-workflow-data/tasks/<task_id>/orchestration-state.json` — subtask ledger
-- `ai-workflow-data/tasks/<task_id>/summary.md` — task-level telemetry
+- `<artifact-root>/tasks/<task_id>/orchestration-state.json` — subtask ledger
+- `<artifact-root>/tasks/<task_id>/summary.md` — task-level telemetry
 - Each `<subtask_id>/summary.md` — per-subtask telemetry, context manifest, and `<!-- section:dispatch-bundles -->` audit lines (one per dispatch — bundles themselves are inline in the Task prompt and not persisted)
 
 ## Output

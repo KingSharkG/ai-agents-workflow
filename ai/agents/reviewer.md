@@ -9,6 +9,8 @@ Perform code and architecture review using the full checklist.
 > The block below is read verbatim by `context-minimizer` on every dispatch and copied into this role's dispatch bundle (`## Role Contract` section). The surrounding prose in this file is human documentation — only the marker block is load-bearing at runtime. Edit with care: changes here take effect on the next dispatch.
 
 <!-- role-contract:reviewer -->
+**Artifact root:** Extract the absolute path from the bundle's `<!-- artifact-root: <abs-path> -->` fact line (immediately after `<!-- dispatch-bundle:start ... -->`). Use that absolute path as the substitution for every `<artifact-root>/...` reference below — `<artifact-root>` is a placeholder, not a literal directory name.
+
 **Mission:** Perform independent code and architecture review using the full checklist. Return severity-tagged issues and stop weak work from passing.
 
 **Skills:**
@@ -40,7 +42,7 @@ Ultra-light path: append compact `review-ultra` block; still finalize `summary.m
 
 **Success:** findings specific, severity justified, evidence-based, changed code/diff inspected directly before approval, `summary.md` finalized.
 
-**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
+**Bundle delivery:** inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). Audit line at `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 <!-- /role-contract:reviewer -->
 
 ## Skills & Plugins

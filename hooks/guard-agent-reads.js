@@ -19,7 +19,8 @@
  */
 
 const path = require('path');
-const { resolvePluginRoot } = require('./_resolve-plugin-root');
+const { resolvePluginRoot } = require('./lib/plugin-root');
+const { resolveArtifactRoot, canonicalize } = require('./lib/artifact-root');
 
 const filePath = process.env.CLAUDE_TOOL_INPUT_FILE_PATH || '';
 const PLUGIN_ROOT = resolvePluginRoot();
@@ -28,18 +29,22 @@ if (!filePath) {
   process.exit(0);
 }
 
-const resolved = path.resolve(filePath);
-const pluginResolved = path.resolve(PLUGIN_ROOT);
+// Canonicalize via realpath (matching guard-orchestrator-source-writes) so a
+// symlinked artifact root produces the same comparison form across hooks.
+const resolved = canonicalize(filePath);
+const pluginResolved = canonicalize(PLUGIN_ROOT);
+const ARTIFACT = resolveArtifactRoot();
+const artifactRootAbs = ARTIFACT.root ? canonicalize(ARTIFACT.root) : null;
 
 // --- Restricted paths ---
 // 1. Governance files:    ${PLUGIN_ROOT}/ai/governance/*.md
 // 2. Core files:          ${PLUGIN_ROOT}/ai/core/*.md
 // 3. Playbooks:           ${PLUGIN_ROOT}/ai/playbooks/*.md
 // 4. Canonical contracts:  ${PLUGIN_ROOT}/ai/agents/*.md
-// 5. PROJECT_CONFIG.md:   ai-workflow-data/config/PROJECT_CONFIG.md
-// 6. Derived config cache: ai-workflow-data/config/domain-contexts.cache.md
-//                          ai-workflow-data/config/domain-contexts.cache.manifest.json
-//                          ai-workflow-data/config/domain-contexts/*  (legacy fan-out, still warned)
+// 5. PROJECT_CONFIG.md:   <artifact-root>/config/PROJECT_CONFIG.md
+// 6. Derived config cache: <artifact-root>/config/domain-contexts.cache.md
+//                          <artifact-root>/config/domain-contexts.cache.manifest.json
+//                          <artifact-root>/config/domain-contexts/*  (legacy fan-out, still warned)
 
 const restrictedPluginDirs = [
   path.join(pluginResolved, 'ai', 'governance'),
@@ -52,16 +57,25 @@ const isRestrictedPluginFile = restrictedPluginDirs.some(
   (dir) => resolved.startsWith(dir + path.sep) && resolved.endsWith('.md'),
 );
 
-const isProjectConfig =
-  resolved.endsWith(path.join('ai-workflow-data', 'config', 'PROJECT_CONFIG.md'));
+const projectConfigAbs = artifactRootAbs
+  ? path.join(artifactRootAbs, 'config', 'PROJECT_CONFIG.md')
+  : null;
+const cacheFileAbs = artifactRootAbs
+  ? path.join(artifactRootAbs, 'config', 'domain-contexts.cache.md')
+  : null;
+const cacheManifestAbs = artifactRootAbs
+  ? path.join(artifactRootAbs, 'config', 'domain-contexts.cache.manifest.json')
+  : null;
+const legacyDomainContextsDirAbs = artifactRootAbs
+  ? path.join(artifactRootAbs, 'config', 'domain-contexts')
+  : null;
 
-const cacheFile = path.join('ai-workflow-data', 'config', 'domain-contexts.cache.md');
-const cacheManifest = path.join('ai-workflow-data', 'config', 'domain-contexts.cache.manifest.json');
-const legacyDomainContextsDir = path.join('ai-workflow-data', 'config', 'domain-contexts');
+const isProjectConfig = projectConfigAbs ? resolved === projectConfigAbs : false;
+
 const isDerivedContextCache =
-  resolved.endsWith(cacheFile) ||
-  resolved.endsWith(cacheManifest) ||
-  resolved.includes(legacyDomainContextsDir + path.sep);
+  (cacheFileAbs && resolved === cacheFileAbs) ||
+  (cacheManifestAbs && resolved === cacheManifestAbs) ||
+  (legacyDomainContextsDirAbs && resolved.startsWith(legacyDomainContextsDirAbs + path.sep));
 
 if (!isRestrictedPluginFile && !isProjectConfig && !isDerivedContextCache) {
   process.exit(0);

@@ -1,6 +1,6 @@
 # summary.md skeleton
 
-Write to `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md`:
+Write to `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md`:
 
 ```markdown
 # Subtask Summary — <subtask_id>

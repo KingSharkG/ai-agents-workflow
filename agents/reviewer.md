@@ -21,11 +21,11 @@ hooks:
 
 On startup, your dispatch prompt carries an **inline dispatch bundle** wrapped in `<!-- dispatch-bundle:start ... -->` … `<!-- dispatch-bundle:end -->` markers. The bundle contains your role contract excerpts, project context, governance excerpts (review checklist, DoD), and artifact input (implementation, spec, diff) — all pre-curated by the orchestrator via the `context-minimizer` skill. Work from the inline payload directly. Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files; do NOT search for a `roles/<role>.md` file (none exists in current tasks).
 
-**Bundle delivery:** inline in the Task `prompt` parameter. The orchestrator records a one-line audit entry at `ai-workflow-data/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`. As Reviewer you read these audit lines as part of your rollup to verify the bundle obligation was honored each cycle.
+**Bundle delivery:** inline in the Task `prompt` parameter. The orchestrator records a one-line audit entry at `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`. As Reviewer you read these audit lines as part of your rollup to verify the bundle obligation was honored each cycle.
 
 ## MANDATORY OUTPUT (every review, no exceptions)
 
-1. **FIRST action — write `summary.md` skeleton**: Write `ai-workflow-data/tasks/<task_id>/<subtask_id>/summary.md` with `verdict: TBD`. This file MUST exist before you touch `ai-work.md`.
+1. **FIRST action — write `summary.md` skeleton**: Write `<artifact-root>/tasks/<task_id>/<subtask_id>/summary.md` with `verdict: TBD`. This file MUST exist before you touch `ai-work.md`.
 2. **Append review** to `<!-- section:review -->` in the subtask's `ai-work.md`. Use EXACTLY `<!-- section:review -->` / `<!-- /section:review -->` — NOT `section:review-report`, `section:review-cycle*`, or any other variant. Close every section with `<!-- /section:X -->` (NOT `<!-- end:X -->`).
 3. **LAST action — finalize `summary.md`**: Update with actual verdict, files-changed, telemetry, context manifest, and notes.
 

@@ -21,7 +21,7 @@
  * Env vars read:
  *   CLAUDE_TOOL_INPUT_SUBAGENT_TYPE — agent role being dispatched
  *   CLAUDE_TOOL_INPUT_PROMPT        — agent prompt (parsed for task_id + subtask_id)
- *   CLAUDE_PLUGIN_ROOT              — plugin installation root (via _resolve-plugin-root)
+ *   CLAUDE_PLUGIN_ROOT              — plugin installation root (via lib/plugin-root)
  *
  * argv (for compatibility with legacy evaluate-triggers entry):
  *   argv[2] — optional target agent override; falls back to subagentType env
@@ -34,11 +34,18 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolvePluginRoot, getPluginVersion } = require('./_resolve-plugin-root');
+const { resolvePluginRoot, getPluginVersion } = require('./lib/plugin-root');
+const { resolveArtifactRoot } = require('./lib/artifact-root');
 
 const PLUGIN_ROOT = resolvePluginRoot();
 const CWD = process.cwd();
-const TASKS_ROOT = path.join('ai-workflow-data', 'tasks');
+
+// Resolve the consumer-repo artifact root once. When the resolver fails (no
+// artifact folder, or legacy ./ai-workflow-data/ still present) we surface the
+// diagnostic only on dispatch attempts that actually need a task directory.
+const ARTIFACT = resolveArtifactRoot();
+const ARTIFACT_ROOT = ARTIFACT.root; // absolute path or null
+const TASKS_ROOT = ARTIFACT_ROOT ? path.join(ARTIFACT_ROOT, 'tasks') : null;
 
 // ---------- Phase 1: parse tool input + locate active task (one-shot) ----------
 
@@ -52,6 +59,16 @@ const prompt = process.env.CLAUDE_TOOL_INPUT_PROMPT || '';
 // invariants apply to it. Exit fast.
 if (!subagentType || subagentType === 'chief-orchestrator') {
   process.exit(0);
+}
+
+// Legacy folder block: if ./ai-workflow-data/ exists and no current-format
+// folder is present, refuse to dispatch ANY non-orchestrator/non-init agent.
+// guard-orchestrator-source-writes blocks the orchestrator's writes once
+// legacy is detected, but without this gate a subagent dispatch could still
+// slip through when the prompt has no parseable task ID.
+if (ARTIFACT.legacyDetected && !ARTIFACT.root && subagentType !== 'init') {
+  console.error(`[pre-task-guard] BLOCKED: ${ARTIFACT.error}\n`);
+  process.exit(1);
 }
 
 function parseTaskIdFromPrompt(p) {
@@ -69,7 +86,7 @@ function taskPrefixFor(id) {
 }
 
 function mostRecentTaskDir() {
-  if (!fs.existsSync(TASKS_ROOT)) return null;
+  if (!TASKS_ROOT || !fs.existsSync(TASKS_ROOT)) return null;
   let best = null;
   let bestMtime = -Infinity;
   let entries;
@@ -121,7 +138,7 @@ function parseSubtaskId(taskId, p) {
 // Resolve the active task: parsed id → 2-segment prefix → most recent. Each
 // candidate is accepted only if its orchestration-state.json exists.
 let resolvedTaskId = null;
-{
+if (TASKS_ROOT) {
   const candidates = [];
   if (parsedId) {
     candidates.push(parsedId);
@@ -193,12 +210,16 @@ if (!pluginRootValid) {
 }
 
 if (taskIdFromPrompt) {
+  if (!TASKS_ROOT) {
+    console.error(`[pre-task-guard] BLOCKED: ${ARTIFACT.error}\n`);
+    process.exit(1);
+  }
   const taskDir = path.join(TASKS_ROOT, taskIdFromPrompt);
 
   if (!fs.existsSync(taskDir)) {
     console.error(
       `[pre-task-guard] BLOCKED: task directory not found: ${taskDir}\n` +
-        `Chief Orchestrator must create ai-workflow-data/tasks/${taskIdFromPrompt}/task-data.md before dispatching any agent.\n`,
+        `Chief Orchestrator must create ${path.relative(CWD, taskDir) || taskDir}/task-data.md before dispatching any agent.\n`,
     );
     process.exit(1);
   }
@@ -231,9 +252,12 @@ if (taskIdFromPrompt) {
     const skeletonPath = findSkeletonPath(taskDir, subtaskIdFromPrompt);
 
     if (!skeletonPath) {
+      const expectedRel =
+        path.relative(CWD, path.join(taskDir, 'phase-X', subtaskIdFromPrompt, 'ai-work.md')) ||
+        path.join(taskDir, 'phase-X', subtaskIdFromPrompt, 'ai-work.md');
       console.error(
         `[pre-task-guard] BLOCKED: ai-work.md skeleton not found for ${subtaskIdFromPrompt}.\n` +
-          `Chief Orchestrator must write ai-workflow-data/tasks/${taskIdFromPrompt}/phase-X/${subtaskIdFromPrompt}/ai-work.md\n` +
+          `Chief Orchestrator must write ${expectedRel}\n` +
           `using the template from ${PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md → section:ai-work-skeleton\n` +
           `before dispatching ${subagentType}.\n`,
       );
@@ -330,7 +354,9 @@ if (GATED_ROLES.has(subagentType)) {
 // ---------- Phase 4: trigger evaluation (non-blocking, stdout) ----------
 
 const GOVERNANCE_PATH = path.join(PLUGIN_ROOT, 'ai', 'governance', 'TRIGGER_RULES.md');
-const PROJECT_CONFIG_PATH = path.join(CWD, 'ai-workflow-data', 'config', 'PROJECT_CONFIG.md');
+const PROJECT_CONFIG_PATH = ARTIFACT_ROOT
+  ? path.join(ARTIFACT_ROOT, 'config', 'PROJECT_CONFIG.md')
+  : null;
 const ARTIFACT_PATH = process.argv[3] || process.env.ARTIFACT_PATH || '';
 const targetAgent = (process.argv[2] || rawSubagentType).includes(':')
   ? (process.argv[2] || rawSubagentType).split(':').pop()
@@ -372,7 +398,9 @@ function parseKeywordSection(filePath, sectionName) {
   return rules;
 }
 
-const CACHE_PATH = path.join(CWD, 'ai-workflow-data', 'config', '.trigger-keywords-cache.json');
+const CACHE_PATH = ARTIFACT_ROOT
+  ? path.join(ARTIFACT_ROOT, 'config', '.trigger-keywords-cache.json')
+  : null;
 
 function getFileMtime(filePath) {
   try {
@@ -383,6 +411,7 @@ function getFileMtime(filePath) {
 }
 
 function loadCachedRules() {
+  if (!CACHE_PATH) return null;
   try {
     return JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8'));
   } catch (_) {
@@ -391,6 +420,7 @@ function loadCachedRules() {
 }
 
 function saveCachedRules(cache) {
+  if (!CACHE_PATH) return;
   try {
     fs.writeFileSync(CACHE_PATH, JSON.stringify(cache), 'utf8');
   } catch (_) {}
