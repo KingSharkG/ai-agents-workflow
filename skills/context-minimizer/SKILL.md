@@ -140,6 +140,22 @@ Per-role bundle blocks above name the `<!-- section:<tag> -->` to extract from e
 - Any pre-existing `roles/<role>.md` files from before this change are vestigial and may be deleted by the orchestrator at task close.
 - Always consult the Project-Level Context Cache (`<artifact-root>/config/domain-contexts.cache.manifest.json`) before extracting any PROJECT_CONFIG.md section. Live extraction from PROJECT_CONFIG.md is the fallback path, not the default — silently re-extracting when a cached copy exists wastes the work the init / mutate skills did. Record every cache miss as `cache_miss: <tag>` in the subtask's `summary.md` so repeat misses surface in retrospective.
 
+## Optional: PR Lessons Injection (reviewer bundles)
+
+When assembling a **reviewer** bundle, also inject a `<!-- section:pr-lessons -->` block if `<artifact-root>/knowledge/pr-lessons.md` exists and is non-empty. Filter to lessons whose `Tags` intersect the changed-file paths/extensions (rough match: language tag matches file extension; area tag matches a path segment). Cap at the top 10 by `Last seen` desc to keep the bundle small. Format:
+
+```
+<!-- section:pr-lessons -->
+## PR Lessons (relevant to this diff)
+- <slug>: <rule> — Fix: <fix> [Source: <first source url>]
+- ...
+<!-- /section:pr-lessons -->
+```
+
+If the file is missing, empty, or no lesson tags intersect the diff, omit the section entirely (do NOT inject an empty section). The reviewer's stub handles the absent case by emitting "PR Lessons: 0 loaded" once.
+
+This injection is the canonical path for reviewer-side lesson consultation. The `pr-lessons-check` skill is for direct (out-of-bundle) invocation by the user before commit / PR creation. Do not invoke `pr-lessons-check` from inside this skill — bundle assembly stays read-only and side-effect-free.
+
 ## Related skills
 
 - `project-config-template` → "Derived Context Cache" — authoritative definition of the combined cache file layout, manifest format, and generation protocol (consumer repo gets the cache written on every `init` / `update`).

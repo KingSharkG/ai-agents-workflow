@@ -63,6 +63,7 @@ Five namespaced slash commands cover the plugin's surface:
 | `/ai-agents-workflow:remove <target-type> <value> [--domain <d>]` | Remove a config entry                                 |
 | `/ai-agents-workflow:task <description>`                          | Classify and route a task (see Intake Classification) |
 | `/ai-agents-workflow:continue [task_id]`                          | Resume an interrupted or in-progress task             |
+| `/ai-agents-workflow:pr-lessons <PR-ref>`                         | Harvest review comments from a PR into the lessons file |
 
 Valid `<target-type>` values for `:add` / `:remove`: `domain`, `skill`, `plugin`, `baseline`, `validation-rule`, `forbidden-action`, `best-practice`, `cross-domain-rule`.
 
@@ -80,6 +81,21 @@ The `/ai-agents-workflow:task` command classifies each request before deciding h
 | `execution-full` | Everything else (default) | Runs the full orchestration pipeline |
 
 If the request is ambiguous, the orchestrator asks one clarifying question before proceeding. See `ai/agents/chief-orchestrator.md` → Intake Classification Protocol for the full heuristics.
+
+## Knowledge: PR Lessons
+
+`/ai-agents-workflow:pr-lessons <PR-ref>` harvests review comments from a GitHub PR (your own or anyone's) and turns them into reusable lessons so the same mistake doesn't recur.
+
+- **Storage:** `<artifact-root>/knowledge/pr-lessons.md` — one file per project, append-only with dedup on the rule slug.
+- **Format:** each lesson is a `## <slug>` block with `Rule`, `Why`, `Fix`, `Tags`, `Source`, `Seen`, `First seen`, `Last seen`. Owned by the `pr-lessons-store` skill — do not hand-edit the structure.
+- **Source:** GitHub MCP when available; falls back to the `gh` CLI. Manual trigger only in v1.
+- **Consumed by:**
+  - The `reviewer` agent automatically consults the file via the `pr-lessons-check` skill on every review.
+  - You can run the same check before commit / PR creation: invoke the `pr-lessons-check` skill against `git diff --staged` (or any range) to see likely repeats of past feedback.
+
+`<PR-ref>` accepts `123`, `owner/repo#123`, or a full PR URL. The harvester classifies each comment, generalizes it into a rule, asks you which to keep / edit / drop, then merges accepted lessons (incrementing `Seen` and adding source links for repeats).
+
+The feature is self-contained (own command, agent, three skills, dedicated `knowledge/` subdir) so it can be lifted into a standalone plugin later by swapping the artifact-root resolver.
 
 ## External sources
 
@@ -160,7 +176,7 @@ Run `/ai-agents-workflow:init` in a fresh consumer repo (or use natural language
 - `agents/` — 9 subagent definitions (adds `init`, `resume-orchestrator`)
 - `skills/` — 15 skills with SKILL.md each (adds `project-discovery`, `project-config-template`, `project-config-review`, `project-config-mutate`)
 - `hooks/` — 5 Node.js hook scripts plus `hooks.json`
-- `commands/` — 6 user-facing slash commands (`init`, `add`, `update`, `remove`, `task`, `continue`) namespaced as `/ai-agents-workflow:<command>`
+- `commands/` — 7 user-facing slash commands (`init`, `add`, `update`, `remove`, `task`, `continue`, `pr-lessons`) namespaced as `/ai-agents-workflow:<command>`
 - `ai/core/`, `ai/governance/`, `ai/playbooks/`, `ai/agents/` — canonical governance docs
 
 See `CLAUDE.md` for the full layout and path conventions.
