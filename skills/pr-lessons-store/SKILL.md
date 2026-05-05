@@ -11,7 +11,9 @@ Single source of truth for the lessons file format. The harvester agent and the 
 
 `<artifact-root>/knowledge/pr-lessons.md`
 
-Resolve `<artifact-root>` exactly the same way the rest of the plugin does (in-project `<cwd>/.claude/aiaw-data-<project>/` or sibling `<dirname(cwd)>/aiaw-data-<project>/`). If `<artifact-root>/knowledge/` does not exist, create it before writing. If the file does not exist, create it with the header below.
+**The caller passes you the absolute artifact-root path** — extracted from the dispatch bundle's `<!-- artifact-root: <abs-path> -->` fact line by the harvester agent, or obtained via `node "${CLAUDE_PLUGIN_ROOT}/hooks/bin/resolve-artifact-root.js"` for direct-CLI use. Treat `<artifact-root>` as that absolute path; **do not re-derive it, do not guess from `<cwd>/.claude/`, and do not fall back to a global location**. If the caller did not pass an absolute path, refuse to write and report the contract violation.
+
+If `<artifact-root>/knowledge/` does not exist, create it before writing. If the file does not exist, create it with the header below.
 
 ## File Header
 

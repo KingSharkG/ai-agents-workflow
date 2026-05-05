@@ -15,11 +15,20 @@ Consult lessons harvested from past PR reviews and flag any in the current diff 
 
 ## Input
 
-Either:
+Required:
+- **`artifact_root`** — absolute filesystem path to the project's artifact root. The skill reads `<artifact_root>/knowledge/pr-lessons.md`. **Never resolve this internally** — the caller owns resolution. See "Caller flows" below for how each caller obtains it.
+
+Plus one of:
 - A unified diff string, OR
 - A diff source spec: `{ "kind": "staged" | "unstaged" | "range", "range": "<base>..<head>" }` — the skill resolves it via `git diff`.
 
-If the lessons file `<artifact-root>/knowledge/pr-lessons.md` is missing or empty, return immediately with `{ "lessons_loaded": 0, "matches": [] }` — never error. Callers that surface the result to a human MUST still print "PR Lessons: 0 loaded" once so the wiring is observable; the skill itself is silent.
+If the caller did not pass an absolute `artifact_root`, refuse to run and report the contract violation. If the lessons file `<artifact_root>/knowledge/pr-lessons.md` is missing or empty, return immediately with `{ "lessons_loaded": 0, "matches": [] }` — never error. Callers that surface the result to a human MUST still print "PR Lessons: 0 loaded" once so the wiring is observable; the skill itself is silent.
+
+## Caller flows
+
+- **Reviewer agent (orchestrator pipeline)** — does NOT invoke this skill. Lessons are pre-injected into the reviewer's dispatch bundle as a `<!-- section:pr-lessons -->` block by `context-minimizer`; the reviewer reads from the bundle. This skill stays out of that path.
+- **User pre-commit / pre-PR (direct invocation)** — the user's main session resolves the artifact root via `node "${CLAUDE_PLUGIN_ROOT}/hooks/bin/resolve-artifact-root.js"` (exit 0 → stdout = absolute path; exit 1 → surface stderr and abort), then passes that path as `artifact_root`.
+- **Ad-hoc programmatic callers** — must resolve via the same wrapper and pass the absolute path. No exceptions.
 
 ## Config
 
