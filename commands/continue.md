@@ -1,7 +1,7 @@
 ---
 description: Resume an in-progress task by task_id, or show a menu of resumable tasks.
 argument-hint: "[task_id or subtask_id]"
-allowed-tools: Task, AskUserQuestion, Read
+allowed-tools: Task, AskUserQuestion, Read, Bash(node:*), Skill
 ---
 
 Dispatch the `resume-orchestrator` subagent to resume an interrupted workflow task.
@@ -11,8 +11,8 @@ If `$ARGUMENTS` is empty, the resume-orchestrator will discover all in-progress 
 If `$ARGUMENTS` is non-empty, pass it as the `task_id` directly to the resume-orchestrator.
 
 Pre-flight:
-1. If CWD does not contain `<artifact-root>/` and does contain `.claude-plugin/plugin.json`, surface: "You appear to be in the plugin directory. Run this command from your project repo instead." and exit without dispatching.
-2. If `<artifact-root>/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
+1. Invoke the `ai-agents-workflow:resolve-artifact-root` skill to obtain `ARTIFACT_ROOT`. On resolver failure, follow the skill's read-mostly branch (proceed only if the user confirms after the surfaced diagnostic).
+2. If `${ARTIFACT_ROOT}/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
 
 Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:resume-orchestrator`, passing the following prompt:
 

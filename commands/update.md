@@ -1,12 +1,12 @@
 ---
 description: Rescan the repo and refresh CLI-owned sections of <artifact-root>/config/PROJECT_CONFIG.md.
 argument-hint: ""
-allowed-tools: Task
+allowed-tools: Task, Bash(node:*), Skill
 ---
 
 Dispatch the `init` subagent in `update` mode.
 
-Pre-flight: if CWD does not contain `<artifact-root>/` and does contain `.claude-plugin/plugin.json`, surface: "You appear to be in the plugin directory. Run this command from your project repo instead." and exit without dispatching.
+Pre-flight: invoke the `ai-agents-workflow:resolve-artifact-root` skill to obtain `ARTIFACT_ROOT` for the dispatch. On resolver failure, follow the skill's mutating-command branch (exit without dispatching after the surfaced diagnostic).
 
 Use the Task tool with `subagent_type: ai-agents-workflow:init` and prompt:
 

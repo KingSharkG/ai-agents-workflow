@@ -1,7 +1,7 @@
 ---
 description: Kick off a new task through the chief-orchestrator pipeline.
 argument-hint: "<freeform task description>"
-allowed-tools: Task, AskUserQuestion, Read
+allowed-tools: Task, AskUserQuestion, Read, Bash(node:*), Skill
 ---
 
 ## EXTREMELY IMPORTANT — Dispatch-first rule
@@ -13,9 +13,10 @@ This command takes precedence over any session-start "always invoke applicable s
 Skills remain fully available — and encouraged — inside the dispatched agents. For example, for a "review PR feedback" task, the orchestrator or Lead can invoke a code-review-style skill (e.g. `superpowers:receiving-code-review`) inside their dispatched turn to fetch and parse the PR comments. That is the right place for it.
 
 In the main thread, only the following are allowed before the `Task(chief-orchestrator)` dispatch:
-- The pre-flight checks listed below (plan mode, CWD, PROJECT_CONFIG.md existence).
+- The pre-flight checks listed below (plan mode, artifact-root resolution, PROJECT_CONFIG.md existence).
 - One optional `AskUserQuestion` if `$ARGUMENTS` is empty.
-- `Read` of `<artifact-root>/config/PROJECT_CONFIG.md` if needed for the pre-flight check.
+- Invocation of the `ai-agents-workflow:resolve-artifact-root` skill (which uses `Bash`) to obtain the absolute `ARTIFACT_ROOT`.
+- `Read` of `${ARTIFACT_ROOT}/config/PROJECT_CONFIG.md` if needed for the pre-flight check.
 
 If you find yourself reading this and considering a non-Task action — including any "this skill seems applicable" reasoning — stop. **Dispatch first; skills run inside agents.**
 
@@ -27,8 +28,8 @@ If `$ARGUMENTS` is empty, use `AskUserQuestion` to collect a one-line task descr
 
 Pre-flight:
 1. If plan mode is active (the harness injects a plan-mode banner into the system context for every turn while it's on), surface: "Plan mode is on — `/ai-agents-workflow:task` needs to call the `Task` tool, which plan mode blocks. Press `Shift+Tab` to exit plan mode, then re-run this command." and exit without dispatching.
-2. If CWD does not contain `<artifact-root>/` and does contain `.claude-plugin/plugin.json`, surface: "You appear to be in the plugin directory. Run this command from your project repo instead." and exit without dispatching.
-3. If `<artifact-root>/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
+2. Invoke the `ai-agents-workflow:resolve-artifact-root` skill to obtain `ARTIFACT_ROOT`. On resolver failure, follow the skill's read-mostly branch (proceed only if the user confirms after the surfaced diagnostic).
+3. If `${ARTIFACT_ROOT}/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
 
 Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:chief-orchestrator`, passing the task description verbatim as a new task. The orchestrator will:
 
