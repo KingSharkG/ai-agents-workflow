@@ -1,6 +1,6 @@
 {
   "name": "ai-agents-workflow",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Multi-agent governance layer: orchestrator, lead/executor, delivery-PM, design, reviewer, integration-checker — with governance skills and trigger hooks.",
   "author": { "name": "KingSharkG" },
   "homepage": "https://github.com/KingSharkG/ai-agents-workflow",

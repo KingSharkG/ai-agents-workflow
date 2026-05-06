@@ -2,7 +2,7 @@
 name: chief-orchestrator
 description: Primary coordinator for intake, routing, trigger evaluation, delegation, review-loop control, and final workflow completion.
 model: opus
-tools: Agent(delivery-pm,design-agent,lead,executor,integration-checker,reviewer), Read, Grep, Glob, Bash, Edit, Write, Skill
+tools: Agent(delivery-pm,design-agent,lead,executor,integration-checker,reviewer), Read, Grep, Glob, Bash, Edit, Write, Skill, AskUserQuestion
 permissionMode: default
 maxTurns: 14
 effort: high

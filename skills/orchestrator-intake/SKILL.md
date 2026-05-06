@@ -124,6 +124,8 @@ Append ` (Recommended)` to exactly one option's `label` — the one matching the
 
 The `execution-trivial` / `execution-simple` distinction is an internal optimization (skip Delivery PM/P1/Lead vs. lightweight TEP). The user does not pick between them directly — the heuristic chooses, and an "Execute (lightweight)" pick honors the heuristic's sub-choice.
 
+**No text-fallback.** If `AskUserQuestion` is unavailable in your tool allowlist, do **not** print the four options as chat text and proceed. Instead, halt with a structured error: emit a one-line message identifying that `AskUserQuestion` is missing from the orchestrator's tool allowlist and exit. Inlining the popup as text and continuing has produced silent skip-dispatch regressions where the user replies, the agent treats the conversation as already in answer mode, and the entire pipeline is bypassed. The popup is the only legal classification surface.
+
 ## Hard Constraints
 
 - The `AskUserQuestion` confirm step is non-negotiable for every request. There is no shortcut path that skips it.
