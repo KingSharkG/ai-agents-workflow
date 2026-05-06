@@ -26,6 +26,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-main-thread-mutations.js\"",
+            "blocking": true
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-orchestrator-source-writes.js\"",
             "blocking": true
           }

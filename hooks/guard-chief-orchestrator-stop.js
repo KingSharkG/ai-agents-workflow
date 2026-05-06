@@ -148,19 +148,23 @@ if (!intakeInvoked) {
   process.exit(0);
 }
 
-// -------- Did chief dispatch any subtask agent? --------
+// -------- What roles did chief dispatch? --------
 
-let dispatched = false;
+function bareSubagent(input) {
+  const sub = String((input && input.subagent_type) || '');
+  return sub.includes(':') ? sub.split(':').pop() : sub;
+}
+
+const dispatchedRoles = new Set();
 for (const tu of toolUses(entries)) {
   if (tu.name === 'Task') {
-    dispatched = true;
-    break;
+    const role = bareSubagent(tu.input);
+    if (role) dispatchedRoles.add(role);
   }
 }
 
-if (dispatched) {
-  process.exit(0);
-}
+const anyDispatch = dispatchedRoles.size > 0;
+const dispatchedExecutor = dispatchedRoles.has('executor');
 
 // -------- Did chief write task-data.md with a legitimate exit-without-dispatch path? --------
 
@@ -184,35 +188,74 @@ function extractFinalPath(toolUse) {
   return m ? m[1].toLowerCase() : null;
 }
 
-let allowedExitPath = null;
+let recordedFinalPath = null;
 for (const tu of toolUses(entries)) {
   if (!isTaskDataWrite(tu)) continue;
   const fp = extractFinalPath(tu);
-  if (fp === 'direct-answer' || fp === 'plan-only') {
-    allowedExitPath = fp;
-    break;
+  if (fp) {
+    recordedFinalPath = fp;
+    // Don't break — later writes may overwrite earlier ones; take the last.
   }
 }
 
-if (allowedExitPath) {
+const EXECUTE_PATHS = new Set([
+  'execution-trivial',
+  'execution-simple',
+  'execution-full',
+]);
+
+const isExecutePath = recordedFinalPath && EXECUTE_PATHS.has(recordedFinalPath);
+const isStopPath =
+  recordedFinalPath === 'direct-answer' || recordedFinalPath === 'plan-only';
+
+// Allow legitimate stop-without-execution paths.
+if (isStopPath && !anyDispatch) {
+  process.exit(0);
+}
+
+// On execute paths, require an Executor dispatch specifically. Lead-only
+// or design-only dispatches are not enough — code changes must run.
+if (isExecutePath && dispatchedExecutor) {
+  process.exit(0);
+}
+
+// Backwards-compat: if final_path was never recorded (older runs) but at
+// least one Task was dispatched, allow. The artifact-chain validators
+// catch downstream gaps.
+if (!recordedFinalPath && anyDispatch) {
   process.exit(0);
 }
 
 // -------- Block --------
 
+let reason;
+if (isExecutePath && !dispatchedExecutor) {
+  reason =
+    `final_path is "${recordedFinalPath}" but no Task(executor) dispatch ` +
+    `was found in this turn (dispatched roles: ` +
+    `${[...dispatchedRoles].join(', ') || 'none'}). Execute paths require ` +
+    `Executor to run so ai-work.md and summary.md are produced and ` +
+    `Reviewer can finalize the cycle.`;
+} else if (!recordedFinalPath && !anyDispatch) {
+  reason =
+    `orchestrator-intake ran but no task-data.md final_path was recorded ` +
+    `and no Task() dispatch was made. This is the v1.8.1 silent-skip-` +
+    `dispatch failure mode (intake popup degraded to chat-text fallback ` +
+    `if AskUserQuestion is missing from chief's tool allowlist).`;
+} else {
+  reason =
+    `orchestrator-intake ran but the orchestrator returned without a ` +
+    `complete artifact chain. final_path=${recordedFinalPath || '<unset>'}, ` +
+    `dispatched=[${[...dispatchedRoles].join(', ') || 'none'}].`;
+}
+
 process.stderr.write(
-  `[guard-chief-orchestrator-stop] BLOCKED: chief-orchestrator invoked ` +
-    `the orchestrator-intake skill but produced no Task() dispatch and ` +
-    `no task-data.md with final_path direct-answer or plan-only.\n` +
+  `[guard-chief-orchestrator-stop] BLOCKED: ${reason}\n` +
     `\n` +
-    `This is the v1.8.1 silent-skip-dispatch failure mode. Likely cause: ` +
-    `the four-option intake popup degraded to chat-text fallback because ` +
-    `AskUserQuestion is missing from chief-orchestrator's tool allowlist ` +
-    `(see agents/chief-orchestrator.md frontmatter).\n` +
-    `\n` +
-    `Resolution: ensure AskUserQuestion is present in chief's \`tools:\` ` +
-    `list, then restart the task. If the popup truly cannot be rendered ` +
-    `in this environment, escalate via blocker-escalation-report rather ` +
-    `than continuing inline.\n`,
+    `Resolution: on execute paths, dispatch Task(executor) (and Task(reviewer) ` +
+    `to finalize) before returning. On non-execute paths, write task-data.md ` +
+    `with final_path: direct-answer or plan-only. If the popup truly cannot ` +
+    `be rendered in this environment, escalate via blocker-escalation-report ` +
+    `rather than continuing inline.\n`,
 );
 process.exit(2);
