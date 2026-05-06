@@ -540,6 +540,46 @@ test('orchestration-state.json phase=complete with pending subtasks is rejected'
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('orchestration-state.json phase=complete without sibling task summary is rejected', () => {
+  const dir = tmpDir('state-complete-no-summary');
+  const file = path.join(dir, 'orchestration-state.json');
+  fs.writeFileSync(file, JSON.stringify(validState({ phase: 'complete', pending_subtasks: [] })));
+  // Note: NO summary.md alongside.
+  const out = runHook(file);
+  assert.strictEqual(out.status, 1);
+  assert.match(out.stderr, /cannot mark task complete/);
+  assert.match(out.stderr, /telemetry-summary skill/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('orchestration-state.json phase=complete with sibling summary having empty Status is rejected', () => {
+  const dir = tmpDir('state-complete-empty-status');
+  const file = path.join(dir, 'orchestration-state.json');
+  fs.writeFileSync(file, JSON.stringify(validState({ phase: 'complete', pending_subtasks: [] })));
+  // summary.md exists but its Status section is empty.
+  fs.writeFileSync(
+    path.join(dir, 'summary.md'),
+    '# Task Summary\n\n## Status\n\n## Next\n',
+  );
+  const out = runHook(file);
+  assert.strictEqual(out.status, 1);
+  assert.match(out.stderr, /empty ## Status section/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('orchestration-state.json phase=complete with populated task summary passes', () => {
+  const dir = tmpDir('state-complete-ok');
+  const file = path.join(dir, 'orchestration-state.json');
+  fs.writeFileSync(file, JSON.stringify(validState({ phase: 'complete', pending_subtasks: [] })));
+  fs.writeFileSync(
+    path.join(dir, 'summary.md'),
+    '# Task Summary\n\n## Status\n\n- workflow_state: complete\n- review_verdict: approved\n\n## Changes by Phase\n\n- A: 1 subtask\n',
+  );
+  const out = runHook(file);
+  assert.strictEqual(out.status, 0, out.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('orchestration-state.json current_focus overstating completion is rejected', () => {
   const dir = tmpDir('state-overstate');
   const file = path.join(dir, 'orchestration-state.json');

@@ -30,6 +30,16 @@
             "blocking": true
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-main-thread-skills.js\"",
+            "blocking": true
+          }
+        ]
       }
     ],
     "PostToolUse": [

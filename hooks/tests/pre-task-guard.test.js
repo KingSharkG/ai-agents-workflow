@@ -65,6 +65,9 @@ function defaultState(extras = {}) {
       pending_user_actions: [],
       task_summary_path: 'tasks/TP-001/summary.md',
       schema_version: 2,
+      current_subtask: null,
+      last_completed_seq: 0,
+      subtask_offsets: {},
       gates: { p1_approved: true },
       classification: 'execution-full',
     },
@@ -269,6 +272,79 @@ test('legacy state file (no schema_version) → allow with WARN', () => {
   });
   assert.strictEqual(out.status, 0, out.stderr);
   assert.match(out.stderr, /WARN: legacy task/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+// =========================================================================
+// Missing artifact root (Change 0)
+// =========================================================================
+
+test('no artifact root + no legacy + executor dispatch → block with init hint', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ptg-no-root-'));
+  const proj = path.join(root, 'proj');
+  fs.mkdirSync(proj);
+  // No .claude/aiaw-data-proj, no sibling, no legacy folder.
+  const out = runHook(proj, {
+    CLAUDE_TOOL_INPUT_SUBAGENT_TYPE: 'executor',
+    CLAUDE_TOOL_INPUT_PROMPT: 'implement TP-001-A1',
+  });
+  assert.strictEqual(out.status, 1, out.stderr);
+  assert.match(out.stderr, /cannot dispatch executor without an artifact folder/);
+  assert.match(out.stderr, /\/ai-agents-workflow:init/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('no artifact root + delivery-pm dispatch → block (no improvising)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ptg-no-root-pm-'));
+  const proj = path.join(root, 'proj');
+  fs.mkdirSync(proj);
+  const out = runHook(proj, {
+    CLAUDE_TOOL_INPUT_SUBAGENT_TYPE: 'delivery-pm',
+    CLAUDE_TOOL_INPUT_PROMPT: 'plan TP-001',
+  });
+  assert.strictEqual(out.status, 1, out.stderr);
+  assert.match(out.stderr, /cannot dispatch delivery-pm without an artifact folder/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('no artifact root + init dispatch → allow (init scaffolds the folder)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ptg-no-root-init-'));
+  const proj = path.join(root, 'proj');
+  fs.mkdirSync(proj);
+  const out = runHook(proj, {
+    CLAUDE_TOOL_INPUT_SUBAGENT_TYPE: 'init',
+    CLAUDE_TOOL_INPUT_PROMPT: 'init',
+  });
+  assert.strictEqual(out.status, 0, out.stderr);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+// =========================================================================
+// Canonical schema_version=2 validation (Change 2)
+// =========================================================================
+
+test('legacy ad-hoc state shape (subtasks[] + phase:executing) → block with migration hint', () => {
+  const { root, proj } = makeProject('adhoc-shape', {
+    taskId: 'TP-001',
+    subtaskId: 'TP-001-A1',
+    state: {
+      task_id: 'TP-001',
+      classification: 'execution-simple',
+      phase: 'executing', // not in canonical phase set
+      schema_version: 2,
+      gates: { p1_approved: true },
+      pending_subtasks: [], // satisfies legacy requiredFields check
+      // ad-hoc shape — has stray subtasks[] array, missing canonical fields
+      subtasks: [{ id: 'TP-001-A1', status: 'in-progress', current_step: 'lead' }],
+    },
+  });
+  const out = runHook(proj, {
+    CLAUDE_TOOL_INPUT_SUBAGENT_TYPE: 'executor',
+    CLAUDE_TOOL_INPUT_PROMPT: 'implement TP-001-A1',
+  });
+  assert.strictEqual(out.status, 1, out.stderr);
+  assert.match(out.stderr, /fails canonical schema_version=2 validation/);
+  assert.match(out.stderr, /unknown field "subtasks"/);
   fs.rmSync(root, { recursive: true, force: true });
 });
 

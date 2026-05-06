@@ -71,6 +71,26 @@ if (ARTIFACT.legacyDetected && !ARTIFACT.root && subagentType !== 'init') {
   process.exit(1);
 }
 
+// Missing artifact root (no legacy folder either): block any subtask-agent
+// dispatch. Without an artifact root the orchestrator cannot write canonical
+// task-data.md / orchestration-state.json / summary.md trees, so subagents
+// would either fail their own skeleton checks or improvise paths under
+// `.claude/`. Refuse explicitly and direct the user to /init.
+//
+// `delivery-pm` is included in this block (unlike the P1 phase, where it is
+// allowed) because delivery-pm needs a task directory to write its plan into.
+// `init` is exempt — it is the agent that scaffolds the missing folder.
+if (!ARTIFACT.root && subagentType !== 'init') {
+  console.error(
+    `[pre-task-guard] BLOCKED: cannot dispatch ${subagentType} without an artifact folder.\n` +
+      `${ARTIFACT.error}\n` +
+      `The chief-orchestrator must NOT improvise paths under .claude/ or anywhere else; ` +
+      `run /ai-agents-workflow:init first to scaffold the canonical layout, ` +
+      `then re-run /ai-agents-workflow:task.\n`,
+  );
+  process.exit(1);
+}
+
 function parseTaskIdFromPrompt(p) {
   if (!p) return null;
   return (
@@ -288,6 +308,57 @@ if (taskIdFromPrompt) {
             `Chief Orchestrator must include all required fields before dispatching ${subagentType}.\n`,
         );
         process.exit(1);
+      }
+
+      // Canonical-schema check (schema_version >= 2). Legacy files without
+      // schema_version are tolerated by the P1 phase (with a warn-and-upgrade
+      // hint) — they are NOT blocked here. Files claiming schema_version=2
+      // must conform.
+      if (parsedTaskState.schema_version === 2) {
+        const canonicalIssues = [];
+        if (!('current_subtask' in parsedTaskState)) {
+          canonicalIssues.push('current_subtask (string|null) missing');
+        }
+        if (!Array.isArray(parsedTaskState.pending_subtasks)) {
+          canonicalIssues.push('pending_subtasks must be an array');
+        }
+        if (typeof parsedTaskState.last_completed_seq !== 'number') {
+          canonicalIssues.push('last_completed_seq must be a number');
+        }
+        if (
+          parsedTaskState.subtask_offsets !== undefined &&
+          (typeof parsedTaskState.subtask_offsets !== 'object' ||
+            Array.isArray(parsedTaskState.subtask_offsets))
+        ) {
+          canonicalIssues.push('subtask_offsets must be an object when present');
+        }
+        const validPhases = ['planning', 'planned', 'execution', 'blocked', 'complete'];
+        if (!validPhases.includes(parsedTaskState.phase)) {
+          canonicalIssues.push(
+            `phase "${parsedTaskState.phase}" is not one of ${validPhases.join('|')}`,
+          );
+        }
+        // Reject legacy ad-hoc field shapes (e.g. subtasks[] array with
+        // current_step). The canonical schema does NOT track intra-subtask
+        // role progression in state — current_subtask is the subtask ID
+        // string, transitions live in orchestration-history.json.
+        if ('subtasks' in parsedTaskState) {
+          canonicalIssues.push(
+            'unknown field "subtasks" — canonical schema uses pending_subtasks[] + current_subtask',
+          );
+        }
+        if (canonicalIssues.length > 0) {
+          console.error(
+            `[pre-task-guard] BLOCKED: orchestration-state.json fails canonical schema_version=2 validation:\n` +
+              canonicalIssues.map((s) => `  - ${s}`).join('\n') +
+              `\n` +
+              `File: ${taskLevelStatePath}\n` +
+              `Resolution: invoke the orchestrator-state skill and follow ` +
+              `\${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/references/state-schemas.md → Migration ` +
+              `to rewrite the file in canonical shape before dispatching ${subagentType}.\n`,
+          );
+          process.exit(1);
+        }
       }
     }
 

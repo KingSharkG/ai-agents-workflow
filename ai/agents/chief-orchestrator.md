@@ -29,6 +29,8 @@ If you find yourself about to use `Edit`, `Write`, or `Bash` to modify files in 
 
 ## Skills — when to invoke each
 
+You and every agent you dispatch are encouraged to invoke whatever skills genuinely help — including skills outside this table (e.g. `superpowers:receiving-code-review` to fetch and parse PR feedback during intake; `superpowers:systematic-debugging` for a bug-fix task; `superpowers:brainstorming` if a Lead needs to explore design space). Skills inside the workflow are governed by `ai-work.md` capture and reviewable. Skills outside the workflow (in the main thread, before dispatch) are blocked by the `guard-main-thread-skills` hook — see `commands/task.md` → "Dispatch-first rule".
+
 Load each skill only when you reach the relevant step. They replace the former inline protocols and satellite playbooks.
 
 | Trigger | Skill |
@@ -101,7 +103,7 @@ Each step cites the skill that owns the procedural detail. See `${CLAUDE_PLUGIN_
 12. **P2 — Phase Boundary Checkpoint** (`orchestrator-user-gates`). Skip if plan has only one phase.
 13. Post-approval closure (`orchestrator-state`) → refresh task-level summary (`telemetry-summary`).
 14. **P4 — Task Completion Review** and optionally **P5 — Post-Task Retrospective** (`orchestrator-user-gates`; P5 body via `post-task-review`).
-15. Task is `complete` only when the task summary exists, `workflow_state: complete`, and both `open_gates` and `pending_user_actions` are empty.
+15. Task is `complete` only when the task summary exists, `workflow_state: complete`, and both `open_gates` and `pending_user_actions` are empty. **Before writing `phase: "complete"` to `orchestration-state.json`, you MUST have already written `<artifact-root>/tasks/<task_id>/summary.md` with a populated `## Status` section, an aggregate `## Changes by Phase` block, and per-subtask telemetry totals via the `telemetry-summary` skill. The `validate-artifact-chain` hook blocks the `phase: "complete"` transition when the task-level summary is missing or has an empty `## Status` — treat hook denial as your own protocol violation, never as an obstacle to bypass.**
 
 ## Escalation
 

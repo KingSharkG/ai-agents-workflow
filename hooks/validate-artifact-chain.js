@@ -528,6 +528,38 @@ if (matched.jsonValidation) {
     process.exit(1);
   }
 
+  // Task-level summary precondition: when state is being written with
+  // phase: complete, the sibling <task_id>/summary.md must exist with a
+  // populated `## Status` heading. Per-subtask summary.md presence is NOT
+  // checked here (acceptable to skip on execution-simple).
+  if (parsed.phase === 'complete') {
+    const taskDir = path.dirname(filePath);
+    const taskSummaryPath = path.join(taskDir, 'summary.md');
+    let summaryContent = null;
+    try {
+      summaryContent = fs.readFileSync(taskSummaryPath, 'utf8');
+    } catch (_) {
+      // missing or unreadable
+    }
+    let statusBlock = null;
+    if (summaryContent !== null) {
+      const m = summaryContent.match(/^##\s+(?:Task\s+)?Status\b[^\n]*\n([\s\S]*?)(?=^##\s+|$(?![\r\n]))/im);
+      statusBlock = m ? m[1].trim() : null;
+    }
+    if (!statusBlock) {
+      console.error(
+        `[validate-artifact-chain] INVALID ${matched.name}: cannot mark task complete — ` +
+          `task-level summary is missing or has empty ## Status section.\n` +
+          `Expected: ${taskSummaryPath}\n` +
+          `Resolution: invoke the telemetry-summary skill to finalize the task summary ` +
+          `(populated ## Status, ## Changes by Phase, per-subtask totals) BEFORE writing ` +
+          `phase: "complete" to ${path.basename(filePath)}.\n` +
+          `File: ${filePath}\n`,
+      );
+      process.exit(1);
+    }
+  }
+
   if (
     typeof parsed.current_focus === 'string' &&
     /all\s+\d+\s+subtasks\s+pass/i.test(parsed.current_focus) &&

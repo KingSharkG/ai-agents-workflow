@@ -140,21 +140,31 @@ Per-role bundle blocks above name the `<!-- section:<tag> -->` to extract from e
 - Any pre-existing `roles/<role>.md` files from before this change are vestigial and may be deleted by the orchestrator at task close.
 - Always consult the Project-Level Context Cache (`<artifact-root>/config/domain-contexts.cache.manifest.json`) before extracting any PROJECT_CONFIG.md section. Live extraction from PROJECT_CONFIG.md is the fallback path, not the default — silently re-extracting when a cached copy exists wastes the work the init / mutate skills did. Record every cache miss as `cache_miss: <tag>` in the subtask's `summary.md` so repeat misses surface in retrospective.
 
-## Optional: PR Lessons Injection (reviewer bundles)
+## Optional: PR Lessons Injection (executor + reviewer bundles)
 
-When assembling a **reviewer** bundle, also inject a `<!-- section:pr-lessons -->` block if `<artifact-root>/knowledge/pr-lessons.md` exists and is non-empty. Filter to lessons whose `Tags` intersect the changed-file paths/extensions (rough match: language tag matches file extension; area tag matches a path segment). Cap at the top 10 by `Last seen` desc to keep the bundle small. Format:
+When assembling a bundle for **executor** or **reviewer**, inject a `<!-- section:pr-lessons -->` block if `<artifact-root>/knowledge/pr-lessons.md` exists and is non-empty.
+
+**Filter input differs by role:**
+- **Executor** (pre-implementation): filter by the TEP's `target_files` paths/extensions. The diff doesn't exist yet, so match on the files Executor is about to touch.
+- **Reviewer** (post-implementation): filter by the changed-file paths/extensions in the diff.
+
+In both cases the rough match is: language tag matches file extension; area tag matches a path segment. Cap at the top 10 by `Last seen` desc to keep the bundle small. Format:
 
 ```
 <!-- section:pr-lessons -->
-## PR Lessons (relevant to this diff)
+## PR Lessons (relevant to this <diff|task>)
 - <slug>: <rule> — Fix: <fix> [Source: <first source url>]
 - ...
 <!-- /section:pr-lessons -->
 ```
 
-If the file is missing, empty, or no lesson tags intersect the diff, omit the section entirely (do NOT inject an empty section). The reviewer's stub handles the absent case by emitting "PR Lessons: 0 loaded" once.
+Use `this task` in the heading for executor bundles and `this diff` for reviewer bundles so the agent knows what the lessons were filtered against.
 
-This injection is the canonical path for reviewer-side lesson consultation. The `pr-lessons-check` skill is for direct (out-of-bundle) invocation by the user before commit / PR creation. Do not invoke `pr-lessons-check` from inside this skill — bundle assembly stays read-only and side-effect-free.
+If the file is missing, empty, or no lesson tags intersect the target paths, omit the section entirely (do NOT inject an empty section). The agent stubs handle the absent case by emitting "PR Lessons: 0 loaded" once.
+
+This injection is the canonical path for in-bundle lesson consultation. The `pr-lessons-check` skill is for direct (out-of-bundle) invocation by the user before commit / PR creation. Do not invoke `pr-lessons-check` from inside this skill — bundle assembly stays read-only and side-effect-free.
+
+**Why both roles consult lessons:** Executor consultation lets known issues be *avoided* during implementation rather than only *flagged* at review, reducing rework cycles. Reviewer consultation remains the safety net for cases where Executor's lesson set didn't catch something or where the diff drifted from the TEP's `target_files`.
 
 ## Related skills
 
