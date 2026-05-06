@@ -16,6 +16,16 @@ Write to `<artifact-root>/tasks/<task_id>/task-data.md` (create new file). Wrap 
 ```markdown
 # Task Data
 
+<!-- section:intake-classification -->
+### Intake Classification
+- **heuristic_verdict**: <direct-answer | plan-only | execution-trivial | execution-simple | execution-full>
+- **final_path**: <same enum — equals heuristic_verdict if user confirmed, differs if user overrode>
+- **user_action**: <confirmed | overrode>
+- **signals**: <comma-separated rule conditions that fired>
+- **risk_keywords_matched**: <comma-separated keywords, or "none">
+- **timestamp**: <ISO 8601 UTC>
+<!-- /section:intake-classification -->
+
 <!-- section:task-packet -->
 ## Task Packet
 
@@ -74,3 +84,4 @@ Totals: governance 0 | artifact 0 | source 0 | schema 0 | docs 0
 - `task_title`, Requirements Excerpt, and Scope Estimate are the workflow-driving body; `requested_by`, `priority`, Business Goal, Known Blockers, and Assumptions are audit metadata and may be omitted if genuinely unavailable.
 - If `requested_by` is unknown, prefer `user`; it remains optional audit metadata.
 - The Delivery PM will append `<!-- section:delivery-plan -->` to this same file. Do not pre-create that section.
+- The `<!-- section:intake-classification -->` block at the top of the file is owned by `orchestrator-intake` (not Delivery PM). For `direct-answer`, this block may be the ONLY content in `task-data.md` — the rest of the task-packet sections are skipped because no pipeline runs.

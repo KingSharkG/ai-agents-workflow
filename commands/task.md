@@ -33,7 +33,7 @@ Pre-flight:
 
 Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:chief-orchestrator`, passing the task description verbatim as a new task. The orchestrator will:
 
-1. **Classify the request** (Step 0) into one of: `direct-answer`, `plan-only`, `execution-simple`, or `execution-full`. For questions and explanations, the orchestrator answers directly without creating artifacts. For plan-only requests, it stops after the delivery plan is approved. See `${CLAUDE_PLUGIN_ROOT}/ai/agents/chief-orchestrator.md` → Intake Classification Protocol.
+1. **Classify the request** (Step 0) into one of: `direct-answer`, `plan-only`, `execution-trivial`, `execution-simple`, or `execution-full`. The orchestrator runs checklist-based heuristics, then ALWAYS shows you a radio-button popup with four options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`); its recommendation is pre-selected and you can override before any pipeline work starts. See `${CLAUDE_PLUGIN_ROOT}/ai/agents/chief-orchestrator.md` → Intake Classification Protocol and `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-intake/SKILL.md` for the full rules and risk-keyword sets.
 2. For execution paths: produce a Task Packet via the `task-packet` skill at `<artifact-root>/tasks/<task_id>/task-data.md`.
 3. Hand off to Delivery PM, Lead, Executor, Reviewer, and Integration Checker per `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:default-flow -->`.
 4. Finalize `<artifact-root>/tasks/<task_id>/summary.md` when all subtasks complete.

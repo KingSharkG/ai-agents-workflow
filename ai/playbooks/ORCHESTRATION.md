@@ -6,7 +6,7 @@
 
 Each step cites the skill that owns the procedural detail. Full step content lives in the skills — this file is a quick-reference outline.
 
-0. **Intake Classification** → `orchestrator-intake` skill. If `direct-answer`, respond inline and exit with zero artifacts. If `execution-trivial`, follow the compressed flow in `<!-- section:trivial-flow -->` below.
+0. **Intake Classification** → `orchestrator-intake` skill. The skill runs checklist-based heuristics, then ALWAYS calls `AskUserQuestion` with four radio-button options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`) — the heuristic's pick is marked `(Recommended)` as the default. The user's choice is the `final_path`. If `final_path = direct-answer`, write the minimal `<!-- section:intake-classification -->` block to `task-data.md` (when an `<artifact-root>` exists) and respond inline. If `final_path = execution-trivial`, follow the compressed flow in `<!-- section:trivial-flow -->` below.
 1. Chief Orchestrator receives the task.
 2. Create `task-data.md` with `<!-- section:intake-classification -->` then task-packet → `task-packet` skill. Persist `classification` to `orchestration-state.json`.
 3. Delivery PM appends `<!-- section:delivery-plan -->` → `delivery-plan` skill. For `execution-simple`, bundle includes a low-complexity hint. Orchestrator then populates `subtask_offsets` in `orchestration-state.json` → `orchestrator-state` skill.
@@ -31,7 +31,7 @@ Each step cites the skill that owns the procedural detail. Full step content liv
 
 The trivial path bypasses Delivery PM, the P1 gate, and Lead. It is reserved for mechanical changes with zero design ambiguity (typo, single-string update, single-line bump). Bundle composition is the same as for any other path — composed in memory by `context-minimizer` and embedded inline in the Task prompt; trivial just skips the upstream stages. Steps:
 
-1. **Step 0** — `orchestrator-intake` returns `execution-trivial`.
+1. **Step 0** — `orchestrator-intake` returns `execution-trivial` as `final_path` (heuristic verdict + user confirmation via the mandatory `AskUserQuestion` popup; user may have overridden a different heuristic verdict to land here).
 2. **Step 1** — Create `task-data.md` with `<!-- section:intake-classification -->` recording the trivial classification. Skip `task-packet` content beyond what is needed for the artifact chain.
 3. **Step 2** — Write initial `orchestration-state.json` with:
    - `classification: "execution-trivial"`

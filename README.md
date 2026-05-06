@@ -73,14 +73,15 @@ Natural-language invocations (e.g., "initialize project config") still work — 
 
 The `/ai-agents-workflow:task` command classifies each request before deciding how much of the pipeline to run:
 
-| Classification | When | What happens |
-|----------------|------|-------------|
-| `direct-answer` | Question, explanation, advice, summary | Orchestrator answers inline — no artifacts, no agents |
-| `plan-only` | User explicitly wants only a plan or proposal | Creates Task Packet + Delivery Plan, stops after approval. Resume later with `/continue` |
-| `execution-simple` | Small, low-risk code change (single-file, no schema/API/auth change) | Runs the workflow with lightweight/ultra-light paths preferred |
-| `execution-full` | Everything else (default) | Runs the full orchestration pipeline |
+| Classification | When (heuristic) | What happens |
+|----------------|------------------|-------------|
+| `direct-answer` | Question, explanation, advice, summary — no imperative verb targeting code | Orchestrator answers inline — no agents dispatched. A minimal classification record is written to `task-data.md` if an artifact root exists |
+| `plan-only` | User explicitly says "plan only", "draft a plan", "don't implement", etc. | Creates Task Packet + Delivery Plan, stops after P1 approval. Resume later with `/continue` |
+| `execution-trivial` | Single file, ≤ 5 LOC, no risk-area keywords, no public-symbol changes (typo, version bump, single import) | Compressed flow: skip Delivery PM + P1 + Lead. Orchestrator → Executor → Reviewer |
+| `execution-simple` | ≤ 2 files AND ≤ 50 LOC, no risk keywords, no schema/API/auth/cross-cutting concerns | Full workflow, lightweight/ultra-light paths preferred |
+| `execution-full` | Anything with a risk-area keyword, > 2 files, > 50 LOC, refactor/migrate/redesign, or vague scope | Full 15-step orchestration |
 
-If the request is ambiguous, the orchestrator asks one clarifying question before proceeding. See `ai/agents/chief-orchestrator.md` → Intake Classification Protocol for the full heuristics.
+**Confirm-and-Override popup**: every request — without exception — produces an `AskUserQuestion` radio-button popup with four user-facing options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`). The orchestrator's heuristic pick is marked `(Recommended)` and pre-selected; the user can override before any pipeline work starts. See [skills/orchestrator-intake/SKILL.md](skills/orchestrator-intake/SKILL.md) for full checklist rules and the risk-area keyword sets (schema, API, auth, reliability, cross-cutting).
 
 ## Knowledge: PR Lessons
 
