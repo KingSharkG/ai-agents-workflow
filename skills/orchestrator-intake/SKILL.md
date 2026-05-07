@@ -7,6 +7,32 @@ description: Classify an incoming task into one of five paths (direct-answer, pl
 
 Classify the incoming task description into exactly one of five paths, then ALWAYS confirm the choice with the user via `AskUserQuestion` before doing anything else. Classification is Step 0 of the default flow and MUST happen before any artifact is created or any agent is dispatched.
 
+## Step 0a — Ambiguity Check (Pre-Classification)
+
+Before applying classification rules, evaluate whether the request is ambiguous enough to warrant clarification. If **any** of these signals fire, ask 1–3 targeted questions via `AskUserQuestion` first, then re-evaluate with the answers folded into the request before classification.
+
+**Ambiguity triggers (any one fires the clarify gate):**
+
+- Request length < 8 words AND contains an imperative verb but no concrete target (e.g., "fix the bug", "improve performance", "refactor that").
+- Conflicting signals: question phrasing AND imperative verb in the same message (e.g., "how does X work and update it to Y").
+- Risk-area keyword present (`auth`, `migration`, `schema`, etc. — see "Risk-area keyword sets" below) but no scope indicators (no file path, no specific identifier, no LOC hint, no bounded surface).
+- Vague modifier verbs without object: `clean up`, `polish`, `make it better`, `improve`, `tidy` with no `<X>` target.
+- Multi-intent: 2+ unrelated imperative verbs (e.g., "add X and refactor Y and migrate Z").
+
+**Skip the clarify gate when:**
+
+- Request explicitly names a file/path/identifier and an action.
+- Request is a clear question (matches `direct-answer` MUST-pass cleanly, no imperatives).
+- Request is a canonical trivial pattern (`rename X→Y`, `bump version`, `fix typo`, `remove unused import`).
+
+**Clarify gate behavior:** ≤3 questions max in a single `AskUserQuestion` call. Typical questions:
+
+- "What's the target file or area?"
+- "What outcome do you want?"
+- "Should this be planned only or fully implemented?"
+
+After answers, proceed to classification using the enriched description. The ambiguity check runs **once per task** — after clarification, classification proceeds without a second clarify round. The mandatory classification popup (Confirm-and-Override Protocol) still fires after Step 0a regardless of whether the clarify gate ran.
+
 ## Classification Paths
 
 | Path | When to use | Behavior |
@@ -141,7 +167,7 @@ The `execution-trivial` / `execution-simple` distinction is an internal optimiza
 After classification + confirmation, the orchestrator:
 
 1. Writes the `<!-- section:intake-classification -->` block to `task-data.md` (always, including `direct-answer`).
-2. For `direct-answer`: produce the inline answer and exit. No further artifacts, no `orchestration-state.json`.
+2. For `direct-answer`: produce the inline answer, then (when `<artifact-root>` exists) write a minimal `<artifact-root>/tasks/<task_id>/summary.md` containing the classification block, the user's question, and a 3–5 line answer recap. No `orchestration-state.json`, no per-subtask folders, no agent dispatch. See `telemetry-summary` skill → "Non-execution path summaries" for the schema.
 3. For all other paths: continue to Step 1 of the default flow with `classification = final_path`. Persist `classification` to `orchestration-state.json` once the file is created (Step 6a). For `execution-trivial`, the same write also sets `gates.p1_approved: true` and `gates.p1_approved_signature: "trivial-path-auto"`.
 
 ## intake-classification block schema

@@ -118,3 +118,68 @@ Then append rows to Detail, update Context Breakdown, and recalculate Totals. At
 - **Repeat reads**: any path in ≥2 agents' manifests for this task. Write `none` when empty.
 - **Task Status / Pending User Actions are mandatory**: derive Status from subtask workflow_state + open gates; list user actions as flat bullets or `- none` (the count is derived from this list).
 - **Completion semantics**: complete only when `workflow_state: complete` AND `open_gate_count: 0` AND `pending_user_action_count: 0`. If any subtask is blocked, the task summary must reflect that blocked state — never overstate completion.
+
+## Non-execution path summaries
+
+For classifications that produce no agent telemetry (`direct-answer`, `plan-only`), the orchestrator still writes a task-level `summary.md` so every task has a rolled-up artifact. These summaries omit Pipeline / Detail / Context Breakdown / Totals (no agent invocations to record) and use the compact schema below.
+
+### `direct-answer` schema
+
+Written immediately after the inline answer, when `<artifact-root>` exists. Skipped silently when no artifact root is initialized — the inline answer is the deliverable.
+
+```markdown
+# Task Summary — <task_id>
+
+## Metadata
+- **task_id**: <TP-NNN>
+- **classification**: direct-answer
+- **created_at**: <ISO 8601 UTC>
+
+## Task Status
+- **workflow_state**: complete
+- **open_gate_count**: 0
+- **pending_user_action_count**: 0
+
+## Request
+<verbatim user question, ≤2 lines>
+
+## Answer Recap
+<3–5 line summary of the inline answer — key points, not the full text>
+
+<!-- section:intake-classification -->
+<copied verbatim from task-data.md>
+<!-- /section:intake-classification -->
+```
+
+### `plan-only` schema
+
+Written after P1 records `phase: planned`. The orchestrator refreshes this summary before exiting so the task has closure even though no execution ran.
+
+```markdown
+# Task Summary — <task_id>
+
+## Metadata
+- **task_id**: <TP-NNN>
+- **classification**: plan-only
+- **created_at**: <ISO 8601 UTC>
+- **updated_at**: <ISO 8601 UTC>
+
+## Task Status
+- **workflow_state**: planned
+- **open_gate_count**: 0
+- **pending_user_action_count**: <0 or 1 — 1 if user can resume via /continue>
+
+## Request
+<verbatim user request, ≤3 lines>
+
+## Plan Reference
+- Delivery Plan: `<artifact-root>/tasks/<task_id>/task-data.md` → `<!-- section:delivery-plan -->`
+- Phase: planned (no execution dispatched)
+- Resume: `/ai-agents-workflow:continue <task_id>` to approve and execute
+
+<!-- section:intake-classification -->
+<copied verbatim from task-data.md>
+<!-- /section:intake-classification -->
+```
+
+These compact schemas are produced by the orchestrator directly, not by aggregating subtask telemetry. They MUST NOT be written for execution paths — those use the full template above. If a `plan-only` task is later resumed and executes, the summary is rewritten using the full template at task completion.
