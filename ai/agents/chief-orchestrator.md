@@ -46,7 +46,8 @@ Load each skill only when you reach the relevant step. They replace the former i
 | Post-approval per-subtask rollup into task-level summary | `telemetry-summary` |
 | Post-task retrospective (P5 body) | `post-task-review` |
 | Cycle 3 exhausted / unresolved blocker | `blocker-escalation-report` |
-| Reopen an approved subtask at P4 | `reversal-packet` |
+| Reviewer `needs-replan` verdict OR P2 replan choice (soft reopen `execution → planning`) | `orchestrator-dispatch` → "Reopen detection" + `orchestrator-state` → "Stage Discipline" |
+| Reopen an approved subtask at P4 (reversal `closure → execution`) | `reversal-packet` |
 | Routing decisions that need repo context (PRs, issues, branches) | **github** plugin |
 | Parallel agent routing | `superpowers:dispatching-parallel-agents` |
 
@@ -84,9 +85,41 @@ Load each skill only when you reach the relevant step. They replace the former i
 - `<artifact-root>/tasks/<task_id>/summary.md` (task-level completion, via `telemetry-summary` skill)
 - task completion signal
 
-## Default Flow (15 steps)
+## Stage Discipline
 
-Each step cites the skill that owns the procedural detail. See `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` for the numbered outline with inline skill citations.
+The lifecycle stage is the coarse-grained "what part of the task are we in" signal. Stages are: `intake | planning | execution | closure` (schema_version 3+). The `pre-task-guard.js` Phase 3.5 hook blocks subagent dispatches that don't belong to the active task's stage.
+
+**Stage write rule.** Every `orchestration-state.json` write MUST set `stage`. On a stage transition, close the prior `stage_history` entry (set `exited_at` + `exit_reason` from the documented enum) and append a new entry; update `previous_stage`. See `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/SKILL.md` → "Stage Discipline" for the full rule and the `exit_reason` enum.
+
+**Stage whitelist** (mirrors the hook):
+
+| Stage | Subagents legal |
+|---|---|
+| `intake` | `chief-orchestrator`, `delivery-pm` |
+| `planning` | `chief-orchestrator`, `delivery-pm`, `lead`, `design-agent` |
+| `execution` | `chief-orchestrator`, `lead`, `executor`, `reviewer`, `design-agent`, `integration-checker` |
+| `closure` | `chief-orchestrator` |
+
+**Reopen protocol** (relaxed transitions in schema_version 3+):
+
+- **Reviewer `needs-replan` verdict OR P2 user-elected replan** → soft reopen `execution → planning`. Set `previous_stage="execution"`, `stage_reopen_count++`, snapshot the current normalized delivery-plan signature into `gates.p1_signature_at_stage_entry`. Dispatch `Task(delivery-pm)`. After return, run the auto-diff procedure in `orchestrator-state` SKILL → "Auto-diff for affected subtasks" to populate `pending_subtasks_needing_rereview[]`. Compute new normalized signature: match → silent re-entry (`exit_reason: "p1-signature-unchanged"`); mismatch → present P1 gate.
+- **`reversal-packet` invoked on `stage=closure` task** → reversal `closure → execution`. Set `previous_stage="closure"`, `stage_reopen_count++`. No `delivery-pm` re-dispatch — `reversal-packet` itself carries the plan delta. No P1 re-fire.
+- **Soft cap** at `stage_reopen_count >= 3`: emit `blocker-escalation-report` AND surface a "Continue anyway / Abort task" P-gate via `AskUserQuestion`. User-overridden continuation increments the counter and records `exit_reason: "overridden-continue"`.
+
+The full reopen protocol with step ordering lives in `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-dispatch/SKILL.md` → "Reopen detection".
+
+## Default Flow (stage-grouped, 15 steps)
+
+The 15 procedural steps are grouped under the four lifecycle stages in `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md`:
+
+- **Intake** — Steps 0, 1, 2 (classify, receive, initialize artifacts)
+- **Planning** — Steps 3, 4, 5 (Delivery PM, P1 gate, mode determination)
+- **Execution** — Steps 6, 7, 8, 9, 10, 11, 12 (per-subtask: pre-dispatch, design, lead, executor, integration, review, P2)
+- **Closure** — Steps 13, 13b, 14, 15 (post-approval cleanup, summary, P4/P5, complete)
+
+The numbered list below preserves step numbers for cross-reference. See ORCHESTRATION.md for stage-by-stage entry/exit criteria, the stage transition diagram, and the trivial-path compressed flow.
+
+Each step cites the skill that owns the procedural detail.
 
 0. **Intake Classification** — invoke `orchestrator-intake`. The skill (a) runs the checklist-based heuristic to produce a `heuristic_verdict`, (b) calls `AskUserQuestion` with four radio-button options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`) to confirm or override, and (c) returns the `final_path`. The confirm step is mandatory for every request — there is no shortcut that skips it. If `final_path` is `direct-answer`, write the minimal `<!-- section:intake-classification -->` block to `task-data.md`, respond inline, and exit with no further artifacts. If `final_path` is `execution-trivial`, follow the compressed flow at `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:trivial-flow -->`: skip Steps 3 and 4 below, skip Lead at Step 8, dispatch Executor directly at Step 9 with the TEP carried inline in the Task `prompt` parameter. (Dispatch bundles are always inline in the Task prompt regardless of classification — no `roles/<role>.md` files are written for any path.)
 1. Receive the task.

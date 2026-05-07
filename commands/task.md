@@ -13,7 +13,7 @@ This command takes precedence over any session-start "always invoke applicable s
 Skills remain fully available — and encouraged — inside the dispatched agents. For example, for a "review PR feedback" task, the orchestrator or Lead can invoke a code-review-style skill (e.g. `superpowers:receiving-code-review`) inside their dispatched turn to fetch and parse the PR comments. That is the right place for it.
 
 In the main thread, only the following are allowed before the `Task(chief-orchestrator)` dispatch:
-- The pre-flight checks listed below (plan mode, artifact-root resolution, PROJECT_CONFIG.md existence).
+- The pre-flight checks listed below (artifact-root resolution, PROJECT_CONFIG.md existence). Plan-mode handling is owned by the `hooks/check-plan-mode.js` PreToolUse hook — it blocks the dispatch directly with the canonical message; no command-level check is needed.
 - One optional `AskUserQuestion` if `$ARGUMENTS` is empty.
 - Invocation of the `ai-agents-workflow:resolve-artifact-root` skill (which uses `Bash`) to obtain the absolute `ARTIFACT_ROOT`.
 - `Read` of `${ARTIFACT_ROOT}/config/PROJECT_CONFIG.md` if needed for the pre-flight check.
@@ -27,13 +27,14 @@ Dispatch the `chief-orchestrator` subagent with the task description.
 If `$ARGUMENTS` is empty, use `AskUserQuestion` to collect a one-line task description (the user can use the "Other" affordance for free text).
 
 Pre-flight:
-1. If plan mode is active (the harness injects a plan-mode banner into the system context for every turn while it's on), surface: "Plan mode is on — `/ai-agents-workflow:task` needs to call the `Task` tool, which plan mode blocks. Press `Shift+Tab` to exit plan mode, then re-run this command." and exit without dispatching.
-2. Invoke the `ai-agents-workflow:resolve-artifact-root` skill to obtain `ARTIFACT_ROOT`. On resolver failure, follow the skill's read-mostly branch (proceed only if the user confirms after the surfaced diagnostic).
-3. If `${ARTIFACT_ROOT}/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
+1. Invoke the `ai-agents-workflow:resolve-artifact-root` skill to obtain `ARTIFACT_ROOT`. On resolver failure, follow the skill's read-mostly branch (proceed only if the user confirms after the surfaced diagnostic).
+2. If `${ARTIFACT_ROOT}/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
+
+(Plan-mode handling is enforced by the `hooks/check-plan-mode.js` PreToolUse hook — when plan mode is active, the dispatch is blocked at the harness level with a clear message instructing the user to press `Shift+Tab`.)
 
 Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:chief-orchestrator`, passing the task description verbatim as a new task. The orchestrator will:
 
-1. **Classify the request** (Step 0) into one of: `direct-answer`, `plan-only`, `execution-trivial`, `execution-simple`, or `execution-full`. The orchestrator runs checklist-based heuristics, then ALWAYS shows you a radio-button popup with four options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`); its recommendation is pre-selected and you can override before any pipeline work starts. See `${CLAUDE_PLUGIN_ROOT}/ai/agents/chief-orchestrator.md` → Intake Classification Protocol and `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-intake/SKILL.md` for the full rules and risk-keyword sets.
+1. **Classify the request** (Step 0) into one of: `direct-answer`, `plan-only`, `execution-trivial`, `execution-simple`, or `execution-full`. The orchestrator runs checklist-based heuristics, then ALWAYS shows you a radio-button popup with four options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`); its recommendation is pre-selected and you can override before any pipeline work starts. See `${CLAUDE_PLUGIN_ROOT}/ai/agents/chief-orchestrator.md` → Intake Classification Protocol and `${CLAUDE_PLUGIN_ROOT}/skills/intake/orchestrator-intake/SKILL.md` for the full rules and risk-keyword sets.
 2. For execution paths: produce a Task Packet via the `task-packet` skill at `<artifact-root>/tasks/<task_id>/task-data.md`.
 3. Hand off to Delivery PM, Lead, Executor, Reviewer, and Integration Checker per `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:default-flow -->`.
 4. Finalize `<artifact-root>/tasks/<task_id>/summary.md` when all subtasks complete.

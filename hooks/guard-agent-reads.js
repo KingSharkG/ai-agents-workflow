@@ -40,7 +40,7 @@ const artifactRootAbs = ARTIFACT.root ? canonicalize(ARTIFACT.root) : null;
 // 1. Governance files:    ${PLUGIN_ROOT}/ai/governance/*.md
 // 2. Core files:          ${PLUGIN_ROOT}/ai/core/*.md
 // 3. Playbooks:           ${PLUGIN_ROOT}/ai/playbooks/*.md
-// 4. Canonical contracts:  ${PLUGIN_ROOT}/ai/agents/*.md
+// 4. Procedural agent docs: ${PLUGIN_ROOT}/ai/agents/*.md (chief-orchestrator, init, resume-orchestrator only — role contracts for the 6 dispatched agents live in ${PLUGIN_ROOT}/agents/<role>.md)
 // 5. PROJECT_CONFIG.md:   <artifact-root>/config/PROJECT_CONFIG.md
 // 6. Derived config cache: <artifact-root>/config/domain-contexts.cache.md
 //                          <artifact-root>/config/domain-contexts.cache.manifest.json

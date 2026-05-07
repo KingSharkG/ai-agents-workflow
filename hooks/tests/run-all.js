@@ -3,11 +3,17 @@
  * Aggregate runner for every *.test.js file in this directory.
  *
  * Run:
- *   node hooks/tests/run-all.js
+ *   node hooks/tests/run-all.js                # unit tests only (default)
+ *   node hooks/tests/run-all.js --include-e2e  # + e2e/*.assert.js scenarios
  *
  * Each suite is spawned as its own Node subprocess (so module-level state
  * stays isolated) and its stdout/stderr are streamed live. The runner exits
  * non-zero if ANY suite exits non-zero. Output ends with a totals line.
+ *
+ * E2E tests live under hooks/tests/e2e/<scenario>.assert.js. Each one is a
+ * standalone Node script that scaffolds a sandbox project, runs an end-to-end
+ * scenario, and asserts the artifact tree matches expectations. They are
+ * slower than unit tests and therefore opt-in via --include-e2e.
  *
  * Zero dependencies (Node built-ins only). No reliance on a test framework.
  */
@@ -18,11 +24,24 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+const includeE2e = process.argv.includes('--include-e2e');
+
 const TESTS_DIR = __dirname;
+const E2E_DIR = path.join(TESTS_DIR, 'e2e');
+
 const suites = fs
   .readdirSync(TESTS_DIR)
   .filter((f) => f.endsWith('.test.js'))
   .sort();
+
+if (includeE2e && fs.existsSync(E2E_DIR)) {
+  const e2eSuites = fs
+    .readdirSync(E2E_DIR)
+    .filter((f) => f.endsWith('.assert.js'))
+    .sort()
+    .map((f) => path.join('e2e', f));
+  suites.push(...e2eSuites);
+}
 
 if (suites.length === 0) {
   process.stderr.write('No *.test.js files found in hooks/tests/.\n');

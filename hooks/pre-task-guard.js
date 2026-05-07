@@ -312,9 +312,12 @@ if (taskIdFromPrompt) {
 
       // Canonical-schema check (schema_version >= 2). Legacy files without
       // schema_version are tolerated by the P1 phase (with a warn-and-upgrade
-      // hint) — they are NOT blocked here. Files claiming schema_version=2
-      // must conform.
-      if (parsedTaskState.schema_version === 2) {
+      // hint) — they are NOT blocked here. Files claiming schema_version >= 2
+      // must conform to the canonical v2 shape; v3 is a strict superset of v2
+      // and is validated by the same checks here. Full v3-specific validation
+      // (stage field, stage_history shape, etc.) lands with the stage guard in
+      // a later commit.
+      if (parsedTaskState.schema_version === 2 || parsedTaskState.schema_version === 3) {
         const canonicalIssues = [];
         if (!('current_subtask' in parsedTaskState)) {
           canonicalIssues.push('current_subtask (string|null) missing');
@@ -349,12 +352,12 @@ if (taskIdFromPrompt) {
         }
         if (canonicalIssues.length > 0) {
           console.error(
-            `[pre-task-guard] BLOCKED: orchestration-state.json fails canonical schema_version=2 validation:\n` +
+            `[pre-task-guard] BLOCKED: orchestration-state.json fails canonical schema_version=${parsedTaskState.schema_version} validation:\n` +
               canonicalIssues.map((s) => `  - ${s}`).join('\n') +
               `\n` +
               `File: ${taskLevelStatePath}\n` +
               `Resolution: invoke the orchestrator-state skill and follow ` +
-              `\${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/references/state-schemas.md → Migration ` +
+              `\${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/references/state-schemas.md → Migration ` +
               `to rewrite the file in canonical shape before dispatching ${subagentType}.\n`,
           );
           process.exit(1);
@@ -395,7 +398,7 @@ if (GATED_ROLES.has(subagentType)) {
         `(no schema_version) — allowing dispatch; the orchestrator must ` +
         `upgrade ${resolvedStatePath} to schema_version=2 with ` +
         `gates.p1_approved=true and signature="legacy-migration" on its ` +
-        `next touch (see skills/orchestrator-state/references/state-schemas.md ` +
+        `next touch (see skills/shared/orchestrator-state/references/state-schemas.md ` +
         `→ Migration).\n`,
     );
   } else if (state.classification === 'execution-trivial') {
@@ -419,6 +422,69 @@ if (GATED_ROLES.has(subagentType)) {
       );
       process.exit(1);
     }
+  }
+}
+
+// ---------- Phase 3.5: stage guard (blocking) ----------
+//
+// Blocks dispatches that don't belong to the active task's lifecycle stage.
+// Stages are: intake | planning | execution | closure (schema_version 3).
+//
+// Tolerance rules:
+//   - No state file present     → exit 0 (initial intake hasn't written yet)
+//   - state.stage absent        → exit 0 (no enforcement on pre-v3 state files;
+//                                 wipe-and-restart policy in effect)
+//   - subagent not in GATED_ROLES → not subject to the stage check
+//
+// Kill switch: AIAW_DISABLE_STAGE_GUARD=1 disables Phase 3.5 entirely.
+
+const STAGE_AGENTS = {
+  intake: new Set(['chief-orchestrator', 'delivery-pm']),
+  planning: new Set(['chief-orchestrator', 'delivery-pm', 'lead', 'design-agent']),
+  execution: new Set([
+    'chief-orchestrator',
+    'lead',
+    'executor',
+    'reviewer',
+    'design-agent',
+    'integration-checker',
+  ]),
+  closure: new Set(['chief-orchestrator']),
+};
+
+if (
+  process.env.AIAW_DISABLE_STAGE_GUARD !== '1' &&
+  GATED_ROLES.has(subagentType) &&
+  state &&
+  !stateMalformed &&
+  Object.prototype.hasOwnProperty.call(state, 'stage')
+) {
+  const activeStage = state.stage;
+  const allowed = STAGE_AGENTS[activeStage];
+  if (!allowed) {
+    console.error(
+      `[pre-task-guard] BLOCKED: orchestration-state.json has unknown stage="${activeStage}" ` +
+        `for task ${resolvedTaskId}.\n` +
+        `Active state file: ${resolvedStatePath}\n` +
+        `Allowed stage values: ${Object.keys(STAGE_AGENTS).join(' | ')}\n` +
+        `Resolution: invoke the orchestrator-state skill and rewrite the file with a valid stage.\n`,
+    );
+    process.exit(1);
+  }
+  if (!allowed.has(subagentType)) {
+    console.error(
+      `[pre-task-guard] BLOCKED: dispatch of ${subagentType} for task ${resolvedTaskId} ` +
+        `is not allowed in stage="${activeStage}".\n` +
+        `Active state file: ${resolvedStatePath}\n` +
+        `Stage whitelist: ${[...allowed].join(', ')}\n` +
+        `Resolution: advance the stage via the orchestrator-state skill, or — if this is a ` +
+        `planning re-open after a needs-replan / p2-replan / reversal — set stage="planning" ` +
+        `(or stage="execution" for reversal), update previous_stage, increment ` +
+        `stage_reopen_count, and append a stage_history entry before re-dispatching. See ` +
+        `\${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/SKILL.md → "Stage Discipline" for ` +
+        `the full reopen protocol.\n`,
+    );
+    process.exit(1);
   }
 }
 

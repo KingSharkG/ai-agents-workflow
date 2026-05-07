@@ -48,6 +48,8 @@ All project-specific rules — stack, domains, baselines (fe, be, api, auth), co
   - `[phase-X/]<subtask_id>/ai-work.md` — all agent context transfer for that subtask, sectioned, append-only
   - `[phase-X/]<subtask_id>/summary.md` — subtask completion record (written by Reviewer on approval)
 
+The canonical list of `<!-- section:* -->` markers used in these artifacts — including writer, readers, location, and required/optional/conditional status — lives in [`ai/core/SECTION_MARKERS.md`](SECTION_MARKERS.md). Add a row there before introducing a new marker; renames must update writers, `context-minimizer`, and validation hooks in lockstep.
+
 <!-- section:definition-of-done -->
 
 ## Definition of Done
