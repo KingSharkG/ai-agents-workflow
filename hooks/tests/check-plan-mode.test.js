@@ -248,6 +248,66 @@ test('AIAW_DISABLE_PLAN_MODE_GUARD=1 with banner present → allow', () => {
 });
 
 // =========================================================================
+// Edge cases: malformed input, non-ASCII, large transcripts
+// =========================================================================
+
+test('malformed JSONL line is skipped, valid lines still parsed → allow', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cpm-malformed-'));
+  const file = path.join(dir, 'transcript.jsonl');
+  // Mix garbage with valid entries; hook must fail-open (exit 0), not crash.
+  fs.writeFileSync(
+    file,
+    [
+      '{not valid json',
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'hi' } }),
+      '!!!',
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: 'ok' } }),
+    ].join('\n') + '\n',
+  );
+  const out = runHook({
+    CLAUDE_TOOL_INPUT_SUBAGENT_TYPE: 'chief-orchestrator',
+    CLAUDE_TRANSCRIPT_PATH: file,
+  });
+  assert.strictEqual(out.status, 0, `expected exit 0 (no banner); got ${out.status}, stderr: ${out.stderr}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('non-ASCII content in user turn does not crash detection', () => {
+  const { dir, file } = tmpTranscript('non-ascii', [
+    { type: 'user', message: { role: 'user', content: '日本語のリクエスト 🚀 émojis' } },
+    { type: 'assistant', message: { role: 'assistant', content: 'ok' } },
+  ]);
+  const out = runHook({
+    CLAUDE_TOOL_INPUT_SUBAGENT_TYPE: 'chief-orchestrator',
+    CLAUDE_TRANSCRIPT_PATH: file,
+  });
+  assert.strictEqual(out.status, 0, out.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('large transcript (~1MB) parses without timeout', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cpm-large-'));
+  const file = path.join(dir, 'transcript.jsonl');
+  const lines = [];
+  // ~1MB of filler turns (no banner) followed by a final innocuous user turn.
+  const pad = 'x'.repeat(1024);
+  for (let i = 0; i < 1000; i++) {
+    lines.push(JSON.stringify({ type: 'user', message: { role: 'user', content: pad } }));
+    lines.push(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: 'ack' } }));
+  }
+  fs.writeFileSync(file, lines.join('\n') + '\n');
+  const start = Date.now();
+  const out = runHook({
+    CLAUDE_TOOL_INPUT_SUBAGENT_TYPE: 'chief-orchestrator',
+    CLAUDE_TRANSCRIPT_PATH: file,
+  });
+  const elapsed = Date.now() - start;
+  assert.strictEqual(out.status, 0, out.stderr);
+  assert.ok(elapsed < 5000, `hook should finish well under 5s timeout; took ${elapsed}ms`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// =========================================================================
 // Run
 // =========================================================================
 

@@ -8,6 +8,12 @@ stage: planning
 
 Convert a Delivery Plan subtask into a precise TEP. The TEP is the executor's **single source of context** — an executor receiving only this section plus governance excerpts should be able to complete the work without reading arbitrary repo files.
 
+## When NOT to invoke
+
+- Subtask `complexity ∈ {medium, hard}` and no `<!-- section:exploration-notes -->` exists yet — run `codebase-exploration` first; otherwise `target_files` cannot be verified.
+- Subtask was not produced by `delivery-plan` (no `<!-- section:delivery-subtask-* -->` ancestor). The TEP relies on the subtask's `complexity`, `turns_budget`, and Domain Handoff Note.
+- Definition of Ready below cannot be satisfied — raise a `blocker-escalation-report` instead of drafting an unanchored TEP.
+
 ## Definition of Ready
 A TEP is dispatchable only when all are true:
 - `target_files` verified to exist

@@ -7,12 +7,14 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/check-plan-mode.js\"",
-            "blocking": true
+            "blocking": true,
+            "timeout": 5000
           },
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-task-guard.js\" \"$CLAUDE_TOOL_INPUT_SUBAGENT_TYPE\"",
-            "blocking": true
+            "blocking": true,
+            "timeout": 5000
           }
         ]
       },
@@ -22,7 +24,8 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-agent-reads.js\"",
-            "blocking": false
+            "blocking": false,
+            "timeout": 5000
           }
         ]
       },
@@ -32,12 +35,14 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-main-thread-mutations.js\"",
-            "blocking": true
+            "blocking": true,
+            "timeout": 5000
           },
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-orchestrator-source-writes.js\"",
-            "blocking": true
+            "blocking": true,
+            "timeout": 5000
           }
         ]
       },
@@ -47,7 +52,8 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-main-thread-skills.js\"",
-            "blocking": true
+            "blocking": true,
+            "timeout": 5000
           }
         ]
       }
@@ -58,7 +64,8 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-chief-orchestrator-stop.js\"",
-            "blocking": true
+            "blocking": true,
+            "timeout": 5000
           }
         ]
       }
@@ -69,11 +76,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-artifact-chain.js\" \"$CLAUDE_TOOL_INPUT_FILE_PATH\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-artifact-chain.js\" \"$CLAUDE_TOOL_INPUT_FILE_PATH\"",
+            "timeout": 5000
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-summary-telemetry.js\" \"$CLAUDE_TOOL_INPUT_FILE_PATH\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/validate-summary-telemetry.js\" \"$CLAUDE_TOOL_INPUT_FILE_PATH\"",
+            "timeout": 5000
           }
         ]
       }

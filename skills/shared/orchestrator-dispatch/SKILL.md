@@ -130,19 +130,4 @@ For review cycle N > 1, dispatch bundles carry only delta context. The canonical
 
 ## Reopen detection — `needs-replan` and reversal triggers (schema_version 3+)
 
-When a dispatch returns, the orchestrator MUST inspect the result for reopen triggers BEFORE proceeding to the next subtask:
-
-1. **Reviewer return with `verdict: needs-replan`** (read from `<subtask_id>/summary.md` → `Status` block): the subtask cannot be repaired by another rework cycle and the plan itself needs revision. Trigger an `execution → planning` reopen per the protocol in `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/SKILL.md` → "Stage Discipline":
-   a. Snapshot the current normalized delivery-plan signature into `gates.p1_signature_at_stage_entry`.
-   b. Set `previous_stage="execution"`, `stage="planning"`, `stage_reopen_count++`. Append `stage_history` entry with `exit_reason: "needs-replan"` for the execution exit.
-   c. Dispatch `Task(delivery-pm)` (legal in `stage=planning`).
-   d. After delivery-pm returns, run the auto-diff procedure in `orchestrator-state` SKILL → "Auto-diff for affected subtasks" to populate `pending_subtasks_needing_rereview[]`.
-   e. Compute the new normalized signature. If it matches `gates.p1_signature_at_stage_entry` → silent re-entry (set `stage="execution"`, append `stage_history` with `exit_reason: "p1-signature-unchanged"` for the planning exit, no P1 popup). If it differs → present the P1 gate; on approval, set `stage="execution"`, update `gates.p1_approved_signature`, append `stage_history` with `exit_reason: "p1-approved-execute"`.
-
-2. **P2 phase-boundary user-elected replan** (`orchestrator-user-gates` skill returns the replan choice from the P2 menu): same protocol as (1), with `exit_reason: "p2-replan"` for the execution exit.
-
-3. **Reversal trigger** (user invokes `reversal-packet` against a `stage=closure` task — typically via `/ai-agents-workflow:continue` with reversal mode): `closure → execution` transition. Set `previous_stage="closure"`, `stage="execution"`, `stage_reopen_count++`. Append `stage_history` entry with `exit_reason: "reversal"` for the closure exit. Resume execution from the targeted subtask. **No `delivery-pm` re-dispatch** — `reversal-packet` itself carries the plan delta. **No P1 re-fire** — reversal does not re-enter planning stage.
-
-**Soft cap (all reopens):** before incrementing `stage_reopen_count`, check `state.stage_reopen_count >= 3`. If so, emit a `blocker-escalation-report` AND surface a "Continue anyway / Abort task" P-gate via `AskUserQuestion`. User-overridden continuation increments the counter and records `exit_reason: "overridden-continue"` for the prior stage.
-
-The reopen detection runs on every Reviewer return and at every P2 gate close. Skipping it is an orchestration defect — a `needs-replan` verdict that does not trigger a stage rewind leaves the orchestrator stuck (the failing subtask cannot progress, and the planning-stage agents are not legal in `stage=execution`).
+The canonical reopen protocol (Reviewer `needs-replan`, P2-elected replan, `reversal-packet`, soft cap at `stage_reopen_count >= 3`, auto-diff for `pending_subtasks_needing_rereview[]`) lives in `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/references/stage-discipline.md`. The orchestrator MUST evaluate it on every dispatch return and every P2 gate close BEFORE proceeding to the next subtask. Skipping the check is an orchestration defect — a `needs-replan` verdict with no stage rewind leaves the orchestrator stuck (planning-stage agents are not legal in `stage=execution`).

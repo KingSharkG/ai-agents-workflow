@@ -1,4 +1,5 @@
 ---
+name: pr-lessons
 description: Harvest review comments from a GitHub PR into <artifact-root>/knowledge/pr-lessons.md so the same mistake isn't made twice.
 argument-hint: "<PR number | owner/repo#N | full PR URL>"
 allowed-tools: Task, AskUserQuestion, Bash(gh:*), Bash(git:*), Bash(command:*), Bash(node:*), Read, Skill

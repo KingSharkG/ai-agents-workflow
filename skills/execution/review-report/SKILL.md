@@ -46,7 +46,7 @@ These are soft targets to keep ai-work.md manageable — complex subtasks may ex
 - `cycle_count` must be read from the previous `### Cycle N` subsection — do not reset or invent it.
 - `rework_direction` must be specific enough that the executor can act without asking follow-up questions.
 - Every finding must carry a `root_cause_category` AND a `confidence` integer.
-- **`pr-lessons-check` consultation is MANDATORY** during review. Invoke the `pr-lessons-check` skill against the diff produced by the subtask under review BEFORE writing the cycle's verdict. Any matched lessons whose `pr-lessons-check` confidence meets the high/medium threshold MUST become findings in `section:review-findings` (with `root_cause_category: pr-lesson` and the lesson reference quoted in `description`). Lower-confidence matches go in `section:review-low-confidence` for audit. The consultation itself MUST be recorded in the reviewer's context-manifest subsection in `summary.md`. Also: verify the Executor recorded its own `pr-lessons-check` consultation in `impl-dynamic-skills` — missing record is a finding with `root_cause_category: process` and `confidence: 90`.
+- **`pr-lessons-check` consultation is MANDATORY** during review. The full protocol (when to invoke, finding-routing by confidence, where to record, how to verify the Executor's consultation) lives in `${CLAUDE_PLUGIN_ROOT}/skills/pr-lessons/pr-lessons-check/references/consultation-protocol.md`. Skipping is a protocol violation.
 
 ### Stable Finding IDs (Cycle N > 1)
 

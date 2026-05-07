@@ -1,4 +1,5 @@
 ---
+name: continue
 description: Resume an in-progress task by task_id, or show a menu of resumable tasks.
 argument-hint: "[task_id or subtask_id]"
 allowed-tools: Task, AskUserQuestion, Read, Bash(node:*), Skill

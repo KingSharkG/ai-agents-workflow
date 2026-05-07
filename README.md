@@ -206,6 +206,33 @@ Run `/ai-agents-workflow:init` in a fresh consumer repo (or use natural language
 
 See `CLAUDE.md` for the full layout and path conventions.
 
+## Hooks & Guards
+
+The plugin enforces workflow discipline via Node.js hooks wired through [hooks/hooks.json](hooks/hooks.json). All guards are synchronous, fail-open on missing input, and exit fast (5s timeout each).
+
+| Hook | Event / Matcher | Blocks when… |
+| --- | --- | --- |
+| `check-plan-mode.js` | `PreToolUse(Task)` | Native plan mode is active and `Task(chief-orchestrator)` is dispatched. |
+| `pre-task-guard.js` | `PreToolUse(Task)` | Subtask skeleton missing, P1 gate unmet, stage discipline violated, or trigger evaluation fails. |
+| `guard-agent-reads.js` | `PreToolUse(Read)` | Audit-only (non-blocking). |
+| `guard-main-thread-mutations.js` | `PreToolUse(Edit\|Write\|Bash)` | Main thread tries to mutate `<artifact-root>` outside dispatch. |
+| `guard-orchestrator-source-writes.js` | `PreToolUse(Edit\|Write\|Bash)` | Plugin source files are written from a non-orchestrator caller. |
+| `guard-main-thread-skills.js` | `PreToolUse(Skill)` | Main thread invokes a dispatched-only skill before chief-orchestrator handoff. |
+| `guard-chief-orchestrator-stop.js` | `SubagentStop` | Chief-orchestrator returns without satisfying the executor-required stop guard. |
+| `validate-artifact-chain.js` | `PostToolUse(Write\|Edit)` | Audit-only — verifies `<!-- section:* -->` markers. |
+| `validate-summary-telemetry.js` | `PostToolUse(Write\|Edit)` | Audit-only — verifies telemetry / context manifest. |
+
+### Troubleshooting
+
+If a hook blocks an action, the stderr message names the exact remediation skill (e.g., `orchestrator-user-gates` for an unmet P1 gate). Read the message and re-run after fixing.
+
+**Emergency kill switches** (set in your shell environment; do NOT commit to settings):
+
+- `AIAW_DISABLE_PLAN_MODE_GUARD=1` — bypass `check-plan-mode.js`. Use only when you need the orchestrator to dispatch from inside plan mode and accept that ExitPlanMode tracking is skipped.
+- `AIAW_DISABLE_STAGE_GUARD=1` — bypass Phase 3.5 stage discipline in `pre-task-guard.js`. Use only when recovering from a corrupted `orchestration-state.json`; restore the file and unset immediately.
+
+Other guards have no kill switch by design — they enforce invariants the workflow cannot reason about if violated.
+
 ## Development
 
 Plugin-internal paths use `${CLAUDE_PLUGIN_ROOT}` in markdown and hook configs, and `process.env.CLAUDE_PLUGIN_ROOT` in Node.js scripts. Test changes locally via `/plugin marketplace update` without reinstall.

@@ -8,6 +8,12 @@ stage: planning
 
 Produce an ordered Delivery Plan from a Task Packet. Avoid oversized subtasks — keep every subtask single-domain; split multi-domain work into paired single-domain subtasks. Mark trigger-candidate subtasks for Design and Lead.
 
+## When NOT to invoke
+
+- The intake skill classified the task as `direct-answer`, `execution-trivial`, or `plan-only` (trivial path) — those flows skip Delivery PM entirely. See `skills/intake/orchestrator-intake/SKILL.md` and `ai/playbooks/ORCHESTRATION.md` → `<!-- section:trivial-flow -->`.
+- The task is a `reversal-packet` re-entry (`closure → execution`). Reversals carry the plan delta themselves — do NOT re-run the planner. See `skills/shared/orchestrator-state/references/stage-discipline.md`.
+- A Task Packet (`<!-- section:task-packet -->`) has not been written yet. Delivery Plan is appended to the same `task-data.md`; without the packet there is nothing to anchor against.
+
 Each subtask must be **self-describing**: the Lead reading only the matching subtask excerpt should have enough context to create a TEP without re-exploring the repo.
 
 For all new plans, default to the sectioned format `sectioned-v1` so the orchestrator can excerpt one subtask without opening the full artifact.

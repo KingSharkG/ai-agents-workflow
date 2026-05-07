@@ -20,9 +20,11 @@ Produce a structured Retrospective Report after a task reaches `phase: complete`
 - `<artifact-root>/tasks/<task_id>/summary.md` — task-level telemetry
 - Each `<subtask_id>/summary.md` — per-subtask telemetry, context manifest, and `<!-- section:dispatch-bundles -->` audit lines (one per dispatch — bundles themselves are inline in the Task prompt and not persisted)
 
-## Output
+## Output Target
 
-Append a `## Retrospective` section to the task-level `summary.md` (do not create a separate file). The section contains:
+**Append** a `## Retrospective` section to the task-level `summary.md` at `<artifact-root>/tasks/<task_id>/summary.md` (do not create a separate file). If that `summary.md` does not exist, escalate via `blocker-escalation-report` — the Reviewer was responsible for creating it during execution closure.
+
+The Retrospective section contains:
 
 ### Rework Heat-Map
 

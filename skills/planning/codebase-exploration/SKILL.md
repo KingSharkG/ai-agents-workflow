@@ -12,7 +12,7 @@ Before drafting the TEP, the Lead uses this skill to produce a structured explor
 
 - **Always** at Lead startup for any subtask with `complexity ∈ {medium, hard}`.
 - **When** `complexity = low` but the subtask's `target_files` list is incomplete or the `Domain Handoff Note` flags unfamiliar territory.
-- **Skip** when the prior subtask's TEP already emitted an `exploration-notes` block covering the same area AND the current subtask's `target_files` sit entirely inside that area. Re-using exploration across sibling subtasks is preferred over re-exploring.
+- **Skip** when the prior subtask's TEP already emitted an `exploration-notes` block covering the same area AND the current subtask's `target_files` sit entirely inside that area. Re-using exploration across sibling subtasks is preferred over re-exploring. **"Same area" is determined by overlap**: at least one entry in the prior subtask's `<!-- section:exploration-key-files -->` table matches a path in the current subtask's `target_files` (exact path, or shared parent directory at depth ≥ 2). If no overlap, do NOT skip.
 
 ## Output Target
 
@@ -28,7 +28,14 @@ Before drafting the TEP, the Lead uses this skill to produce a structured explor
 3. **Trace one golden path end-to-end.** For the most representative entry point, follow the call chain through each architecture layer (presentation → orchestration → domain → data or the project's equivalent). Note the layer each file belongs to. Stop at 6 files or one full traversal, whichever comes first.
 4. **Record patterns, not code.** Describe the shape (pattern name, invariant, transformation) — do NOT paste large code blocks. The Executor reads the real files at implementation time; this skill's job is navigation.
 
-Keep the total output under 120 lines. If the subtask is too broad to fit, emit a `blocker-escalation-report` with `blocker_type: scope-too-broad` instead of writing an overstuffed exploration record.
+### Scope gate (hard limits)
+
+Stop and emit a `blocker-escalation-report` (with `blocker_type: scope-too-broad`, routed to `delivery-pm`) instead of writing an overstuffed record if ANY of:
+
+- Output would exceed **120 lines** (anything beyond is unread by Executor anyway).
+- Exploration would exceed **2 Lead turns** (the budget above).
+- The golden-path traversal needs more than **6 files** to make sense of one entry point.
+- More than **3 candidate entry points** are equally plausible — the subtask is under-scoped, not under-explored.
 
 ## Output Template
 

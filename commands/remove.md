@@ -1,4 +1,5 @@
 ---
+name: remove
 description: Remove an entry from <artifact-root>/config/PROJECT_CONFIG.md.
 argument-hint: "<target-type> <value> [--domain <d>]"
 allowed-tools: Task, AskUserQuestion, Bash(node:*), Skill

@@ -1,4 +1,5 @@
 ---
+name: review
 description: Run a pr-lessons-aware review of local changes or a GitHub PR; offer to fix findings via /ai-agents-workflow:task.
 argument-hint: "[pr-number | PR URL | natural-language phrase]"
 allowed-tools: SlashCommand, Skill, AskUserQuestion, Read, Bash(gh:*), Bash(git:*), Bash(node:*), Bash(command:*)

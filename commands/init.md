@@ -1,4 +1,5 @@
 ---
+name: init
 description: Bootstrap <artifact-root>/config/PROJECT_CONFIG.md for this repo via the init agent.
 argument-hint: "[--force]"
 allowed-tools: Task

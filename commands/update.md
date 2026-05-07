@@ -1,4 +1,5 @@
 ---
+name: update
 description: Rescan the repo and refresh CLI-owned sections of <artifact-root>/config/PROJECT_CONFIG.md.
 argument-hint: ""
 allowed-tools: Task, Bash(node:*), Skill

@@ -1,4 +1,5 @@
 ---
+name: task
 description: Kick off a new task through the chief-orchestrator pipeline.
 argument-hint: "<freeform task description>"
 allowed-tools: Task, AskUserQuestion, Read, Bash(node:*), Skill
