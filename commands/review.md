@@ -3,6 +3,12 @@ name: review
 description: Run a pr-lessons-aware review of local changes or a GitHub PR; offer to fix findings via /ai-agents-workflow:task.
 argument-hint: "[pr-number | PR URL | natural-language phrase]"
 allowed-tools: SlashCommand, Skill, AskUserQuestion, Read, Bash(gh:*), Bash(git:*), Bash(node:*), Bash(command:*)
+# Bash allowlist is wider than `task.md` because this command runs entirely
+# in the main thread (no orchestrator dispatch) and needs:
+#   gh:*       — fetch PR diff/metadata for PR mode
+#   git:*      — read local diff for branch/uncommitted-changes mode
+#   node:*     — `node hooks/lib/artifact-root.js` via resolve-artifact-root
+#   command:*  — `command -v gh` availability probe in pre-flight
 ---
 
 Run a code review with the project's accumulated PR lessons injected as additional review criteria, then offer to fix the findings via `/ai-agents-workflow:task`.

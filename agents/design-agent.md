@@ -49,7 +49,7 @@ The block below is the load-bearing contract — `context-minimizer` extracts th
 - `superpowers:brainstorming` — UX approaches before finalizing constraints.
 - `plan-addendum` — produce the Design Review Addendum.
 
-**Base plugins:** `context7` — UI library / design system docs (Radix, shadcn, MUI, etc.) when validating component constraints against the baseline. Use `context7:resolve-library-id` then `context7:query-docs` before asserting a pattern is valid/invalid.
+**Plugins:** `context7` — UI library / design system docs (Radix, shadcn, MUI, etc.) when validating component constraints against the baseline. Use `context7:resolve-library-id` then `context7:query-docs` before asserting a pattern is valid/invalid.
 
 **Produce-artifact-first:** Append to `<!-- section:plan-addendum -->` in the subtask's `ai-work.md`. The placeholder MUST already exist — if absent, raise Blocker Escalation. Required: `design-metadata`, `design-findings`, `design-constraints`, `design-open-questions`.
 

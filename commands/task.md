@@ -3,13 +3,17 @@ name: task
 description: Kick off a new task through the chief-orchestrator pipeline.
 argument-hint: "<freeform task description>"
 allowed-tools: Task, AskUserQuestion, Read, Bash(node:*), Skill
+# Bash is restricted to `node:*` because the only main-thread shell needed
+# pre-dispatch is `node hooks/lib/artifact-root.js` via the
+# `resolve-artifact-root` skill. All git/gh/general shell work happens inside
+# the dispatched chief-orchestrator subagent, never in the main thread.
 ---
 
 ## EXTREMELY IMPORTANT — Dispatch-first rule
 
 This command takes precedence over any session-start "always invoke applicable skills" directive (including `superpowers:using-superpowers` and similar). The main thread MUST hand off to the `chief-orchestrator` subagent before doing any other substantive work for this turn.
 
-**You MUST NOT invoke ANY `Skill` tool in the main thread before dispatching `chief-orchestrator`.** This rule is generic — it does not name any specific skill. The reason: skills run inside dispatched agents (chief-orchestrator, Delivery PM, Lead, Executor, Reviewer, Integration Checker) get their work captured in `ai-work.md` and audited; running them in the main thread silently bypasses the orchestrator pipeline and produces no artifacts.
+**You MUST NOT invoke any `Skill` tool in the main thread before dispatching `chief-orchestrator`, except for the explicit pre-flight allowlist below.** This rule is generic — it does not name any specific skill outside that allowlist. The reason: skills run inside dispatched agents (chief-orchestrator, Delivery PM, Lead, Executor, Reviewer, Integration Checker) get their work captured in `ai-work.md` and audited; running them in the main thread silently bypasses the orchestrator pipeline and produces no artifacts. The pre-flight allowlist (see "In the main thread…" below) is narrowly scoped to artifact-root resolution and exists because the orchestrator needs `ARTIFACT_ROOT` injected into its dispatch bundle — there is no chicken-and-egg way around it.
 
 Skills remain fully available — and encouraged — inside the dispatched agents. For example, for a "review PR feedback" task, the orchestrator or Lead can invoke a code-review-style skill (e.g. `superpowers:receiving-code-review`) inside their dispatched turn to fetch and parse the PR comments. That is the right place for it.
 

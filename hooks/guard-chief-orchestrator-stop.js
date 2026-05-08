@@ -273,7 +273,10 @@ function mostRecentTaskDir() {
     } catch (_) {
       continue;
     }
-    if (mtime > bestMtime) {
+    if (mtime > bestMtime || (mtime === bestMtime && best !== null && entry.name > best)) {
+      // Strictly newer mtime wins; on equal mtime (clock skew, bulk copy)
+      // pick the lexically larger directory name so the choice is
+      // deterministic across filesystems / readdir orderings.
       bestMtime = mtime;
       best = entry.name;
     }
@@ -324,9 +327,20 @@ function isLegitimateTerminalState(s) {
 
 function findAiWorkPath(rootDir, subtaskId) {
   if (!rootDir || !subtaskId) return null;
-  const stack = [rootDir];
+  const MAX_DEPTH = 8;
+  const visited = new Set();
+  const stack = [{ dir: rootDir, depth: 0 }];
   while (stack.length) {
-    const dir = stack.pop();
+    const { dir, depth } = stack.pop();
+    if (depth > MAX_DEPTH) continue;
+    let real;
+    try {
+      real = fs.realpathSync(dir);
+    } catch (_) {
+      continue;
+    }
+    if (visited.has(real)) continue;
+    visited.add(real);
     let dirEntries;
     try {
       dirEntries = fs.readdirSync(dir, { withFileTypes: true });
@@ -339,7 +353,7 @@ function findAiWorkPath(rootDir, subtaskId) {
         const candidate = path.join(dir, e.name, 'ai-work.md');
         if (fs.existsSync(candidate)) return candidate;
       }
-      stack.push(path.join(dir, e.name));
+      stack.push({ dir: path.join(dir, e.name), depth: depth + 1 });
     }
   }
   return null;

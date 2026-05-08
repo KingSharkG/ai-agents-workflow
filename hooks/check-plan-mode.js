@@ -166,11 +166,14 @@ if (lastAssistantIndex === -1) {
 }
 
 // The banner is injected as part of the user-message system-reminder block
-// for the upcoming assistant turn. So the relevant scan window is from
-// max(lastUserIndex, 0) inclusive through the end of the transcript: the
-// banner is present in the most-recent user/system block iff plan mode is
-// currently active.
-const scanStart = lastUserIndex === -1 ? 0 : lastUserIndex;
+// for the upcoming assistant turn. So the relevant scan window is the
+// most-recent user/system block. If we have an assistant turn but no
+// user turn before it (rare: synthetic transcripts, harness bootstraps),
+// scan only from the last assistant entry onward — scanning from index 0
+// would catch stale "Plan mode is active" banners from much earlier in
+// the transcript and produce false positives.
+const scanStart =
+  lastUserIndex !== -1 ? lastUserIndex : Math.max(lastAssistantIndex, 0);
 let bannerSeen = false;
 for (let i = scanStart; i < lines.length; i++) {
   let entry;

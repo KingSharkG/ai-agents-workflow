@@ -25,11 +25,11 @@ On startup, follow the inline dispatch bundle protocol in `${CLAUDE_PLUGIN_ROOT}
 
 ## MANDATORY OUTPUT (every review, no exceptions)
 
-1. **FIRST action — write `summary.md` skeleton**: Write `<artifact-root>/tasks/<task_id>/<subtask_id>/summary.md` with `verdict: TBD`. This file MUST exist before you touch `ai-work.md`.
+1. **FIRST action — verify `summary.md` skeleton exists** at `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md`. The orchestrator creates this skeleton alongside `ai-work.md` at subtask init (trivial-flow Step 6 / standard Step 6); `pre-task-guard.js` blocks dispatch when it's missing, so a missing skeleton at this point indicates the hook was bypassed — raise a Blocker Escalation rather than authoring it yourself.
 2. **Append review** to `<!-- section:review -->` in the subtask's `ai-work.md`. Use EXACTLY `<!-- section:review -->` / `<!-- /section:review -->` — NOT `section:review-report`, `section:review-cycle*`, or any other variant. Close every section with `<!-- /section:X -->` (NOT `<!-- end:X -->`).
 3. **LAST action — finalize `summary.md`**: Update with actual verdict, files-changed, telemetry, context manifest, and notes.
 
-Skipping `summary.md` or writing to a non-canonical section is a workflow failure. Invoke the `review-report` skill for exact templates.
+Skipping `summary.md` finalization or writing to a non-canonical section is a workflow failure. Invoke the `review-report` skill for exact templates.
 
 ---
 

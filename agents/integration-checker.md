@@ -45,7 +45,7 @@ The block below is the load-bearing contract — `context-minimizer` extracts th
 - `integration-check` — isolate contract breaks and emit the canonical Integration Check Report.
 - `blocker-escalation-report` — missing context blocks comparison.
 
-**Base plugins:** `github` — fetch PR diff, file contents, branch comparisons when contract surfaces live in GitHub PRs.
+**Plugins:** `github` — fetch PR diff, file contents, branch comparisons when contract surfaces live in GitHub PRs.
 
 **Produce-artifact-first:** Append to `<!-- section:integration-check -->` in the FE subtask's `ai-work.md` (or the changed side's `ai-work.md` when only one side changed). The placeholder MUST already exist — if absent, raise Blocker Escalation. Required: `integration-metadata`, `integration-fe-surface`, `integration-be-surface`, `integration-verdict`, `integration-findings`, `integration-recommended-fixes`. If the IC covers two subtasks, note both in `integration-metadata` and include the BE subtask path under `integration-be-surface`.
 

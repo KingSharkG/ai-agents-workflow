@@ -130,15 +130,114 @@ if (matcher === 'Bash') {
   const command = process.env.CLAUDE_TOOL_INPUT_COMMAND || '';
   if (!command) process.exit(0);
 
-  // 1. Output redirection (`>` or `>>`) targeting a non-artifact path
-  //    is an unambiguous write outside ai-workflow-data/.
-  //    Match `>` or `>>` followed by a path token.
-  const redirRegex = /(?:^|[\s;|&])(>{1,2})\s*([^\s;|&]+)/g;
-  let m;
-  while ((m = redirRegex.exec(command)) !== null) {
-    const target = m[2].replace(/^["']|["']$/g, '');
-    if (!isArtifactPath(target)) {
-      denyBash(command, `redirection "${m[1]} ${target}" writes outside the artifact root`);
+  // Quote-aware splitter shared by segment + token + redirect scanning.
+  // Returns an array of { text, quoted } chunks where `text` is the literal
+  // run with quotes stripped and `quoted` is true if any character of the run
+  // came from inside a quoted region. Backslash escapes outside quotes
+  // pass through; sufficient for the heuristic decisions made below.
+  function shellLex(input) {
+    const out = [];
+    let buf = '';
+    let bufQuoted = false;
+    let i = 0;
+    let mode = 'normal'; // 'normal' | 'single' | 'double'
+    const flush = () => {
+      if (buf.length) out.push({ text: buf, quoted: bufQuoted });
+      buf = '';
+      bufQuoted = false;
+    };
+    while (i < input.length) {
+      const ch = input[i];
+      if (mode === 'normal') {
+        if (ch === '\\' && i + 1 < input.length) {
+          buf += input[i + 1];
+          i += 2;
+          continue;
+        }
+        if (ch === "'") { mode = 'single'; bufQuoted = true; i++; continue; }
+        if (ch === '"') { mode = 'double'; bufQuoted = true; i++; continue; }
+        if (/\s/.test(ch) || ch === ';' || ch === '|' || ch === '&' || ch === '>' || ch === '<') {
+          flush();
+          out.push({ text: ch, quoted: false, sep: true });
+          i++;
+          continue;
+        }
+        buf += ch;
+        i++;
+        continue;
+      }
+      if (mode === 'single') {
+        if (ch === "'") { mode = 'normal'; i++; continue; }
+        buf += ch; i++; continue;
+      }
+      // double quotes: allow \" \\ escapes
+      if (ch === '\\' && i + 1 < input.length && (input[i + 1] === '"' || input[i + 1] === '\\')) {
+        buf += input[i + 1]; i += 2; continue;
+      }
+      if (ch === '"') { mode = 'normal'; i++; continue; }
+      buf += ch; i++;
+    }
+    flush();
+    return out;
+  }
+
+  // Re-stitch shellLex() output into segments separated by &&, ||, ;, |.
+  // Each segment is an array of token objects { text, quoted }.
+  function splitSegments(input) {
+    const lex = shellLex(input);
+    const segs = [];
+    let cur = [];
+    let pendingSep = '';
+    const pushSeg = () => {
+      if (cur.length) segs.push(cur);
+      cur = [];
+    };
+    for (const part of lex) {
+      if (part.sep) {
+        if (part.text === '&' || part.text === '|') {
+          pendingSep += part.text;
+          if (pendingSep === '&&' || pendingSep === '||' || pendingSep === '|') {
+            pushSeg();
+            pendingSep = '';
+          }
+          continue;
+        }
+        if (part.text === ';') { pushSeg(); pendingSep = ''; continue; }
+        // whitespace, redirect operator
+        pendingSep = '';
+        continue;
+      }
+      pendingSep = '';
+      cur.push({ text: part.text, quoted: part.quoted });
+    }
+    pushSeg();
+    return segs;
+  }
+
+  // 1. Output redirection (`>` or `>>`) targeting a non-artifact path is an
+  //    unambiguous write outside the artifact root. Walk the lex stream so
+  //    redirect operators inside quoted strings (`echo "a > b"`) are ignored.
+  {
+    const lex = shellLex(command);
+    for (let i = 0; i < lex.length; i++) {
+      const part = lex[i];
+      if (!part.sep) continue;
+      if (part.text !== '>' ) continue;
+      // Coalesce >> into one operator
+      let op = '>';
+      if (i + 1 < lex.length && lex[i + 1].sep && lex[i + 1].text === '>') {
+        op = '>>';
+        i++;
+      }
+      // Find the next non-whitespace, non-sep token = target
+      let j = i + 1;
+      while (j < lex.length && lex[j].sep) j++;
+      if (j >= lex.length) break;
+      const target = lex[j].text;
+      if (!isArtifactPath(target)) {
+        denyBash(command, `redirection "${op} ${target}" writes outside the artifact root`);
+      }
+      i = j;
     }
   }
 
@@ -159,34 +258,103 @@ if (matcher === 'Bash') {
     { name: 'truncate', firstPathArg: true },
   ];
 
-  // Tokenize the command on simple separators. This is intentionally
-  // conservative — anything we cannot tokenize cleanly falls through.
-  const segments = command.split(/&&|\|\||;|\|/g).map((s) => s.trim());
-  for (const segment of segments) {
-    if (!segment) continue;
-    const tokens = segment.split(/\s+/);
-    if (tokens.length === 0) continue;
-    const cmd = path.basename(tokens[0]);
+  // Quote-aware segment + token walk. Anything we cannot tokenize cleanly
+  // (e.g. unbalanced quotes degrade to a single segment) falls through.
+  // For each segment we walk tokens linearly, honoring per-command
+  // "flag takes a value" sets so `sed -i -e 'expr' file` resolves to `file`
+  // (not `-e`) and `cp -t dest src1 src2` resolves to `dest` (not `src2`).
+
+  // Flags that consume the next token as their value.
+  const SED_VALUE_FLAGS = new Set(['-e', '-f', '--expression', '--file']);
+  const CP_VALUE_FLAGS = new Set(['-t', '--target-directory', '-S', '--suffix']);
+  const MV_VALUE_FLAGS = new Set(['-t', '--target-directory', '-S', '--suffix']);
+
+  // Walk tokens, returning { positionals, longFlagValues } where
+  // longFlagValues maps the canonical long-flag name to its value (for
+  // `--target-directory=DIR` and `--target-directory DIR`).
+  function parseArgs(tokens, valueFlags) {
+    const positionals = [];
+    const longFlagValues = new Map();
+    for (let i = 0; i < tokens.length; i++) {
+      const tok = tokens[i];
+      const text = tok.text;
+      if (text === '--') {
+        for (let j = i + 1; j < tokens.length; j++) positionals.push(tokens[j]);
+        break;
+      }
+      if (text.startsWith('--')) {
+        const eq = text.indexOf('=');
+        const name = eq === -1 ? text : text.slice(0, eq);
+        if (valueFlags.has(name)) {
+          if (eq !== -1) {
+            longFlagValues.set(name, text.slice(eq + 1));
+          } else if (i + 1 < tokens.length) {
+            longFlagValues.set(name, tokens[i + 1].text);
+            i++;
+          }
+        }
+        continue;
+      }
+      if (text.startsWith('-') && text.length > 1) {
+        // Short flag (or cluster). If it (or its first char form) takes a
+        // value, consume the next token. Conservative: only the bare
+        // short-flag forms in valueFlags trigger this — clusters like
+        // `-it` won't be misread as `-i` taking the next arg.
+        if (valueFlags.has(text) && i + 1 < tokens.length) {
+          longFlagValues.set(text, tokens[i + 1].text);
+          i++;
+        }
+        continue;
+      }
+      positionals.push(tok);
+    }
+    return { positionals, longFlagValues };
+  }
+
+  const segments = splitSegments(command);
+  for (const segTokens of segments) {
+    if (!segTokens.length) continue;
+    const cmd = path.basename(segTokens[0].text);
 
     const mutator = mutators.find((mu) => mu.name === cmd);
     if (!mutator) continue;
 
+    const argTokens = segTokens.slice(1);
+
     if (mutator.name === 'sed') {
       // Block only sed -i / sed --in-place that targets non-artifact paths.
-      const usesInPlace = tokens.some((t) => t === '-i' || t === '--in-place' || t.startsWith('-i'));
+      // BSD sed accepts `-i ''` (empty suffix) where the empty string is the
+      // backup-suffix value, not a flag — handle by treating bare `-i` as
+      // potentially consuming an empty next token only when that token is
+      // literally empty / a quoted empty string.
+      const usesInPlace = argTokens.some(
+        (t) => t.text === '-i' || t.text === '--in-place' || t.text.startsWith('-i'),
+      );
       if (!usesInPlace) continue;
-      const fileArg = tokens.slice(1).find((t) => !t.startsWith('-') && t !== 'sed');
-      if (fileArg && !isArtifactPath(fileArg)) {
-        denyBash(command, `"sed -i" target "${fileArg}" is outside the artifact root`);
+      const { positionals } = parseArgs(argTokens, SED_VALUE_FLAGS);
+      // The file argument is the last positional after -e/-f values are
+      // peeled off. sed may take multiple files; check all of them.
+      for (const p of positionals) {
+        if (!isArtifactPath(p.text)) {
+          denyBash(command, `"sed -i" target "${p.text}" is outside the artifact root`);
+        }
       }
       continue;
     }
 
     if (mutator.name === 'cp') {
-      // cp <src> <dst>: destination is the LAST positional arg.
-      const positional = tokens.slice(1).filter((t) => !t.startsWith('-'));
-      if (positional.length < 2) continue;
-      const dest = positional[positional.length - 1];
+      // cp <src>... <dst>  OR  cp -t <dst> <src>...
+      const { positionals, longFlagValues } = parseArgs(argTokens, CP_VALUE_FLAGS);
+      const targetFlag =
+        longFlagValues.get('-t') || longFlagValues.get('--target-directory');
+      if (targetFlag) {
+        if (!isArtifactPath(targetFlag)) {
+          denyBash(command, `"cp" destination "${targetFlag}" is outside the artifact root`);
+        }
+        continue;
+      }
+      if (positionals.length < 2) continue;
+      const dest = positionals[positionals.length - 1].text;
       if (!isArtifactPath(dest)) {
         denyBash(command, `"cp" destination "${dest}" is outside the artifact root`);
       }
@@ -194,11 +362,17 @@ if (matcher === 'Bash') {
     }
 
     if (mutator.name === 'mv') {
-      // mv <src> <dst>: destination is the LAST positional arg; either
-      // src or dst leaving ai-workflow-data/ is a violation.
-      const positional = tokens.slice(1).filter((t) => !t.startsWith('-'));
-      if (positional.length < 2) continue;
-      const dest = positional[positional.length - 1];
+      const { positionals, longFlagValues } = parseArgs(argTokens, MV_VALUE_FLAGS);
+      const targetFlag =
+        longFlagValues.get('-t') || longFlagValues.get('--target-directory');
+      if (targetFlag) {
+        if (!isArtifactPath(targetFlag)) {
+          denyBash(command, `"mv" destination "${targetFlag}" is outside the artifact root`);
+        }
+        continue;
+      }
+      if (positionals.length < 2) continue;
+      const dest = positionals[positionals.length - 1].text;
       if (!isArtifactPath(dest)) {
         denyBash(command, `"mv" destination "${dest}" is outside the artifact root`);
       }
@@ -207,11 +381,11 @@ if (matcher === 'Bash') {
 
     // Generic single-target mutators (rm, chmod, chown, tee, touch,
     // install, truncate): deny if any positional arg is a non-artifact
-    // path. This intentionally over-blocks `rm src/*.tmp` etc. because
-    // the orchestrator has no business deleting consumer-repo files.
-    const positional = tokens.slice(1).filter((t) => !t.startsWith('-'));
-    for (const arg of positional) {
-      // Skip glob/wildcard args we cannot statically resolve — fail-open.
+    // path. Intentionally over-blocks `rm src/*.tmp` etc. — orchestrator
+    // has no business deleting consumer-repo files.
+    const { positionals } = parseArgs(argTokens, new Set());
+    for (const p of positionals) {
+      const arg = p.text;
       if (arg.includes('*') || arg.includes('?')) continue;
       if (!isArtifactPath(arg)) {
         denyBash(command, `"${cmd}" target "${arg}" is outside the artifact root`);

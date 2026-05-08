@@ -53,7 +53,7 @@ Pick up local edits with the same update sequence:
 
 ## Usage
 
-Five namespaced slash commands cover the plugin's surface:
+Eight namespaced slash commands cover the plugin's surface:
 
 | Command                                                           | Purpose                                               |
 | ----------------------------------------------------------------- | ----------------------------------------------------- |
@@ -64,6 +64,7 @@ Five namespaced slash commands cover the plugin's surface:
 | `/ai-agents-workflow:task <description>`                          | Classify and route a task (see Intake Classification) |
 | `/ai-agents-workflow:continue [task_id]`                          | Resume an interrupted or in-progress task             |
 | `/ai-agents-workflow:pr-lessons <PR-ref>`                         | Harvest review comments from a PR into the lessons file |
+| `/ai-agents-workflow:review [pr-number \| URL \| phrase]`         | PR-lessons-aware review of local diff or a GitHub PR; offers to dispatch fixes via `/ai-agents-workflow:task` |
 
 Valid `<target-type>` values for `:add` / `:remove`: `domain`, `skill`, `plugin`, `baseline`, `validation-rule`, `forbidden-action`, `best-practice`, `cross-domain-rule`.
 
@@ -201,7 +202,7 @@ Run `/ai-agents-workflow:init` in a fresh consumer repo (or use natural language
     - `skills/project-config/` (4): owned by `/init`, `/add`, `/update`, `/remove`
     - `skills/pr-lessons/` (3): owned by `/pr-lessons`; `pr-lessons-check` is also consulted by Executor and Reviewer during execution
 - `hooks/` — Node.js hook scripts plus `hooks/hooks.json`. Notable: `pre-task-guard.js` (Phases 1–4 + Phase 3.5 stage guard), `check-plan-mode.js` (blocks `Task(chief-orchestrator)` while plan mode is on), `lib/plan-mode-message.js` (canonical error message).
-- `commands/` — 7 user-facing slash commands (`init`, `add`, `update`, `remove`, `task`, `continue`, `pr-lessons`) namespaced as `/ai-agents-workflow:<command>`.
+- `commands/` — 8 user-facing slash commands (`init`, `add`, `update`, `remove`, `task`, `continue`, `pr-lessons`, `review`) namespaced as `/ai-agents-workflow:<command>`.
 - `ai/core/`, `ai/governance/`, `ai/playbooks/`, `ai/agents/` — canonical governance docs.
 
 See `CLAUDE.md` for the full layout and path conventions.

@@ -14,6 +14,8 @@ Single source of truth for `<!-- section:<name> -->` markers used in workflow ar
 
 Sub-sections are listed under their parent block as indented rows (parent must be present for children to be considered).
 
+**Casing rule:** marker names MUST be authored lowercase (`<!-- section:review -->`, never `<!-- section:Review -->`). Validators and the section-counter in `hooks/validate-artifact-chain.js` match case-insensitively as a defensive read, but mixed-case markers are protocol violations and may be rejected by future stricter validators. New markers added to this registry must be lowercase, hyphen-separated, ASCII-only.
+
 ---
 
 ## ai-work.md (per-subtask artifact)

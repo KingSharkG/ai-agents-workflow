@@ -34,6 +34,17 @@ Before applying classification rules, evaluate whether the request is ambiguous 
 
 After answers, proceed to classification using the enriched description. The ambiguity check runs **once per task** — after clarification, classification proceeds without a second clarify round. The mandatory classification popup (Confirm-and-Override Protocol) still fires after Step 0a regardless of whether the clarify gate ran.
 
+## Test-Mode Auto-Approve (E2E only)
+
+When the originating task prompt contains the literal marker `[E2E_AUTO_APPROVE_MODE]` (typically injected by `/aiaw-e2e-test auto`), this skill enters auto-approve mode:
+
+1. **Skip the Step 0a clarify gate** even if ambiguity triggers fire — fold the prompt verbatim into classification.
+2. **Skip the four-option `AskUserQuestion` confirm popup.** `final_path` equals `heuristic_verdict`; `user_action` is recorded as `auto-approved-e2e` (NOT `confirmed`).
+3. **Stamp gate-reached evidence.** Append (or include in the initial write of) `<!-- e2e-gate-reached: intake-classify -->` to `<artifact-root>/tasks/<task_id>/task-data.md` immediately after writing the `<!-- section:intake-classification -->` block. The verifier asserts this line is present per scenario.
+4. **Honest signature.** The classification block records `signals: [...]` as normal so the heuristic decision is auditable. Do NOT rewrite signals to claim the user confirmed — that defeats the audit.
+
+This branch exists only to make full e2e regression auditable without manual clicks. Production paths MUST always present the popup.
+
 ## Classification Paths
 
 | Path | When to use | Behavior |

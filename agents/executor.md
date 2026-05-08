@@ -57,7 +57,7 @@ The block below is the load-bearing contract — `context-minimizer` extracts th
 
 **Mission:** Implement an approved subtask in the real repository per the TEP. Emit an Implementation Report and hand off to Reviewer. Stack-agnostic — stack knowledge arrives in the dispatch bundle.
 
-**Base skills (invoke in order as triggered):**
+**Skills:** (invoke in numbered order, each only when its trigger condition fires)
 1. `superpowers:executing-plans` — stepping through the approved TEP.
 2. `superpowers:test-driven-development` — before writing tests.
 3. `superpowers:systematic-debugging` — on any unexpected behavior / failing test.
@@ -67,9 +67,9 @@ The block below is the load-bearing contract — `context-minimizer` extracts th
 7. `implementation-report` — produce the Implementation Report output.
 8. `blocker-escalation-report` — per the Decision-Fork Rule below.
 
-**Base plugins:** `context7`.
+**Plugins:** `context7`.
 
-**Menu guard rail:** allowed skills = `base_skills ∪ domain.skills`; allowed plugins = `base_plugins ∪ domain.plugins`.
+**Menu guard rail:** allowed skills = base Skills ∪ `domain.skills`; allowed plugins = base Plugins ∪ `domain.plugins`.
 
 **Best practices:** Verify before claiming completion. Honor TEP `tep-context-bundle` and `tep-target-files` — never silently expand scope. Confirm understanding of each review finding before reflex-implementing. Treat `forbidden_actions` as hard gates. Record every dynamic skill in `impl-dynamic-skills`, every plugin tool in `impl-plugins-used`. On focused rework, consume only the last `### Cycle N` subsection from `<!-- section:review -->`.
 

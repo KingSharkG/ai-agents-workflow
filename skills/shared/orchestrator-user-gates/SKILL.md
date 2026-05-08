@@ -8,6 +8,25 @@ stage: shared
 
 The orchestrator MUST pause for user input at these checkpoints. Use `AskUserQuestion` with the specified options.
 
+## Test-Mode Auto-Approve (E2E only)
+
+When the originating task prompt contains the literal marker `[E2E_AUTO_APPROVE_MODE]` (typically injected by `/aiaw-e2e-test auto`), every gate in this skill auto-approves with an honest audit trail instead of popping `AskUserQuestion`. This branch exists only to make full e2e regression auditable without manual clicks. Production paths MUST always present the popup.
+
+For each gate that fires under auto-approve mode:
+
+| Gate | Auto-pick | State / artifact effect | Required audit line |
+|---|---|---|---|
+| **P1** | `Approve plan and execute` | `gates.p1_approved: true`, `gates.p1_approved_signature: "e2e-auto-approve"`, `gates.p1_approved_at: <ISO-8601>`, `gates.p1_approved_by: "e2e-auto"` | `<!-- e2e-gate-reached: P1 -->` appended to `<artifact-root>/tasks/<task_id>/task-data.md` |
+| **P2** | `Continue to Phase <N+1>` | record decision in stage history; do NOT run integration verification, scope adjustment, or pause | `<!-- e2e-gate-reached: P2-phase-<N>-to-<N+1> -->` appended to `<artifact-root>/tasks/<task_id>/summary.md` |
+| **P4** | `Approve completion` | proceed to `workflow_state: complete`; honor the artifact-chain + history-consistency checks (do not bypass them) | `<!-- e2e-gate-reached: P4 -->` appended to `<artifact-root>/tasks/<task_id>/summary.md` |
+| **P5** | `No feedback` | skip retrospective free-text collection but still run `post-task-review` skill if it would normally run | `<!-- e2e-gate-reached: P5 -->` appended to `<artifact-root>/tasks/<task_id>/summary.md` |
+
+**Discipline:**
+
+- The audit lines are non-negotiable. The verifier (`/aiaw-e2e-test verify-auto`) asserts the right set of `e2e-gate-reached` lines for each classification.
+- The pre-flight invariants for each gate (artifact-chain validation at P4, history-consistency check, single-phase skip at P2) STILL run in auto mode. Auto-approve only replaces the `AskUserQuestion` step — never the prerequisite checks. A failing invariant must still emit a `blocker-escalation-report` even in auto mode.
+- The signature `"e2e-auto-approve"` is distinct from `"trivial-path-auto"` (which is the production-mode auto-approve for `execution-trivial`). Do not conflate them; the verifier matches each by signature.
+
 ## P1 — Delivery Plan Approval
 
 **When:** After Delivery PM appends `<!-- section:delivery-plan -->` to `task-data.md`, before dispatching any subtask agent.

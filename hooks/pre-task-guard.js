@@ -151,7 +151,10 @@ function parseSubtaskId(taskId, p) {
   if (last) return last;
 
   const promptWithoutTaskId = p.replace(taskId, '');
-  const legacyMatch = promptWithoutTaskId.match(/\b([A-Z]{1,2}-\d{3}|[A-Z]+-[A-Z]\d+)\b/);
+  // Require ≥2 uppercase chars in the alpha prefix on both legacy forms so
+  // incidental tokens like `A-A1` in prose don't false-match. Word
+  // boundaries continue to anchor the match.
+  const legacyMatch = promptWithoutTaskId.match(/\b([A-Z]{2,}-\d{3}|[A-Z]{2,}-[A-Z]\d+)\b/);
   return legacyMatch ? legacyMatch[1] : null;
 }
 
@@ -236,9 +239,15 @@ if (taskIdFromPrompt) {
   }
   const taskDir = path.join(TASKS_ROOT, taskIdFromPrompt);
 
-  if (!fs.existsSync(taskDir)) {
+  let taskDirIsDir = false;
+  try {
+    taskDirIsDir = fs.statSync(taskDir).isDirectory();
+  } catch (_) {
+    taskDirIsDir = false;
+  }
+  if (!taskDirIsDir) {
     console.error(
-      `[pre-task-guard] BLOCKED: task directory not found: ${taskDir}\n` +
+      `[pre-task-guard] BLOCKED: task directory not found (or not a directory): ${taskDir}\n` +
         `Chief Orchestrator must create ${path.relative(CWD, taskDir) || taskDir}/task-data.md before dispatching any agent.\n`,
     );
     process.exit(1);
@@ -257,13 +266,28 @@ if (taskIdFromPrompt) {
     // creates both at trivial-flow Step 6 / standard Step 6 — Reviewer
     // finalizes summary.md downstream, so a missing skeleton means downstream
     // writes will land on a non-existent file or get suppressed entirely.
-    const findSubtaskDir = (dir, targetId) => {
+    const SUBTASK_WALK_MAX_DEPTH = 8;
+    const findSubtaskDir = (dir, targetId, visited = new Set(), depth = 0) => {
+      if (depth > SUBTASK_WALK_MAX_DEPTH) return null;
+      let real;
+      try {
+        real = fs.realpathSync(dir);
+      } catch (_) {
+        return null;
+      }
+      if (visited.has(real)) return null;
+      visited.add(real);
       try {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
           if (!entry.isDirectory()) continue;
           if (entry.name === targetId) return path.join(dir, entry.name);
-          const nested = findSubtaskDir(path.join(dir, entry.name), targetId);
+          const nested = findSubtaskDir(
+            path.join(dir, entry.name),
+            targetId,
+            visited,
+            depth + 1,
+          );
           if (nested) return nested;
         }
       } catch (_) {}
@@ -335,10 +359,14 @@ if (taskIdFromPrompt) {
       // schema_version are tolerated by the P1 phase (with a warn-and-upgrade
       // hint) — they are NOT blocked here. Files claiming schema_version >= 2
       // must conform to the canonical v2 shape; v3 is a strict superset of v2
-      // and is validated by the same checks here. Full v3-specific validation
-      // (stage field, stage_history shape, etc.) lands with the stage guard in
-      // a later commit.
-      if (parsedTaskState.schema_version === 2 || parsedTaskState.schema_version === 3) {
+      // and future versions are expected to remain backward-compatible
+      // supersets, so any numeric schema_version >= 2 is validated here. Full
+      // v3-specific validation (stage field, stage_history shape, etc.) lands
+      // with the stage guard in a later commit.
+      if (
+        typeof parsedTaskState.schema_version === 'number' &&
+        parsedTaskState.schema_version >= 2
+      ) {
         const canonicalIssues = [];
         if (!('current_subtask' in parsedTaskState)) {
           canonicalIssues.push('current_subtask (string|null) missing');
@@ -410,9 +438,24 @@ if (GATED_ROLES.has(subagentType)) {
   if (!resolvedTaskId) {
     // No active task we can resolve — defer. Earlier phases would have already
     // surfaced any structural issues.
-  } else if (stateMalformed || !state) {
-    // Malformed state is the skeleton phase's domain; missing state was
-    // tolerated above. Don't double-block here.
+  } else if (stateMalformed) {
+    // The skeleton phase blocks malformed state when its taskDir resolution
+    // succeeds, but its taskDir derivation is independent of the
+    // resolvedTaskId used here (prompt-derived). When the two paths diverge,
+    // the skeleton phase may not run. Block here as a safety net so a corrupt
+    // state file never silently allows a gated dispatch.
+    console.error(
+      `[pre-task-guard] BLOCKED: dispatch of ${subagentType} for task ${resolvedTaskId} ` +
+        `cannot proceed because orchestration-state.json is malformed JSON.\n` +
+        `File: ${resolvedStatePath}\n` +
+        `Resolution: Chief Orchestrator must rewrite the state file with valid JSON ` +
+        `conforming to the canonical schema (see ` +
+        `\${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/references/state-schemas.md) ` +
+        `before redispatching ${subagentType}.\n`,
+    );
+    process.exit(1);
+  } else if (!state) {
+    // Missing state file was tolerated by earlier phases — defer.
   } else if (!Object.prototype.hasOwnProperty.call(state, 'schema_version')) {
     console.error(
       `[pre-task-guard] WARN: legacy task ${resolvedTaskId} ` +
@@ -538,9 +581,27 @@ function parseKeywordSection(filePath, sectionName) {
 
   const rules = {};
   let currentAgent = null;
+  let mixedIndentWarned = false;
   for (const line of yamlMatch[1].split('\n')) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
+
+    // Reject mixed tabs/spaces in the leading indent of any non-empty line.
+    // The parser treats leading whitespace as significant when grouping list
+    // items under their agent key, so a tab/space mix silently misaligns
+    // them. Surface a single warning per parse and skip the offending line
+    // rather than producing a wrongly-grouped rule set.
+    const indentMatch = line.match(/^([ \t]*)\S/);
+    if (indentMatch && /\t/.test(indentMatch[1]) && / /.test(indentMatch[1])) {
+      if (!mixedIndentWarned) {
+        mixedIndentWarned = true;
+        console.error(
+          `[pre-task-guard] WARN: trigger-rules YAML in ${filePath} mixes tabs and spaces in line indentation; ` +
+            `affected lines are skipped. Use spaces only.\n`,
+        );
+      }
+      continue;
+    }
 
     const agentMatch = line.match(/^([A-Za-z][A-Za-z0-9_-]*):\s*(\[\s*\])?\s*$/);
     if (agentMatch) {
@@ -577,11 +638,22 @@ function loadCachedRules() {
   }
 }
 
+let cacheWriteWarned = false;
 function saveCachedRules(cache) {
   if (!CACHE_PATH) return;
   try {
     fs.writeFileSync(CACHE_PATH, JSON.stringify(cache), 'utf8');
-  } catch (_) {}
+  } catch (e) {
+    // Don't block on cache write failure (cold cache just means slightly
+    // slower next run), but emit one stderr line per process so a
+    // permission/disk-full issue doesn't fail silently forever.
+    if (!cacheWriteWarned) {
+      cacheWriteWarned = true;
+      console.error(
+        `[pre-task-guard] WARN: failed to write trigger-rules cache at ${CACHE_PATH}: ${e.message}\n`,
+      );
+    }
+  }
 }
 
 function getCachedOrParse(filePath, sectionName, cacheKey, cache) {

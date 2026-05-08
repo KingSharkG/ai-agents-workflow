@@ -71,3 +71,12 @@ Each suite is a self-contained Node script using only `assert`, `fs`, `os`, `pat
 - **Exit-code semantics.** Blocking hooks: 0 = allow, 1 = block (with stderr explaining why). Non-blocking hooks: always exit 0; warnings go to stderr or stdout.
 - **Path comparisons go through `canonicalize()`.** Anywhere a hook compares an input path to the artifact root, both sides are realpath-resolved (with walk-up for not-yet-created targets) so symlinks behave consistently across hooks.
 - **Resolver returns, never throws.** `resolveArtifactRoot()` always returns a result object. Callers decide whether `result.root === null` should block.
+
+## Timeout policy
+
+| Script kind | Timeout | Rationale |
+|---|---|---|
+| PreToolUse / SubagentStop guards | 5000 ms | Each guard reads at most a handful of small JSON / Markdown files (orchestration-state, plugin manifest, single ai-work / summary). The 5 s cap fails fast on a wedged hook without slowing healthy dispatches. |
+| PostToolUse validators (`validate-artifact-chain`, `validate-summary-telemetry`) | 10000 ms | Validators re-scan the just-written artifact (plus its sibling `summary.md` for telemetry). On large summary files (long-running tasks with deep `<!-- section:dispatch-bundles -->` audit logs) the regex sweep can approach 5 s on cold disk caches. 10 s gives headroom without becoming a usability problem. |
+
+If a hook still times out under this policy, that is a real bug — fix the hook (stream / chunk / exit early), don't raise the budget further.

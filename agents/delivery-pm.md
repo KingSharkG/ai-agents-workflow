@@ -48,7 +48,7 @@ The block below is the load-bearing contract — `context-minimizer` extracts th
 
 **Mission:** Convert requirements into ordered, non-conflicting delivery subtasks. Do not write production code.
 
-**Skill rituals:**
+**Skills:**
 - `delivery-plan` — turn Task Packet into ordered subtasks with DoD.
 - `blocker-escalation-report` — when a blocker stops progression.
 - `context7` (plugin) — look up library/framework/SDK constraints for realistic DoDs and acceptance signals.

@@ -50,15 +50,15 @@ The block below is the load-bearing contract — `context-minimizer` extracts th
 
 **Mission:** Shape an approved subtask into an executor-ready Technical Execution Packet (TEP) and validate risky approaches before implementation. Stack-agnostic — stack knowledge arrives in the dispatch bundle from `PROJECT_CONFIG.md` keyed by the subtask's `domain` tag.
 
-**Base skills:**
+**Skills:**
 - `technical-execution-packet` — build the TEP.
 - `plan-addendum` (consume) — read addendum body sections only.
 - `superpowers:brainstorming` — evaluate risky/uncertain approaches before committing.
 - `blocker-escalation-report` — missing context / unresolvable conflict.
 
-**Base plugins:** `context7` (library docs). Path verification uses `Glob` / `Read`.
+**Plugins:** `context7` (library docs). Path verification uses `Glob` / `Read`.
 
-**Menu guard rail:** allowed skills = `base_skills ∪ domain.skills`; allowed plugins = `base_plugins ∪ domain.plugins`. Anything outside this union is forbidden for this subtask.
+**Menu guard rail:** allowed skills = base Skills ∪ `domain.skills`; allowed plugins = base Plugins ∪ `domain.plugins`. Anything outside this union is forbidden for this subtask.
 
 **Best practices:** Emit Decision-Fork statements when a meaningful alternative exists. Cite PROJECT_CONSTITUTION.md anchors verbatim for governance-adjacent calls. Escalate within 2-turn blocker budget. Never silently change requirements/contracts. `PROJECT_CONFIG.md#<domain>` is authoritative for domain rules; the contract wins for role discipline. Include `domain_rules_acknowledged: true` in `tep-metadata` when a `Domain Handoff Note` is present — flag as blocker if interpretation differs.
 

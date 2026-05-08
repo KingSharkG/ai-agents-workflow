@@ -18,6 +18,7 @@
  *   CLAUDE_PLUGIN_ROOT          — plugin installation root
  */
 
+const fs = require('fs');
 const path = require('path');
 const { resolvePluginRoot } = require('./lib/plugin-root');
 const { resolveArtifactRoot, canonicalize } = require('./lib/artifact-root');
@@ -106,5 +107,37 @@ console.log(
     `If you are a dispatched agent, STOP — use your dispatch bundle at roles/<your-role>.md instead.\n` +
     `If you are the Chief Orchestrator assembling a bundle, this warning is expected and safe to ignore.\n`,
 );
+
+// Persist a one-line audit entry so non-blocking warnings actually leave a
+// trail. Best-effort: any failure here (no artifact root, no resolvable
+// task, disk error) is silently dropped — auditing must never block reads.
+try {
+  if (artifactRootAbs) {
+    const tasksRoot = path.join(artifactRootAbs, 'tasks');
+    let auditDir = artifactRootAbs;
+    if (fs.existsSync(tasksRoot)) {
+      const candidates = fs
+        .readdirSync(tasksRoot, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => {
+          const sp = path.join(tasksRoot, e.name, 'orchestration-state.json');
+          let mtime = -Infinity;
+          try { mtime = fs.statSync(sp).mtimeMs; } catch (_) {}
+          return { name: e.name, mtime };
+        })
+        .filter((c) => c.mtime !== -Infinity)
+        .sort((a, b) => b.mtime - a.mtime || (b.name > a.name ? 1 : -1));
+      if (candidates.length) {
+        auditDir = path.join(tasksRoot, candidates[0].name);
+      }
+    }
+    const auditPath = path.join(auditDir, 'audit.log');
+    const role = process.env.CLAUDE_SUBAGENT_TYPE || 'unknown';
+    const line =
+      `${new Date().toISOString()}\tguard-agent-reads\trole=${role}\t` +
+      `category=${category}\tfile=${resolved}\n`;
+    fs.appendFileSync(auditPath, line, 'utf8');
+  }
+} catch (_) {}
 
 process.exit(0);
