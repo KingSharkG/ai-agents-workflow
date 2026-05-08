@@ -148,6 +148,19 @@ function canonicalize(p) {
 }
 
 /**
+ * Normalize backslashes to forward slashes so path-prefix comparisons work the
+ * same on Windows and POSIX. Use after `canonicalize()` whenever the result is
+ * about to be compared with `===` or `startsWith`.
+ *   posixize("C:\\Users\\me\\repo")  →  "C:/Users/me/repo"
+ *   posixize("/tmp/foo")              →  "/tmp/foo"
+ *   posixize(null|undefined|"")       →  ""
+ */
+function posixize(p) {
+  if (!p) return '';
+  return String(p).replace(/\\/g, '/');
+}
+
+/**
  * Convenience: resolve and return just the absolute root, or null.
  * Use the full resolveArtifactRoot() when you need the diagnostic.
  */
@@ -172,6 +185,7 @@ module.exports = {
   artifactRootOrNull,
   artifactPath,
   canonicalize,
+  posixize,
   LEGACY_DIR_NAME,
   PREFIX,
 };

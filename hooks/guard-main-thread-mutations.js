@@ -55,7 +55,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveArtifactRoot, canonicalize } = require('./lib/artifact-root');
+const { resolveArtifactRoot, canonicalize, posixize } = require('./lib/artifact-root');
 
 // -------- Subagent short-circuit --------
 
@@ -212,7 +212,7 @@ const ARTIFACT = resolveArtifactRoot();
 function isArtifactPath(p) {
   if (!p) return false;
   if (!ARTIFACT.root) return false;
-  const root = ARTIFACT.root.replace(/\\/g, '/');
+  const root = posixize(ARTIFACT.root);
   // Prefer the tool-input cwd when the harness provides it, so a relative
   // path resolves against the agent's actual working directory rather than
   // the hook subprocess's process.cwd() (which can drift when the harness
@@ -221,7 +221,7 @@ function isArtifactPath(p) {
     (payload.tool_input && typeof payload.tool_input.cwd === 'string' && payload.tool_input.cwd) ||
     process.env.CLAUDE_TOOL_INPUT_CWD ||
     process.cwd();
-  const abs = canonicalize(path.resolve(baseCwd, p)).replace(/\\/g, '/');
+  const abs = posixize(canonicalize(path.resolve(baseCwd, p)));
   if (abs === root) return true;
   if (abs.startsWith(`${root}/`)) return true;
   return false;

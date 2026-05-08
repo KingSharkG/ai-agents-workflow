@@ -46,12 +46,8 @@
  */
 
 const path = require('path');
-const { resolveArtifactRoot, canonicalize } = require('./lib/artifact-root');
-
-const bareRole = (id) => {
-  if (!id) return '';
-  return id.includes(':') ? id.split(':').pop() : id;
-};
+const { resolveArtifactRoot, canonicalize, posixize } = require('./lib/artifact-root');
+const { bareRole } = require('./lib/active-task');
 
 const callingRole = bareRole(process.env.CLAUDE_SUBAGENT_TYPE || '');
 
@@ -81,8 +77,8 @@ if (ARTIFACT.legacyDetected && !ARTIFACT.root) {
 function isArtifactPath(p) {
   if (!p) return false;
   if (!ARTIFACT.root) return false;
-  const root = ARTIFACT.root.replace(/\\/g, '/');
-  const abs = canonicalize(path.resolve(process.cwd(), p)).replace(/\\/g, '/');
+  const root = posixize(ARTIFACT.root);
+  const abs = posixize(canonicalize(path.resolve(process.cwd(), p)));
   if (abs === root) return true;
   if (abs.startsWith(`${root}/`)) return true;
   return false;

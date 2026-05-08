@@ -36,6 +36,11 @@ const fs = require('fs');
 const path = require('path');
 const { resolvePluginRoot, getPluginVersion } = require('./lib/plugin-root');
 const { resolveArtifactRoot } = require('./lib/artifact-root');
+const {
+  parseTaskIdFromPrompt,
+  taskPrefixFor,
+  mostRecentTaskDir,
+} = require('./lib/active-task');
 
 const PLUGIN_ROOT = resolvePluginRoot();
 const CWD = process.cwd();
@@ -91,48 +96,6 @@ if (!ARTIFACT.root && subagentType !== 'init') {
   process.exit(1);
 }
 
-function parseTaskIdFromPrompt(p) {
-  if (!p) return null;
-  return (
-    p.match(/\b([A-Z]{2,}-[A-Z0-9]+-\d+)\b/) ||
-    p.match(/\b([A-Z]{2,}-\d+)\b/)
-  )?.[1] || null;
-}
-
-function taskPrefixFor(id) {
-  if (!id) return null;
-  const segs = id.split('-');
-  return segs.length >= 3 ? segs.slice(0, 2).join('-') : id;
-}
-
-function mostRecentTaskDir() {
-  if (!TASKS_ROOT || !fs.existsSync(TASKS_ROOT)) return null;
-  let best = null;
-  let bestMtime = -Infinity;
-  let entries;
-  try {
-    entries = fs.readdirSync(TASKS_ROOT, { withFileTypes: true });
-  } catch (_) {
-    return null;
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const statePath = path.join(TASKS_ROOT, entry.name, 'orchestration-state.json');
-    if (!fs.existsSync(statePath)) continue;
-    let mtime;
-    try {
-      mtime = fs.statSync(statePath).mtimeMs;
-    } catch (_) {
-      continue;
-    }
-    if (mtime > bestMtime) {
-      bestMtime = mtime;
-      best = entry.name;
-    }
-  }
-  return best;
-}
-
 const parsedId = parseTaskIdFromPrompt(prompt);
 
 // Pre-resolve subtask ID from prompt: try compound (taskId + suffix) first,
@@ -174,7 +137,7 @@ if (TASKS_ROOT) {
       break;
     }
   }
-  if (!resolvedTaskId) resolvedTaskId = mostRecentTaskDir();
+  if (!resolvedTaskId) resolvedTaskId = mostRecentTaskDir(TASKS_ROOT, 'state');
 }
 
 const taskIdFromPrompt = parsedId; // for skeleton check (uses prompt-derived id)

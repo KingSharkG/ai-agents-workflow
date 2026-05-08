@@ -64,14 +64,28 @@ for (const suite of suites) {
   process.stdout.write(result.stdout || '');
   if (result.stderr) process.stderr.write(result.stderr);
 
-  // Parse the suite's totals line: "<n> passed, <n> failed (<n> total)"
-  const match = (result.stdout || '').match(
-    /(\d+)\s+passed,\s+(\d+)\s+failed\s+\((\d+)\s+total\)/,
-  );
+  // Parse the suite's totals line. Accept either:
+  //   "<n> passed, <n> failed (<n> total)"   (preferred)
+  //   "<n> passed, <n> failed"               (older form; total = passed+failed)
+  // Single source of truth for the contract — no need to update every test
+  // file when the format expands.
+  //
+  // Both regexes anchor on end-of-line (`$` with the `m` flag) so a future
+  // line like "5 passed, 0 failed (3 of 5 skipped)" doesn't partial-match
+  // either pattern and report wrong totals. The trailing `\s*$` tolerates
+  // trailing whitespace before EOL — defensive, not redundant. If neither
+  // anchored regex matches, we fall through to the "no totals line"
+  // diagnostic below.
+  const stdout = result.stdout || '';
+  const match =
+    stdout.match(/^(\d+)\s+passed,\s+(\d+)\s+failed\s+\((\d+)\s+total\)\s*$/m) ||
+    stdout.match(/^(\d+)\s+passed,\s+(\d+)\s+failed\s*$/m);
   if (match) {
-    totalPassed += parseInt(match[1], 10);
-    totalFailed += parseInt(match[2], 10);
-    totalCases += parseInt(match[3], 10);
+    const passed = parseInt(match[1], 10);
+    const failed = parseInt(match[2], 10);
+    totalPassed += passed;
+    totalFailed += failed;
+    totalCases += match[3] !== undefined ? parseInt(match[3], 10) : passed + failed;
   } else {
     // Suite didn't print a recognizable totals line — count it as a failure.
     totalFailed += 1;

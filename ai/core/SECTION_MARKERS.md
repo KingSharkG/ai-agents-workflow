@@ -33,6 +33,7 @@ Sub-sections are listed under their parent block as indented rows (parent must b
 | ↳ `task-telemetry` | `task-packet` skill | `telemetry-summary` | Y | intake | turn/token budget for intake |
 | `intake-classification` | `orchestrator-intake` skill | `chief-orchestrator`, `pre-task-guard.js` | Y | intake | Records `final_path`, `heuristic_verdict`, user choice. |
 | `delivery-plan` | `delivery-plan` skill (delivery-pm) | `chief-orchestrator`, `lead`, `validate-artifact-chain.js` | Y | planning | Lives in `task-data.md` (task-level) when phase split, otherwise here. |
+| `spec` | `chief-orchestrator` (subtask init) | `lead`, `design-agent`, `executor`, `reviewer`, `resume-orchestrator`, `validate-artifact-chain.js` | Y | planning | Per-subtask copy of `delivery-subtask-<id>` content; written when chief creates the `ai-work.md` skeleton. See `ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:ai-work-skeleton -->`. |
 | ↳ `delivery-metadata` | `delivery-plan` skill | `chief-orchestrator` | Y | planning | |
 | ↳ `delivery-routing` | `delivery-plan` skill | `chief-orchestrator` | Y | planning | subtask → role mapping |
 | ↳ `delivery-context-manifest` | `delivery-plan` skill | `context-minimizer` | Y | planning | |
@@ -152,7 +153,9 @@ Sub-sections are listed under their parent block as indented rows (parent must b
 
 These appear as `<!-- section:* -->` in governance/playbook/skill files for in-document navigation. They are **not** consumed by `context-minimizer` or validation hooks and need no registry entry:
 
-`default-flow`, `trivial-flow`, `intake`, `registry`, `escalation`, `escalation-routing`, `rework-cap`, `rework-policy`, `severity`, `verdict-taxonomy`, `produce-artifact-first`, `definition-of-done`, `definition-of-ready`, `context-hygiene`, `agent-best-practices` (when used as anchor in CONSTITUTION rather than as PROJECT_CONFIG section), `summary-skeleton`, `summary-minimum-schema`, `ai-work-skeleton`, `telemetry-gate`, `core-review`, `domain-review`, `reviewer-skills`, `deprecation`, `fields`, `resume-entry`, `global-skills`, `impl-*` (when in skill template snippets), `tep-*` (when in template snippets).
+`default-flow`, `trivial-flow`, `intake`, `registry`, `escalation`, `escalation-routing`, `rework-cap`, `rework-policy`, `severity`, `verdict-taxonomy`, `produce-artifact-first`, `definition-of-done`, `definition-of-ready`, `role-boundaries`, `context-hygiene`, `acceptance-evidence`, `trigger-keywords`, `agent-best-practices` (when used as anchor in CONSTITUTION rather than as PROJECT_CONFIG section), `summary-skeleton`, `summary-minimum-schema`, `ai-work-skeleton`, `telemetry-gate`, `core-review`, `domain-review`, `reviewer-skills`, `deprecation`, `fields`, `resume-entry`, `global-skills`, `impl-*` (when in skill template snippets), `tep-*` (when in template snippets).
+
+> Note: `trigger-keywords` is technically parsed by `hooks/pre-task-guard.js` (it walks the YAML block under that anchor in [`TRIGGER_RULES.md`](../governance/TRIGGER_RULES.md) to merge base rules with PROJECT_CONFIG `extra-trigger-keywords`). It's listed here rather than in the artifact tables because the parser keys off the governance-file location, not a per-task artifact path. If we ever move trigger rules to a per-task artifact, promote it to a table row.
 
 If a marker name appears in both a governance doc (as anchor) AND an artifact template (as a real section), it goes in the table above.
 
@@ -160,9 +163,22 @@ If a marker name appears in both a governance doc (as anchor) AND an artifact te
 
 ## Migration status
 
-- [ ] `context-minimizer` consumes this registry instead of inlining marker names — see [skills/shared/context-minimizer/SKILL.md](../../skills/shared/context-minimizer/SKILL.md) and [references/section-extraction.md](../../skills/shared/context-minimizer/references/section-extraction.md)
-- [ ] `validate-artifact-chain.js` consumes this registry instead of hard-coded regexes
-- [ ] `validate-summary-telemetry.js` consumes this registry
+**Step 0 — prerequisite:** emit `ai/core/section-markers.json` (machine-readable sidecar) so consumers can load the registry without parsing markdown. Schema: array of `{marker, parent?, writer, readers[], location, required, stages[], notes?}`. A stub JSON file with `markers: []` and the schema documented inline already exists at [`ai/core/section-markers.json`](section-markers.json) so cross-references resolve; populating it (either by generating from this table via a small script, or by making the JSON authoritative and rendering the markdown table from it) is what closes Step 0. Pick one direction and document it here.
+
+- [ ] **Step 0** — `ai/core/section-markers.json` populated and kept in sync with the table above (stub exists; needs `markers[]` filled — either auto-generated or authoritative)
+- [ ] `context-minimizer` consumes `section-markers.json` instead of inlining marker names — see [skills/shared/context-minimizer/SKILL.md](../../skills/shared/context-minimizer/SKILL.md) and [references/section-extraction.md](../../skills/shared/context-minimizer/references/section-extraction.md)
+- [ ] `validate-artifact-chain.js` consumes `section-markers.json` instead of hard-coded regexes
+- [ ] `validate-summary-telemetry.js` consumes `section-markers.json`
 - [ ] Writer skills replace inline marker references with anchor links into this file
 
-Until those land, the registry is documentation-only — keep both this file and the inline references in sync when adding/renaming markers.
+Until Step 0 lands, this registry is documentation-only — keep both this file and the inline references in sync when adding/renaming markers. Once Step 0 lands, `section-markers.json` becomes authoritative for tooling; the markdown table remains the human-readable view and must be regenerated or hand-synced alongside it.
+
+**Known inline-reference sites the migration sweep must touch.** When the four checkboxes above land, every literal `<!-- section:* -->` reference outside this registry needs to migrate to a registry-driven lookup or anchor link. Audit with `grep -rn '<!-- section:' .` (or `git grep` from a clone) before sweeping — the list below names the categories the sweep will encounter, not every individual hit:
+
+- [`agents/chief-orchestrator.md`](../../agents/chief-orchestrator.md) hard-rule 10 → `<!-- section:role-boundaries -->` pointer at the constitution
+- [`ai/core/PROJECT_CONSTITUTION.md`](PROJECT_CONSTITUTION.md) → contains the `<!-- section:role-boundaries -->` and `<!-- section:definition-of-done -->` blocks themselves
+- [`ai/playbooks/ORCHESTRATION.md`](../playbooks/ORCHESTRATION.md) → `<!-- section:default-flow -->`, `<!-- section:trivial-flow -->` (and other doc-only anchors)
+- [`hooks/pre-task-guard.js`](../../hooks/pre-task-guard.js), [`hooks/validate-artifact-chain.js`](../../hooks/validate-artifact-chain.js), [`hooks/validate-summary-telemetry.js`](../../hooks/validate-summary-telemetry.js) → hard-coded marker regexes
+- Per-skill `SKILL.md` and `references/*.md` files under [`skills/`](../../skills/) → marker-name strings embedded in templates and section-extraction logic (most artifact-writing skills carry at least one inline reference)
+
+When adding a new marker, either consume an anchor into this file or add the new reference site to this list so the migration sweep knows it exists.

@@ -47,6 +47,17 @@
         ]
       },
       {
+        "matcher": "Edit|Write|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-orchestrator-step0.js\"",
+            "blocking": true,
+            "timeout": 5000
+          }
+        ]
+      },
+      {
         "matcher": "Skill",
         "hooks": [
           {

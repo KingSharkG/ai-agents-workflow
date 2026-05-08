@@ -61,7 +61,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveArtifactRoot } = require('./lib/artifact-root');
+const { resolveArtifactRoot, canonicalize, posixize } = require('./lib/artifact-root');
+const { bareRole, mostRecentTaskDir } = require('./lib/active-task');
 
 // -------- Read stdin payload (best-effort, non-blocking) --------
 
@@ -153,24 +154,23 @@ for (const tu of toolUses(entries)) {
   }
 }
 
-if (!intakeInvoked) {
+// Secondary scoping: when chief never invoked orchestrator-intake at all
+// (CAKE-5997 mode — chief silently skipped Step 0), the intake-invoked
+// signal can't tell us this is chief. Fall back to CLAUDE_SUBAGENT_TYPE.
+const envSaysChief = bareRole(process.env.CLAUDE_SUBAGENT_TYPE || '') === 'chief-orchestrator';
+
+if (!intakeInvoked && !envSaysChief) {
   // Either this is not chief's transcript, or chief errored out before
-  // classification (e.g., CWD validation failure). Either way, not our
-  // failure mode. Allow.
+  // classification AND we have no env signal either. Allow.
   process.exit(0);
 }
 
 // -------- What roles did chief dispatch? --------
 
-function bareSubagent(input) {
-  const sub = String((input && input.subagent_type) || '');
-  return sub.includes(':') ? sub.split(':').pop() : sub;
-}
-
 const dispatchedRoles = new Set();
 for (const tu of toolUses(entries)) {
   if (tu.name === 'Task') {
-    const role = bareSubagent(tu.input);
+    const role = bareRole(String((tu.input && tu.input.subagent_type) || ''));
     if (role) dispatchedRoles.add(role);
   }
 }
@@ -220,8 +220,76 @@ const isExecutePath = recordedFinalPath && EXECUTE_PATHS.has(recordedFinalPath);
 const isStopPath =
   recordedFinalPath === 'direct-answer' || recordedFinalPath === 'plan-only';
 
-// Allow legitimate stop-without-execution paths.
-if (isStopPath && !anyDispatch) {
+// -------- Out-of-artifact Edit/Write detection (Layer 2 backstop) --------
+//
+// CAKE-5997: chief edited consumer-repo source files directly across multiple
+// dispatches. The PreToolUse source-write hook should have blocked this, but
+// when scope detection fails (env var unset, hooks not loaded in consumer
+// install), the writes go through. This is the SubagentStop retroactive
+// backstop — even if Layer 1 was bypassed, we catch it here at stop time.
+//
+// Scope: Edit and Write only. Bash-based mutations (rm / sed -i / >>) against
+// consumer-repo paths are caught by the PreToolUse `guard-orchestrator-source-
+// writes.js` hook, which already inspects Bash command strings. The
+// SubagentStop layer scans the post-hoc tool_use ledger, where Bash arguments
+// would require re-parsing the same shell-lex logic; we deliberately leave
+// that to the PreToolUse layer and keep this scan narrow.
+//
+// We compute outOfArtifactWrites before the legitimate-stop early-exit below:
+// a direct-answer / plan-only run with out-of-artifact writes is still a
+// protocol violation, so the legitimate-stop allow-path must check this list.
+
+const ARTIFACT = resolveArtifactRoot();
+const ARTIFACT_ROOT = ARTIFACT.root || null;
+const TASKS_ROOT = ARTIFACT_ROOT ? path.join(ARTIFACT_ROOT, 'tasks') : null;
+const artifactRootCanon = ARTIFACT_ROOT ? posixize(canonicalize(ARTIFACT_ROOT)) : null;
+
+function isUnderArtifact(p) {
+  // Intentional fail-open: when the resolver couldn't locate an artifact root
+  // (no aiaw-data-* folder; legacy ai-workflow-data/ still present), we can't
+  // judge whether a path is "inside" or "outside" — so we say "inside" and
+  // skip flagging. The missing-artifact-root case is caught earlier on the
+  // dispatch path by `pre-task-guard.js`, which blocks non-init dispatches
+  // when the resolver fails. This hook stays narrow and doesn't double-block.
+  if (!p || !artifactRootCanon) return true;
+  try {
+    const abs = posixize(canonicalize(path.resolve(process.cwd(), p)));
+    return abs === artifactRootCanon || abs.startsWith(`${artifactRootCanon}/`);
+  } catch (_) {
+    return true;
+  }
+}
+
+// Well-known workflow artifact filenames at their canonical depths under
+// `/tasks/<id>/`:
+//   - tasks/<id>/{task-data,orchestration-state,orchestration-history}.{md,json}
+//   - tasks/<id>/[phase-X/]<subtask_id>/{ai-work,summary}.md
+// Even when these land outside the resolved artifact root (e.g. tests using
+// synthetic /tmp paths, or the resolver picking a different layout), they are
+// unambiguously workflow artifacts and should not trip the out-of-artifact
+// check.
+const ARTIFACT_FILE_PATTERN = /(^|\/)tasks\/[^/]+\/(?:phase-[A-Za-z0-9-]+\/)?(?:[^/]+\/)?(?:task-data|orchestration-state|orchestration-history|ai-work|summary)\.(?:md|json)$/;
+
+function isKnownArtifactPath(p) {
+  if (!p) return false;
+  return ARTIFACT_FILE_PATTERN.test(posixize(p));
+}
+
+const outOfArtifactWrites = [];
+for (const tu of toolUses(entries)) {
+  if (tu.name !== 'Edit' && tu.name !== 'Write') continue;
+  const fp = String((tu.input && tu.input.file_path) || '');
+  if (!fp) continue;
+  if (isKnownArtifactPath(fp)) continue;
+  if (!isUnderArtifact(fp)) {
+    outOfArtifactWrites.push({ tool: tu.name, path: fp });
+  }
+}
+
+// Allow legitimate stop-without-execution paths — UNLESS chief made
+// out-of-artifact Edit/Write calls in the same turn (CAKE-5997 mode), in
+// which case the legitimate-stop path is moot.
+if (isStopPath && !anyDispatch && outOfArtifactWrites.length === 0) {
   process.exit(0);
 }
 
@@ -236,8 +304,9 @@ if (isStopPath && !anyDispatch) {
 function extractTaskIdFromTaskDataPath(filePath) {
   if (!filePath) return null;
   // Match .../tasks/<task_id>/task-data.md — task_id is the segment immediately
-  // before /task-data.md.
-  const m = String(filePath).match(/(?:^|\/)tasks\/([^/]+)\/task-data\.md$/);
+  // before /task-data.md. posixize the input first so Windows-style paths
+  // (`tasks\foo\task-data.md`) match the same regex.
+  const m = posixize(filePath).match(/(?:^|\/)tasks\/([^/]+)\/task-data\.md$/);
   return m ? m[1] : null;
 }
 
@@ -249,43 +318,8 @@ for (const tu of toolUses(entries)) {
   if (tid) resolvedTaskId = tid; // last write wins
 }
 
-const ARTIFACT = resolveArtifactRoot();
-const ARTIFACT_ROOT = ARTIFACT.root || null;
-const TASKS_ROOT = ARTIFACT_ROOT ? path.join(ARTIFACT_ROOT, 'tasks') : null;
-
-function mostRecentTaskDir() {
-  if (!TASKS_ROOT || !fs.existsSync(TASKS_ROOT)) return null;
-  let best = null;
-  let bestMtime = -Infinity;
-  let entriesList;
-  try {
-    entriesList = fs.readdirSync(TASKS_ROOT, { withFileTypes: true });
-  } catch (_) {
-    return null;
-  }
-  for (const entry of entriesList) {
-    if (!entry.isDirectory()) continue;
-    const statePath = path.join(TASKS_ROOT, entry.name, 'orchestration-state.json');
-    if (!fs.existsSync(statePath)) continue;
-    let mtime;
-    try {
-      mtime = fs.statSync(statePath).mtimeMs;
-    } catch (_) {
-      continue;
-    }
-    if (mtime > bestMtime || (mtime === bestMtime && best !== null && entry.name > best)) {
-      // Strictly newer mtime wins; on equal mtime (clock skew, bulk copy)
-      // pick the lexically larger directory name so the choice is
-      // deterministic across filesystems / readdir orderings.
-      bestMtime = mtime;
-      best = entry.name;
-    }
-  }
-  return best;
-}
-
 if (!resolvedTaskId && TASKS_ROOT) {
-  resolvedTaskId = mostRecentTaskDir();
+  resolvedTaskId = mostRecentTaskDir(TASKS_ROOT, 'state');
 }
 
 const taskDir = resolvedTaskId && TASKS_ROOT
@@ -300,6 +334,10 @@ if (statePath && fs.existsSync(statePath)) {
   } catch (_) {
     state = null;
   }
+}
+
+function matcherWord(n) {
+  return n === 1 ? 'Edit/Write call' : 'Edit/Write calls';
 }
 
 function nonEmptyArrayOrObject(v) {
@@ -383,6 +421,7 @@ const implSectionEmpty = aiWorkPath ? implementationSectionEmpty(aiWorkPath) : f
 
 const dispatchedReviewer = dispatchedRoles.has('reviewer');
 const stateLooksTerminal = isLegitimateTerminalState(state);
+// outOfArtifactWrites is computed earlier (before the isStopPath early-exit).
 
 // On execute paths, require ALL of:
 //   1. Executor was dispatched (existing).
@@ -398,7 +437,16 @@ if (isExecutePath && dispatchedExecutor) {
     nonEmptyArrayOrObject(state && state.pending_user_actions) ||
     nonEmptyArrayOrObject(state && state.blocked_gates);
   const reviewerOk = dispatchedReviewer || handoffStop;
-  if (stateLooksTerminal && !implSectionEmpty && reviewerOk) {
+  // Out-of-artifact writes by chief override an otherwise-legitimate execute
+  // path: even with executor + reviewer + closure complete, chief is not
+  // permitted to edit consumer-repo files itself. Block with the
+  // out-of-artifact reason below instead of allowing.
+  if (
+    stateLooksTerminal &&
+    !implSectionEmpty &&
+    reviewerOk &&
+    outOfArtifactWrites.length === 0
+  ) {
     process.exit(0);
   }
   // Fall through to block with a specific reason below.
@@ -407,14 +455,56 @@ if (isExecutePath && dispatchedExecutor) {
 // Backwards-compat: if final_path was never recorded (older runs) but at
 // least one Task was dispatched, allow. The artifact-chain validators
 // catch downstream gaps.
-if (!recordedFinalPath && anyDispatch) {
+//
+// EXCEPTION: skip the backwards-compat allow when (a) chief made any
+// out-of-artifact Edit/Write in this turn, or (b) chief never invoked
+// orchestrator-intake (CAKE-5997 mode — the env-says-chief fallback put us
+// in this hook). Those cases must always block.
+if (
+  !recordedFinalPath &&
+  anyDispatch &&
+  outOfArtifactWrites.length === 0 &&
+  intakeInvoked
+) {
   process.exit(0);
 }
 
 // -------- Block --------
 
 let reason;
-if (isExecutePath && !dispatchedExecutor) {
+if (outOfArtifactWrites.length > 0) {
+  // CAKE-5997 retroactive backstop: chief edited consumer-repo source files
+  // directly. Layer 1 (PreToolUse guard-orchestrator-source-writes / step0)
+  // should have blocked at write time; if it didn't (env unset, hooks not
+  // loaded), we catch it here.
+  const sample = outOfArtifactWrites
+    .slice(0, 5)
+    .map((w) => `  ${w.tool}: ${w.path}`)
+    .join('\n');
+  const more =
+    outOfArtifactWrites.length > 5
+      ? `\n  ... and ${outOfArtifactWrites.length - 5} more`
+      : '';
+  reason =
+    `chief-orchestrator made ${outOfArtifactWrites.length} ${matcherWord(outOfArtifactWrites.length)} ` +
+    `to paths outside the artifact root. Code changes in the consumer repo are ` +
+    `reserved for Task(executor) — chief must NEVER Edit/Write source files itself.\n` +
+    `Offending tool calls (first 5):\n${sample}${more}\n` +
+    `Resolution: the next dispatch must go through Task(executor) with the same change ` +
+    `expressed as a TEP. If these edits are already on disk, the work itself isn't ` +
+    `discarded, but the orchestrator's role contract is broken — escalate via ` +
+    `blocker-escalation-report so the supervising user can decide whether to keep, ` +
+    `revert, or re-route the changes.`;
+} else if (envSaysChief && !intakeInvoked) {
+  // CAKE-5997 primary failure mode: chief was dispatched but skipped Step 0
+  // entirely. No orchestrator-intake invocation, no classification popup, no
+  // task-data.md.
+  reason =
+    `chief-orchestrator returned without invoking the orchestrator-intake skill. ` +
+    `Step 0 (intake classification + 4-option AskUserQuestion popup + task-data.md) ` +
+    `is mandatory — there is no path that lets chief skip it. This is the CAKE-5997 ` +
+    `silent-skip-Step-0 failure mode.`;
+} else if (isExecutePath && !dispatchedExecutor) {
   reason =
     `final_path is "${recordedFinalPath}" but no Task(executor) dispatch ` +
     `was found in this turn (dispatched roles: ` +

@@ -2,9 +2,14 @@
 
 ## Version
 
-v1.3
+v1.4
 
 ## Change Log
+
+- v1.4
+  Changed from: role responsibilities scattered across nine `agents/<role>.md` role-contract blocks with no cross-role comparison surface; chief-orchestrator hard rule 10 pointed at a "role-to-task-type table" that did not exist anywhere.
+  To: a canonical "Role Boundaries" table lives in this constitution and is the single source of truth for who owns which work type and which dispatch tool routes there. Per-role contracts in `agents/<role>.md` continue to govern *how* each role does its job; this table governs *which* role to dispatch.
+  Reason: Close the rationalization gap that produced CAKE-5997 (chief edited consumer-repo source files itself). Rule 10 now points at a real, scannable table; readers no longer need to grep nine files to answer "who does X?".
 
 - v1.3
   Changed from: constitution carried Project Scope, Primary Stack (fe-stack, be-stack, package manager), Auth and Security Baseline, and API Baseline inline.
@@ -63,6 +68,36 @@ A subtask is done only when:
 - `<subtask_id>/summary.md` exists (written by Reviewer on approval)
 
 <!-- /section:definition-of-done -->
+
+<!-- section:role-boundaries -->
+
+## Role Boundaries
+
+Canonical mapping of work type → owning role → dispatch tool. The chief-orchestrator dispatches; it never implements. If you cannot find your work type below, the chief-orchestrator is not the owner — escalate or re-classify before acting.
+
+| Work type | Owning role | How chief-orchestrator routes there |
+|-----------|-------------|--------------------------------------|
+| Code changes (any `Edit`/`Write` to source files; mutation `Bash` against the consumer repo) | Executor | `Task(subagent_type: ai-agents-workflow:executor)` |
+| Code review / acceptance gating / `<!-- section:review -->` finalization / subtask `summary.md` finalization | Reviewer | `Task(subagent_type: ai-agents-workflow:reviewer)` |
+| Delivery plan / scope split / dependency graph / blocker analysis (the artifact P1 approves) | Delivery PM | `Task(subagent_type: ai-agents-workflow:delivery-pm)` |
+| Technical Execution Packet (TEP) shaping; codebase exploration notes; multi-approach architecture options | Lead | `Task(subagent_type: ai-agents-workflow:lead)` |
+| UX flows / CTA hierarchy / loading-empty-error states / Design Review Addendum | Design Agent | `Task(subagent_type: ai-agents-workflow:design-agent)` |
+| FE/BE contract compatibility (auth, field names, nullability, request/response shapes) | Integration Checker | `Task(subagent_type: ai-agents-workflow:integration-checker)` |
+| Workflow artifacts under `<artifact-root>/**` — **per-task** (`task-data.md`, `orchestration-state.json`, `orchestration-history.json`, task-level `summary.md`) **and per-subtask** (`ai-work.md` skeleton, `summary.md` skeleton — Reviewer finalizes them) | Chief Orchestrator | `Edit` / `Write` directly (artifact-root scoped) |
+| Intake classification + 4-option AskUserQuestion popup + dispatch routing + state transitions + user gates (P1/P2/P4/P5) | Chief Orchestrator | `Skill` + `AskUserQuestion` + `Task` |
+
+**Hard invariant.** Chief-orchestrator's `Edit` / `Write` / `Bash` tools are valid **only** for paths under `<artifact-root>/**`. Any work that requires touching consumer-repo source files MUST be dispatched via `Task(executor)`. Four blocking hooks enforce this at runtime:
+
+| Hook | Lifecycle | Role |
+|------|-----------|------|
+| `hooks/guard-orchestrator-step0.js` | PreToolUse | Gates Edit/Write/Task before intake completes |
+| `hooks/guard-orchestrator-source-writes.js` | PreToolUse | Blocks consumer-repo writes after intake |
+| `hooks/pre-task-guard.js` | PreToolUse | Validates dispatch preconditions (P1 gate, skeleton, stage, schema) |
+| `hooks/guard-chief-orchestrator-stop.js` | SubagentStop | Catches retroactive bypass attempts at turn end |
+
+Per-role contracts (the *how*, not the *which*) live inline in [`agents/<role>.md`](../../agents/) between `<!-- role-contract:<role> -->` markers. The orchestrator-class agents (chief-orchestrator, init, resume-orchestrator) keep their procedural docs in [`ai/agents/`](../agents/).
+
+<!-- /section:role-boundaries -->
 
 ## Allowed Change Scope
 

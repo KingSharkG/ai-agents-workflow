@@ -184,5 +184,5 @@ for (const t of tests) {
     failed++;
   }
 }
-process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
+process.stdout.write(`\n${passed} passed, ${failed} failed (${passed + failed} total)\n`);
 process.exit(failed === 0 ? 0 : 1);
