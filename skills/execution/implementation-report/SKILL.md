@@ -10,7 +10,7 @@ Produce this report immediately after completing a subtask. Record everything th
 
 ## Output Target
 
-**Append** to `<!-- section:implementation -->` in the subtask's `ai-work.md`. The section placeholder MUST already exist — if absent, raise a Blocker Escalation Report. Also write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
+**Append** to `<!-- section:implementation -->` in the subtask's `ai-work.md`. The section placeholder MUST already exist — if absent, raise a Blocker Escalation Report. Also write the diagnostics footer to `<subtask_id>/summary.md` per `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-telemetry/references/artifact-footer-protocol.md` (role: `executor`).
 
 **Ultra-light path:** When the subtask qualifies for the ultra-light tier, append the compact `impl-ultra` block inside `<!-- section:implementation -->` instead of the full template below. Do NOT append to `task-data.md`.
 
@@ -69,10 +69,7 @@ yes | no
 <!-- /section:impl-project-state -->
 ```
 
-Then write diagnostics to `<subtask_id>/summary.md`:
-
-- Append your telemetry line under `## Telemetry`
-- Append your `### executor` context manifest subsection under `## Context Manifest`
+Then write the diagnostics footer (role: `executor`) per the artifact-footer protocol referenced above.
 
 ## Output Size Guidelines
 

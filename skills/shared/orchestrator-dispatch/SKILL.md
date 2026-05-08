@@ -71,7 +71,7 @@ Every agent dispatch must terminate in one of exactly two valid outcomes:
 - The agent has appended the expected section to `ai-work.md` (and written `summary.md` if the agent is the Reviewer), OR
 - A **Blocker Escalation Report** appended to `<!-- section:escalation-N -->` in `ai-work.md` via the `blocker-escalation-report` skill.
 
-Reject any dispatch result that:
+Reject any dispatch result that violates the footer protocol (`${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-telemetry/references/artifact-footer-protocol.md`). Specifically, reject if the result:
 
 1. Returns with **no section appended** to `ai-work.md` (agent returns prose only, returns mid-investigation, or times out mid-turn).
 2. Is **missing the telemetry line** in `<subtask_id>/summary.md` → `## Telemetry`.

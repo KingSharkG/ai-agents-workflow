@@ -30,7 +30,7 @@ Write to `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` usi
 
 ### 2. Append inside `<!-- section:review -->`
 
-Append a `### Cycle <N>` block using the template in `${CLAUDE_PLUGIN_ROOT}/skills/execution/review-report/references/review-cycle-template.md`. The template lays out `section:review-metadata`, `section:review-verdict`, `section:review-findings` (with the per-finding record schema), `section:review-resolved`, `section:review-low-confidence`, `section:review-summary`, and `section:review-completion-summary`. After appending the cycle block, write the diagnostics block (telemetry line + `### reviewer` context-manifest subsection + finalized Status / Acceptance Signals / Notes / Open Gates) to `<subtask_id>/summary.md`.
+Append a `### Cycle <N>` block using the template in `${CLAUDE_PLUGIN_ROOT}/skills/execution/review-report/references/review-cycle-template.md`. The template lays out `section:review-metadata`, `section:review-verdict`, `section:review-findings` (with the per-finding record schema), `section:review-resolved`, `section:review-low-confidence`, `section:review-summary`, and `section:review-completion-summary`. After appending the cycle block, write the diagnostics footer to `<subtask_id>/summary.md` per `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-telemetry/references/artifact-footer-protocol.md` (role: `reviewer`), then finalize the Reviewer-owned fields (Status / Acceptance Signals / Notes / Open Gates) — those finalization fields are NOT part of the shared footer protocol.
 
 ## Output Size Guidelines
 

@@ -70,8 +70,4 @@ Optional — include only when real observations with `confidence < 75` exist. T
 <!-- /section:review-completion-summary -->
 ```
 
-After appending the cycle block, write diagnostics to `<subtask_id>/summary.md`:
-
-- Append your telemetry line under `## Telemetry`
-- Append your `### reviewer` context manifest subsection under `## Context Manifest`
-- Replace any placeholder or skeleton text in `## Status`, `## Acceptance Signals`, `## Notes`, and `## Open Gates` rather than leaving stale draft content above the final result.
+After appending the cycle block, write the diagnostics footer (role: `reviewer`) per `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-telemetry/references/artifact-footer-protocol.md`. Then replace any placeholder or skeleton text in `## Status`, `## Acceptance Signals`, `## Notes`, and `## Open Gates` rather than leaving stale draft content above the final result (these finalization fields are Reviewer-owned and NOT part of the shared footer protocol).

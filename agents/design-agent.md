@@ -19,7 +19,7 @@ hooks:
 
 ## Dispatch Bundle Protocol
 
-On startup, your dispatch prompt carries an **inline dispatch bundle** wrapped in `<!-- dispatch-bundle:start ... -->` … `<!-- dispatch-bundle:end -->` markers. The bundle contains your role contract excerpts, project context (FE baseline), and artifact input (spec, optional tep for revisions) — all pre-curated by the orchestrator via the `context-minimizer` skill. Work from the inline payload directly. Do NOT independently read canonical contracts, PROJECT_CONFIG.md sections, or governance files; do NOT search for a `roles/<role>.md` file (none exists in current tasks).
+On startup, follow the inline dispatch bundle protocol in `${CLAUDE_PLUGIN_ROOT}/ai/core/DISPATCH_BUNDLE_PROTOCOL.md`. Your bundle slice contains: role contract, project context (FE baseline), and artifact input (spec, optional tep for revisions).
 
 **Bundle delivery:** inline in the Task `prompt` parameter. The orchestrator records a one-line audit entry at `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 

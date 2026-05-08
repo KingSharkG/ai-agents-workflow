@@ -23,7 +23,7 @@ A TEP is dispatchable only when all are true:
 
 ## Output Target
 
-**Append** to `<!-- section:tep -->` in the subtask's `ai-work.md`. The section placeholder MUST already exist — if absent, raise a Blocker Escalation Report. Also write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
+**Append** to `<!-- section:tep -->` in the subtask's `ai-work.md`. The section placeholder MUST already exist — if absent, raise a Blocker Escalation Report. Also write the diagnostics footer to `<subtask_id>/summary.md` per `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-telemetry/references/artifact-footer-protocol.md` (role: `lead`).
 
 ## Output Template
 
@@ -109,10 +109,7 @@ Each question MUST be specific, actionable, and unresolvable from the Delivery P
 <!-- /section:tep-clarifying-questions -->
 ```
 
-Then write diagnostics to `<subtask_id>/summary.md`:
-
-- Append your telemetry line under `## Telemetry`
-- Append your `### lead` context manifest subsection under `## Context Manifest`
+Then write the diagnostics footer (role: `lead`) per the artifact-footer protocol referenced above.
 
 ## Length Budget
 

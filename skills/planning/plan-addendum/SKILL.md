@@ -12,7 +12,7 @@ Domain validation no longer has its own addendum — it is absorbed by the Lead 
 
 ## Output Target
 
-**Append** to `<!-- section:plan-addendum -->` in the subtask's `ai-work.md`. The placeholder MUST already exist — if absent, raise a Blocker Escalation. Also write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
+**Append** to `<!-- section:plan-addendum -->` in the subtask's `ai-work.md`. The placeholder MUST already exist — if absent, raise a Blocker Escalation. Also write the diagnostics footer to `<subtask_id>/summary.md` per `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-telemetry/references/artifact-footer-protocol.md` (role: `design-agent`).
 
 ## Output Template
 
@@ -43,10 +43,7 @@ Append inside `<!-- section:plan-addendum -->`:
 <!-- /section:design-open-questions -->
 ```
 
-Then write diagnostics to `<subtask_id>/summary.md`:
-
-- Append your telemetry line under `## Telemetry`
-- Append your `### design-agent` context manifest subsection under `## Context Manifest`
+Then write the diagnostics footer (role: `design-agent`) per the artifact-footer protocol referenced above.
 
 ## Rules
 

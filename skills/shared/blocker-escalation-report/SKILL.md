@@ -20,7 +20,7 @@ Use this skill to produce a **Blocker Escalation Report**. This is the structure
 
 ## Output Target
 
-**Append** to `<!-- section:escalation-N -->` in the subtask's `ai-work.md`. The orchestrator assigns N (incrementing per escalation event within the subtask) and writes the placeholder before this skill runs. Also write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md`.
+**Append** to `<!-- section:escalation-N -->` in the subtask's `ai-work.md`. The orchestrator assigns N (incrementing per escalation event within the subtask) and writes the placeholder before this skill runs. Also write the diagnostics footer to `<subtask_id>/summary.md` per `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-telemetry/references/artifact-footer-protocol.md` (role: the blocked agent's role; telemetry-line `status: escalated`).
 
 ## Output Format
 
@@ -69,10 +69,7 @@ Append inside `<!-- section:escalation-N -->`:
 <!-- /section:blocker-suggested-rerouting -->
 ```
 
-Then write diagnostics to `<subtask_id>/summary.md`:
-
-- Append your telemetry line under `## Telemetry` (with status: `escalated`)
-- Append your `### <blocked-agent>` context manifest subsection under `## Context Manifest`
+Then write the diagnostics footer (role: blocked agent's role; telemetry-line `status: escalated`) per the artifact-footer protocol referenced above.
 
 ## Rules
 

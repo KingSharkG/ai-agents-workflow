@@ -36,7 +36,7 @@ All project-specific rules — stack, domains, baselines (fe, be, api, auth), co
 - No silent scope changes.
 - Review/rework cycle cap is complexity-tied — see `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:rework-cap -->`.
 - If FE and BE both change, run Integration Checker unless explicitly waived.
-- Every agent must write diagnostics (telemetry line + context manifest subsection) to `<subtask_id>/summary.md` — NOT to `ai-work.md`. Authoritative format and rules: `orchestrator-telemetry` skill → Telemetry + Context Manifest sections. Do not restate them elsewhere.
+- Every dispatched agent must write the diagnostics footer (telemetry line + context manifest subsection) to `<subtask_id>/summary.md` — NOT to `ai-work.md`. Canonical procedure: `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-telemetry/references/artifact-footer-protocol.md`. Do not restate elsewhere.
 - Chief Orchestrator aggregates per-subtask telemetry into `<artifact-root>/tasks/<task_id>/summary.md`.
 
 ## Repo Layout Rule
