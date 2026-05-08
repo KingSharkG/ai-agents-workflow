@@ -41,6 +41,7 @@ function makeProject(label, opts = {}) {
       const subDir = path.join(taskDir, opts.subtaskId);
       fs.mkdirSync(subDir, { recursive: true });
       fs.writeFileSync(path.join(subDir, 'ai-work.md'), '# skeleton\n');
+      fs.writeFileSync(path.join(subDir, 'summary.md'), '# summary skeleton\n');
     }
   }
   return { root, proj, artifactRoot };

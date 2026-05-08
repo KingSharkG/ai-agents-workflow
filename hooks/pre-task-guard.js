@@ -252,26 +252,31 @@ if (taskIdFromPrompt) {
     // the prompt level (role contract) and audit-checked post-hoc by Reviewer
     // reading summary.md → dispatch-bundles audit lines.
   } else if (subtaskIdFromPrompt) {
-    const findSkeletonPath = (dir, targetId) => {
+    // Locate the subtask directory itself; we require BOTH ai-work.md AND
+    // summary.md skeletons before any subtask-agent dispatch. The orchestrator
+    // creates both at trivial-flow Step 6 / standard Step 6 — Reviewer
+    // finalizes summary.md downstream, so a missing skeleton means downstream
+    // writes will land on a non-existent file or get suppressed entirely.
+    const findSubtaskDir = (dir, targetId) => {
       try {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
-          if (entry.isDirectory()) {
-            if (entry.name === targetId) {
-              const candidate = path.join(dir, entry.name, 'ai-work.md');
-              if (fs.existsSync(candidate)) return candidate;
-            }
-            const nested = findSkeletonPath(path.join(dir, entry.name), targetId);
-            if (nested) return nested;
-          }
+          if (!entry.isDirectory()) continue;
+          if (entry.name === targetId) return path.join(dir, entry.name);
+          const nested = findSubtaskDir(path.join(dir, entry.name), targetId);
+          if (nested) return nested;
         }
       } catch (_) {}
       return null;
     };
 
-    const skeletonPath = findSkeletonPath(taskDir, subtaskIdFromPrompt);
+    const subtaskDir = findSubtaskDir(taskDir, subtaskIdFromPrompt);
+    const skeletonPath = subtaskDir ? path.join(subtaskDir, 'ai-work.md') : null;
+    const summaryPath = subtaskDir ? path.join(subtaskDir, 'summary.md') : null;
+    const aiWorkExists = skeletonPath ? fs.existsSync(skeletonPath) : false;
+    const summaryExists = summaryPath ? fs.existsSync(summaryPath) : false;
 
-    if (!skeletonPath) {
+    if (!subtaskDir || !aiWorkExists) {
       const expectedRel =
         path.relative(CWD, path.join(taskDir, 'phase-X', subtaskIdFromPrompt, 'ai-work.md')) ||
         path.join(taskDir, 'phase-X', subtaskIdFromPrompt, 'ai-work.md');
@@ -280,6 +285,22 @@ if (taskIdFromPrompt) {
           `Chief Orchestrator must write ${expectedRel}\n` +
           `using the template from ${PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md → section:ai-work-skeleton\n` +
           `before dispatching ${subagentType}.\n`,
+      );
+      process.exit(1);
+    }
+
+    if (!summaryExists) {
+      const expectedRel =
+        path.relative(CWD, path.join(subtaskDir, 'summary.md')) ||
+        path.join(subtaskDir, 'summary.md');
+      console.error(
+        `[pre-task-guard] BLOCKED: summary.md skeleton not found for ${subtaskIdFromPrompt}.\n` +
+          `Chief Orchestrator must create ${expectedRel} alongside ai-work.md at the\n` +
+          `subtask init step (trivial-flow Step 6 / standard Step 6). Reviewer finalizes\n` +
+          `summary.md downstream and Executor appends to <!-- section:context-manifest -->,\n` +
+          `<!-- section:telemetry --> on it; without the skeleton those writes either fail\n` +
+          `or silently no-op. Initialize it with the canonical sections (telemetry,\n` +
+          `context-manifest, dispatch-bundles) before dispatching ${subagentType}.\n`,
       );
       process.exit(1);
     }

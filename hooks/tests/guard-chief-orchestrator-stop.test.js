@@ -105,10 +105,42 @@ function runHook(transcriptPath, opts = {}) {
     opts.payloadOverrides || {},
   );
   return spawnSync(process.execPath, [HOOK], {
+    cwd: opts.cwd || undefined,
     encoding: 'utf8',
     input: JSON.stringify(payload),
     env: process.env,
   });
+}
+
+// -------- Project scaffold for execute-path closure tests --------
+//
+// Strengthened guard reads <artifact-root>/tasks/<task_id>/orchestration-state.json
+// and the current subtask's ai-work.md. We need a real on-disk layout the hook
+// can resolve via resolveArtifactRoot() when run with cwd = projectDir.
+function makeProject(label, opts = {}) {
+  const taskId = opts.taskId || 'AI-1';
+  const subtaskId = opts.subtaskId || 'AI-1-A1';
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), `gcos-proj-${label}-`));
+  const proj = path.join(root, 'proj');
+  fs.mkdirSync(proj);
+  const artifactRoot = path.join(proj, '.claude', 'aiaw-data-proj');
+  fs.mkdirSync(artifactRoot, { recursive: true });
+  const taskDir = path.join(artifactRoot, 'tasks', taskId);
+  fs.mkdirSync(taskDir, { recursive: true });
+  if (opts.state) {
+    fs.writeFileSync(
+      path.join(taskDir, 'orchestration-state.json'),
+      JSON.stringify(opts.state),
+    );
+  }
+  const subDir = path.join(taskDir, subtaskId);
+  fs.mkdirSync(subDir, { recursive: true });
+  const aiWorkContent = opts.implContent
+    ? `# ai-work\n<!-- section:implementation -->\n${opts.implContent}\n<!-- /section:implementation -->\n`
+    : `# ai-work\n<!-- section:implementation -->\n<!-- /section:implementation -->\n`;
+  fs.writeFileSync(path.join(subDir, 'ai-work.md'), aiWorkContent);
+  fs.writeFileSync(path.join(subDir, 'summary.md'), '# summary\n');
+  return { root, proj, taskDir, subDir, taskId, subtaskId };
 }
 
 const tests = [];
@@ -278,6 +310,128 @@ test('intake invoked + Edit on task-data.md adding final_path direct-answer → 
   const out = runHook(file);
   assert.strictEqual(out.status, 0, out.stderr);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// =========================================================================
+// Strengthened execute-path closure invariants
+// =========================================================================
+
+function executeTurn({ taskDir, subtaskId, dispatchReviewer = true, finalPath = 'execution-trivial' }) {
+  const taskDataPath = path.join(taskDir, 'task-data.md');
+  const parts = [
+    userLine('/ai-agents-workflow:task'),
+    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([taskDataWrite(finalPath, taskDataPath)]),
+    assistantToolUse([taskDispatch('executor')]),
+  ];
+  if (dispatchReviewer) parts.push(assistantToolUse([taskDispatch('reviewer')]));
+  return parts;
+}
+
+test('execute-trivial + executor + reviewer + phase=complete + impl filled → ALLOW', () => {
+  const { root, proj, taskDir, subtaskId, taskId } = makeProject('exec-complete', {
+    implContent: 'impl-summary: did the thing\n',
+    state: {
+      schema_version: 3,
+      task_id: 'AI-1',
+      classification: 'execution-trivial',
+      stage: 'closure',
+      phase: 'complete',
+      workflow_state: 'complete',
+      current_subtask: null,
+      pending_subtasks: [],
+      blocked_gates: [],
+      pending_user_actions: [],
+      last_completed_seq: 1,
+    },
+  });
+  const { dir, file } = writeTranscript('exec-complete', executeTurn({ taskDir, subtaskId }));
+  const out = runHook(file, { cwd: proj });
+  assert.strictEqual(out.status, 0, out.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('execute-trivial + executor only (no reviewer) + state still in_progress → BLOCK', () => {
+  // The bug scenario: orchestrator stopped after Executor returned without
+  // dispatching Reviewer, without running closure, without populating the
+  // implementation section.
+  const { root, proj, taskDir, subtaskId } = makeProject('bug-scenario', {
+    state: {
+      schema_version: 3,
+      task_id: 'AI-1',
+      classification: 'execution-trivial',
+      stage: 'execution',
+      phase: 'execution',
+      workflow_state: 'in_progress',
+      current_subtask: 'AI-1-A1',
+      pending_subtasks: ['AI-1-A1'],
+      blocked_gates: [],
+      pending_user_actions: [],
+      last_completed_seq: 0,
+    },
+  });
+  const { dir, file } = writeTranscript(
+    'bug-scenario',
+    executeTurn({ taskDir, subtaskId, dispatchReviewer: false }),
+  );
+  const out = runHook(file, { cwd: proj });
+  assert.strictEqual(out.status, 2, `expected block, got ${out.status}: ${out.stderr}`);
+  assert.match(out.stderr, /closure invariants/);
+  assert.match(out.stderr, /section:implementation/);
+  assert.match(out.stderr, /reviewer/);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('execute-trivial + reviewer + state phase=complete but impl section empty → BLOCK', () => {
+  const { root, proj, taskDir, subtaskId } = makeProject('empty-impl', {
+    state: {
+      schema_version: 3,
+      task_id: 'AI-1',
+      classification: 'execution-trivial',
+      stage: 'closure',
+      phase: 'complete',
+      workflow_state: 'complete',
+      current_subtask: 'AI-1-A1',
+      pending_subtasks: [],
+      blocked_gates: [],
+      pending_user_actions: [],
+      last_completed_seq: 1,
+    },
+  });
+  const { dir, file } = writeTranscript('empty-impl', executeTurn({ taskDir, subtaskId }));
+  const out = runHook(file, { cwd: proj });
+  assert.strictEqual(out.status, 2);
+  assert.match(out.stderr, /section:implementation/);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('execute-trivial + executor only + pending_user_actions non-empty → ALLOW (legitimate hand-off)', () => {
+  const { root, proj, taskDir, subtaskId } = makeProject('handoff', {
+    implContent: 'impl-summary: paused awaiting user\n',
+    state: {
+      schema_version: 3,
+      task_id: 'AI-1',
+      classification: 'execution-trivial',
+      stage: 'execution',
+      phase: 'execution',
+      current_subtask: 'AI-1-A1',
+      pending_subtasks: ['AI-1-A1'],
+      blocked_gates: [],
+      pending_user_actions: [{ id: 'install-deps', description: 'run npm install' }],
+      last_completed_seq: 0,
+    },
+  });
+  const { dir, file } = writeTranscript(
+    'handoff',
+    executeTurn({ taskDir, subtaskId, dispatchReviewer: false }),
+  );
+  const out = runHook(file, { cwd: proj });
+  assert.strictEqual(out.status, 0, out.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 // =========================================================================

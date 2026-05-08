@@ -49,6 +49,9 @@ function makeProject(label, opts = {}) {
       if (opts.skeleton !== false) {
         fs.writeFileSync(path.join(subDir, 'ai-work.md'), '# skeleton\n');
       }
+      if (opts.summarySkeleton !== false) {
+        fs.writeFileSync(path.join(subDir, 'summary.md'), '# summary skeleton\n');
+      }
     }
   }
   return { root, proj, artifactRoot };
@@ -188,6 +191,22 @@ test('task_id present but missing ai-work.md skeleton → block', () => {
   });
   assert.strictEqual(out.status, 1);
   assert.match(out.stderr, /ai-work\.md skeleton not found/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('ai-work.md present but missing summary.md skeleton → block', () => {
+  const { root, proj } = makeProject('summary-skeleton-missing', {
+    taskId: 'TP-001',
+    subtaskId: 'TP-001-A1',
+    summarySkeleton: false,
+    state: defaultState(),
+  });
+  const out = runHook(proj, {
+    CLAUDE_TOOL_INPUT_SUBAGENT_TYPE: 'executor',
+    CLAUDE_TOOL_INPUT_PROMPT: 'implement TP-001-A1',
+  });
+  assert.strictEqual(out.status, 1);
+  assert.match(out.stderr, /summary\.md skeleton not found/);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
