@@ -234,7 +234,7 @@ let confirmPopupPostIntake = false;
 // (Confirm-popup helpers + intake/popup walk are above. The E2E marker
 // exception: when the originating user prompt contains the literal marker
 // `[E2E_AUTO_APPROVE_MODE]`, the popup is intentionally skipped — see
-// skills/intake/orchestrator-intake/SKILL.md.)
+// skills/orchestrator-intake/SKILL.md.)
 
 // Scope the E2E marker scan to the originating user prompt only — the first
 // user-role entry in the transcript, which carries the Task tool's `prompt`
@@ -609,7 +609,7 @@ if (outOfArtifactWrites.length > 0) {
     `task-data.md, but never fired the mandatory four-option AskUserQuestion ` +
     `confirm popup (Direct answer / Plan only / Execute (lightweight) / ` +
     `Execute (full pipeline)). The popup is non-negotiable for every production ` +
-    `request — see skills/intake/orchestrator-intake/SKILL.md "Confirm-and-Override ` +
+    `request — see skills/orchestrator-intake/SKILL.md "Confirm-and-Override ` +
     `Protocol". The only legal skip path is the [E2E_AUTO_APPROVE_MODE] marker in ` +
     `the originating task prompt, which was not present in this turn. ` +
     `Re-run Step 0 and present the popup before any further dispatch.`;
@@ -695,7 +695,7 @@ process.stderr.write(
     `Resolution: on execute paths, after Task(executor) returns, dispatch ` +
     `Task(reviewer) to append <!-- section:review --> to ai-work.md and finalize ` +
     `summary.md, then invoke the orchestrator-state skill's Post-Approval Closure ` +
-    `procedure (skills/shared/orchestrator-state/SKILL.md → "Post-Approval Closure") ` +
+    `procedure (skills/orchestrator-state/SKILL.md → "Post-Approval Closure") ` +
     `to clear current_subtask, drain pending_subtasks, advance last_completed_seq, ` +
     `transition stage execution → closure, and set phase: "complete" in ` +
     `orchestration-state.json BEFORE returning. If the orchestrator must hand ` +

@@ -90,7 +90,7 @@ Load each skill only when you reach the relevant step. They replace the former i
 
 The lifecycle stage is the coarse-grained "what part of the task are we in" signal. Stages are: `intake | planning | execution | closure` (schema_version 3+). The `pre-task-guard.js` Phase 3.5 hook blocks subagent dispatches that don't belong to the active task's stage.
 
-**Stage write rule.** Every `orchestration-state.json` write MUST set `stage`. On a stage transition, close the prior `stage_history` entry (set `exited_at` + `exit_reason` from the documented enum) and append a new entry; update `previous_stage`. See `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/SKILL.md` → "Stage Discipline" for the full rule and the `exit_reason` enum.
+**Stage write rule.** Every `orchestration-state.json` write MUST set `stage`. On a stage transition, close the prior `stage_history` entry (set `exited_at` + `exit_reason` from the documented enum) and append a new entry; update `previous_stage`. See `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/SKILL.md` → "Stage Discipline" for the full rule and the `exit_reason` enum.
 
 **Stage whitelist** (mirrors the hook):
 
@@ -107,7 +107,7 @@ The lifecycle stage is the coarse-grained "what part of the task are we in" sign
 - **`reversal-packet` invoked on `stage=closure` task** → reversal `closure → execution`. Set `previous_stage="closure"`, `stage_reopen_count++`. No `delivery-pm` re-dispatch — `reversal-packet` itself carries the plan delta. No P1 re-fire.
 - **Soft cap** at `stage_reopen_count >= 3`: emit `blocker-escalation-report` AND surface a "Continue anyway / Abort task" P-gate via `AskUserQuestion`. User-overridden continuation increments the counter and records `exit_reason: "overridden-continue"`.
 
-The full reopen protocol with step ordering lives in `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-dispatch/SKILL.md` → "Reopen detection".
+The full reopen protocol with step ordering lives in `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-dispatch/SKILL.md` → "Reopen detection".
 
 ## Default Flow (stage-grouped, 15 steps)
 

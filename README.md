@@ -97,7 +97,7 @@ The `/ai-agents-workflow:task` command classifies each request before deciding h
 | `execution-simple` | ≤ 2 files AND ≤ 50 LOC, no risk keywords, no schema/API/auth/cross-cutting concerns | Full workflow, lightweight/ultra-light paths preferred |
 | `execution-full` | Anything with a risk-area keyword, > 2 files, > 50 LOC, refactor/migrate/redesign, or vague scope | Full 15-step orchestration |
 
-**Confirm-and-Override popup**: every request — without exception — produces an `AskUserQuestion` radio-button popup with four user-facing options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`). The orchestrator's heuristic pick is marked `(Recommended)` and pre-selected; the user can override before any pipeline work starts. See [skills/intake/orchestrator-intake/SKILL.md](skills/intake/orchestrator-intake/SKILL.md) for full checklist rules and the risk-area keyword sets (schema, API, auth, reliability, cross-cutting).
+**Confirm-and-Override popup**: every request — without exception — produces an `AskUserQuestion` radio-button popup with four user-facing options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`). The orchestrator's heuristic pick is marked `(Recommended)` and pre-selected; the user can override before any pipeline work starts. See [skills/orchestrator-intake/SKILL.md](skills/orchestrator-intake/SKILL.md) for full checklist rules and the risk-area keyword sets (schema, API, auth, reliability, cross-cutting).
 
 ## Knowledge: PR Lessons
 
@@ -177,12 +177,12 @@ This plugin reads and writes files under `<artifact-root>/` in the consumer repo
    - `<!-- section:extra-trigger-keywords -->` (optional)
    - `<!-- section:cross-domain-rules -->` (read by delivery-pm)
    - `<!-- section:quality-gates -->` (read by reviewer and executor)
-2. `<artifact-root>/config/domain-contexts.cache.md` + `domain-contexts.cache.manifest.json` — **derived cache** of the pre-extracted sections above. The `.md` file is the concatenation of every cached section block (anchors preserved); the manifest is written last as the completion marker. Regenerated automatically by `init` / `update` / `add` / `remove`; never hand-edit. `context-minimizer` reads from this cache instead of grepping PROJECT_CONFIG.md on every agent dispatch. Contents are project-dependent — a Python-only backend repo's cache will not contain an `fe-baseline` block. The legacy fan-out layout (`domain-contexts/<tag>.md` + `_manifest.json`) is no longer written and gets removed on next regeneration if present. See `skills/project-config/project-config-template/SKILL.md` → "Derived Context Cache" for the exact format.
+2. `<artifact-root>/config/domain-contexts.cache.md` + `domain-contexts.cache.manifest.json` — **derived cache** of the pre-extracted sections above. The `.md` file is the concatenation of every cached section block (anchors preserved); the manifest is written last as the completion marker. Regenerated automatically by `init` / `update` / `add` / `remove`; never hand-edit. `context-minimizer` reads from this cache instead of grepping PROJECT_CONFIG.md on every agent dispatch. Contents are project-dependent — a Python-only backend repo's cache will not contain an `fe-baseline` block. The legacy fan-out layout (`domain-contexts/<tag>.md` + `_manifest.json`) is no longer written and gets removed on next regeneration if present. See `skills/project-config-template/SKILL.md` → "Derived Context Cache" for the exact format.
 3. `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/ai-work.md` — per-subtask artifact. The `pre-task-guard` hook blocks any non-exempt Task dispatch if this file is missing.
 4. `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/summary.md` — per-subtask summary with diagnostics such as telemetry, context manifests, and dispatch-bundle audit details.
 5. Dispatch bundles are not persisted to disk. The orchestrator composes each bundle in memory via the `context-minimizer` skill and embeds it inline in the Task `prompt` parameter (between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers). A one-line audit per dispatch is appended to `<subtask_id>/summary.md` → `<!-- section:dispatch-bundles -->`.
 6. `<artifact-root>/tasks/<task_id>/orchestration-state.json` — **hot** orchestrator state (current cursor: phase, current_subtask, pending_subtasks, blocked_gates, pending_user_actions, subtask_offsets). Read before every subtask transition.
-7. `<artifact-root>/tasks/<task_id>/orchestration-history.json` — **history** orchestrator state (`completed_subtasks[]` with validated sections, `trigger_decisions{}`). Written once per subtask completion; read only at P2/P4 gates, resume, and retrospective. Separated from hot state so task-history growth doesn't inflate per-dispatch read cost. See `skills/shared/orchestrator-state/SKILL.md` for the schema.
+7. `<artifact-root>/tasks/<task_id>/orchestration-history.json` — **history** orchestrator state (`completed_subtasks[]` with validated sections, `trigger_decisions{}`). Written once per subtask completion; read only at P2/P4 gates, resume, and retrospective. Separated from hot state so task-history growth doesn't inflate per-dispatch read cost. See `skills/orchestrator-state/SKILL.md` for the schema.
 
 The `pre-task-guard` hook reads the subtask's `ai-work.md` spec section for trigger keyword matching during its Phase 4 (trigger evaluation) step. It does NOT scan `.claude/plans/`.
 
@@ -191,16 +191,16 @@ Run `/ai-agents-workflow:init` in a fresh consumer repo (or use natural language
 ## What's inside
 
 - `agents/` — 10 subagent definitions: `chief-orchestrator`, `delivery-pm`, `lead`, `executor`, `design-agent`, `reviewer`, `integration-checker`, `init`, `resume-orchestrator`, `pr-lessons-harvester`.
-- `skills/` — 28 skills organized into folder groups:
-  - **Task-pipeline stages:**
-    - `skills/intake/` (2): `orchestrator-intake`, `task-packet`
-    - `skills/planning/` (5): `delivery-plan`, `technical-execution-packet`, `multi-approach-architecture`, `codebase-exploration`, `plan-addendum`
-    - `skills/execution/` (3): `implementation-report`, `review-report`, `integration-check`
-    - `skills/closure/` (1): `post-task-review`
-    - `skills/shared/` (10): cross-cutting orchestration skills used in every task stage — `orchestrator-state`, `orchestrator-dispatch`, `orchestrator-user-gates`, `orchestrator-degraded`, `orchestrator-telemetry`, `context-minimizer`, `blocker-escalation-report`, `reversal-packet`, `resolve-artifact-root`, `telemetry-summary`
+- `skills/` — 28 skills, each at `skills/<name>/SKILL.md` (flat layout required by Claude Code's plugin loader). Groups below are conceptual only and encoded via the `stage:` frontmatter on each SKILL.md.
+  - **Task-pipeline stages** (`stage:` value):
+    - `intake` (2): `orchestrator-intake`, `task-packet`
+    - `planning` (5): `delivery-plan`, `technical-execution-packet`, `multi-approach-architecture`, `codebase-exploration`, `plan-addendum`
+    - `execution` (3): `implementation-report`, `review-report`, `integration-check`
+    - `closure` (1): `post-task-review`
+    - `shared` (10): cross-cutting orchestration skills used in every task stage — `orchestrator-state`, `orchestrator-dispatch`, `orchestrator-user-gates`, `orchestrator-degraded`, `orchestrator-telemetry`, `context-minimizer`, `blocker-escalation-report`, `reversal-packet`, `resolve-artifact-root`, `telemetry-summary`
   - **Side flows** (independent of the task pipeline):
-    - `skills/project-config/` (4): owned by `/init`, `/add`, `/update`, `/remove`
-    - `skills/pr-lessons/` (3): owned by `/pr-lessons`; `pr-lessons-check` is also consulted by Executor and Reviewer during execution
+    - `project-config` (4): owned by `/init`, `/add`, `/update`, `/remove` — `project-config-template`, `project-config-review`, `project-config-mutate`, `project-discovery`
+    - `pr-lessons` (3): owned by `/pr-lessons` — `pr-lesson-extraction`, `pr-lessons-check`, `pr-lessons-store`; `pr-lessons-check` is also consulted by Executor and Reviewer during execution
 - `hooks/` — Node.js hook scripts plus `hooks/hooks.json`. Notable: `pre-task-guard.js` (Phase 0 plan-mode block + Phases 1–4 + Phase 3.5 stage guard), `lib/plan-mode-check.js` + `lib/plan-mode-message.js` (plan-mode detection helper + canonical error message).
 - `commands/` — 8 user-facing slash commands (`init`, `add`, `update`, `remove`, `task`, `continue`, `pr-lessons`, `review`) namespaced as `/ai-agents-workflow:<command>`.
 - `ai/core/`, `ai/governance/`, `ai/playbooks/`, `ai/agents/` — canonical governance docs.

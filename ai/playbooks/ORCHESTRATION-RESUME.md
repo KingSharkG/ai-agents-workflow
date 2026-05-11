@@ -17,7 +17,7 @@ interrupted_subtask_stage=<stage_code | null>
 
 **State reload:** After reading the inline state for routing decisions, re-read `orchestration-state.json` from disk before making any writes. Disk is authoritative for writes.
 
-**Stage awareness (schema_version 3+).** Each resume code below targets a specific lifecycle stage. The orchestrator MUST verify the on-disk `state.stage` matches the implied stage before acting; mismatch indicates state corruption and should trigger a `blocker-escalation-report`. When a resume code transitions to a new stage (e.g., `EXECUTE_PLAN` moves `planning → execution`), follow the stage-write rule: close the prior `stage_history` entry with the appropriate `exit_reason`, append a new entry, update `previous_stage`. See `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/SKILL.md` → "Stage Discipline".
+**Stage awareness (schema_version 3+).** Each resume code below targets a specific lifecycle stage. The orchestrator MUST verify the on-disk `state.stage` matches the implied stage before acting; mismatch indicates state corruption and should trigger a `blocker-escalation-report`. When a resume code transitions to a new stage (e.g., `EXECUTE_PLAN` moves `planning → execution`), follow the stage-write rule: close the prior `stage_history` entry with the appropriate `exit_reason`, append a new entry, update `previous_stage`. See `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/SKILL.md` → "Stage Discipline".
 
 **Resume entry by code:**
 

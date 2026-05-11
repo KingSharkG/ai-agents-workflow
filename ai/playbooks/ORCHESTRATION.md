@@ -20,7 +20,7 @@ Reopens (schema_version 3+):
   closure   ─(reversal)─▶ execution ─(...)─▶ closure
 ```
 
-Soft cap on reopens: `stage_reopen_count >= 3` triggers a `blocker-escalation-report` plus a "Continue / Abort" P-gate. See `${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/SKILL.md` → "Stage Discipline" for the full reopen protocol.
+Soft cap on reopens: `stage_reopen_count >= 3` triggers a `blocker-escalation-report` plus a "Continue / Abort" P-gate. See `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/SKILL.md` → "Stage Discipline" for the full reopen protocol.
 
 ---
 
@@ -96,11 +96,11 @@ Close the planning `stage_history` entry, append next, set `previous_stage: "pla
 
 **Step 8 — Lead.** Appends `<!-- section:tep -->`. For `complexity: low` without triggers, Lead may dispatch Executor directly with the spec as a lightweight TEP; ultra-light tier uses compact inline artifact format.
 
-**Step 9 — Executor.** Executor MUST invoke `pr-lessons-check` before claiming complete (mandatory hard rule — see `skills/execution/implementation-report/SKILL.md`). Appends `<!-- section:implementation -->`.
+**Step 9 — Executor.** Executor MUST invoke `pr-lessons-check` before claiming complete (mandatory hard rule — see `skills/implementation-report/SKILL.md`). Appends `<!-- section:implementation -->`.
 
 **Step 10 — Integration Checker.** Runs per `TRIGGER_RULES.md` → `<!-- section:integration-trigger -->`. Report appended to `<!-- section:integration-check -->`. `verdict: NOT ok` → route fixes before Review.
 
-**Step 11 — Reviewer.** Reviewer MUST invoke `pr-lessons-check` during review (mandatory — see `skills/execution/review-report/SKILL.md`). Appends `### Cycle N` to `<!-- section:review -->` and finalizes `<subtask_id>/summary.md`. Rework routing + delta bundles → `orchestrator-dispatch` skill → "Delta-review protocol". Rework cap → `TRIGGER_RULES.md` → `<!-- section:rework-cap -->`.
+**Step 11 — Reviewer.** Reviewer MUST invoke `pr-lessons-check` during review (mandatory — see `skills/review-report/SKILL.md`). Appends `### Cycle N` to `<!-- section:review -->` and finalizes `<subtask_id>/summary.md`. Rework routing + delta bundles → `orchestrator-dispatch` skill → "Delta-review protocol". Rework cap → `TRIGGER_RULES.md` → `<!-- section:rework-cap -->`.
 
 **Reviewer reopen detection:** if Reviewer returns `verdict: needs-replan`, run the reopen protocol in `orchestrator-dispatch` SKILL → "Reopen detection". This rewinds `stage` to `planning`, increments `stage_reopen_count`, snapshots the delivery-plan signature, dispatches `delivery-pm`, runs the auto-diff procedure, and either silently re-enters execution (signature unchanged) or re-fires P1 (signature changed).
 

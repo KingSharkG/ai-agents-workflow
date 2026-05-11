@@ -414,7 +414,7 @@ if (taskIdFromPrompt) {
               `\n` +
               `File: ${taskLevelStatePath}\n` +
               `Resolution: invoke the orchestrator-state skill and follow ` +
-              `\${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/references/state-schemas.md → Migration ` +
+              `\${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/references/state-schemas.md → Migration ` +
               `to rewrite the file in canonical shape before dispatching ${subagentType}.\n`,
           );
           process.exit(1);
@@ -477,7 +477,7 @@ if (GATED_ROLES.has(subagentType)) {
         `File: ${resolvedStatePath}\n` +
         `Resolution: Chief Orchestrator must rewrite the state file with valid JSON ` +
         `conforming to the canonical schema (see ` +
-        `\${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/references/state-schemas.md) ` +
+        `\${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/references/state-schemas.md) ` +
         `before redispatching ${subagentType}.\n`,
     );
     process.exit(1);
@@ -490,7 +490,7 @@ if (GATED_ROLES.has(subagentType)) {
         `cannot proceed because orchestration-state.json is unreadable or missing.\n` +
         `Expected at: ${resolvedStatePath}\n` +
         `Resolution: chief-orchestrator must write a canonical state file (see ` +
-        `\${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/SKILL.md) before ` +
+        `\${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/SKILL.md) before ` +
         `dispatching ${subagentType}.\n`,
     );
     process.exit(1);
@@ -500,7 +500,7 @@ if (GATED_ROLES.has(subagentType)) {
         `(no schema_version) — allowing dispatch; the orchestrator must ` +
         `upgrade ${resolvedStatePath} to schema_version=2 with ` +
         `gates.p1_approved=true and signature="legacy-migration" on its ` +
-        `next touch (see skills/shared/orchestrator-state/references/state-schemas.md ` +
+        `next touch (see skills/orchestrator-state/references/state-schemas.md ` +
         `→ Migration).\n`,
     );
   } else if (state.classification === 'execution-trivial') {
@@ -583,7 +583,7 @@ if (
         `planning re-open after a needs-replan / p2-replan / reversal — set stage="planning" ` +
         `(or stage="execution" for reversal), update previous_stage, increment ` +
         `stage_reopen_count, and append a stage_history entry before re-dispatching. See ` +
-        `\${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/SKILL.md → "Stage Discipline" for ` +
+        `\${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/SKILL.md → "Stage Discipline" for ` +
         `the full reopen protocol.\n`,
     );
     process.exit(1);
