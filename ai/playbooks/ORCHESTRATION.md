@@ -26,7 +26,7 @@ Soft cap on reopens: `stage_reopen_count >= 3` triggers a `blocker-escalation-re
 
 ## Stage 1 — Intake
 
-**Entry:** user runs `/ai-agents-workflow:task <request>`. Hook chain fires (`check-plan-mode.js` first, then `pre-task-guard.js`). On pass, chief-orchestrator is dispatched.
+**Entry:** user runs `/ai-agents-workflow:task <request>`. The `pre-task-guard.js` PreToolUse hook fires (Phase 0 plan-mode check, then artifact-root + skeleton + P1 + stage gates). On pass, chief-orchestrator is dispatched.
 
 **Subagents legal in this stage:** `chief-orchestrator`, `delivery-pm`. (Delivery PM is whitelisted so the upcoming planning transition can dispatch it without a stage-mismatch race.)
 

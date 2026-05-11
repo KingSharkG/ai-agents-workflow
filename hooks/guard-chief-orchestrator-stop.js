@@ -64,6 +64,13 @@ const path = require('path');
 const { resolveArtifactRoot, canonicalize, posixize } = require('./lib/artifact-root');
 const { bareRole, mostRecentTaskDir, firstUserPromptText } = require('./lib/active-task');
 
+// Prefer payload.cwd (provided by Claude Code in the SubagentStop payload)
+// over process.cwd() — the subagent's CWD as seen by the harness can differ
+// from the hook subprocess's CWD, and the harness-provided value is the one
+// that matches the consumer-repo working directory used elsewhere in the
+// hook chain. Default to process.cwd() until the payload is parsed below.
+let HOOK_CWD = process.cwd();
+
 // -------- Read stdin payload (best-effort, non-blocking) --------
 
 function readStdinSync() {
@@ -90,6 +97,12 @@ if (stdinRaw) {
 // block, do not block again. The agent has been told what to do.
 if (payload && payload.stop_hook_active === true) {
   process.exit(0);
+}
+
+// Promote payload.cwd if the harness provided it. Falls back to HOOK_CWD
+// when absent (older harness versions, manual test invocations).
+if (payload && typeof payload.cwd === 'string' && payload.cwd) {
+  HOOK_CWD = payload.cwd;
 }
 
 const transcriptPath =
@@ -146,43 +159,19 @@ function isIntakeSkill(toolUse) {
   return name === 'orchestrator-intake' || name.endsWith(':orchestrator-intake');
 }
 
-// Anchor on the LATEST orchestrator-intake invocation, not the first. Each
-// chief subagent runs in its own JSONL transcript, so multi-task false-allows
-// across sessions can't happen — but a model could invoke intake more than
-// once within a single turn (e.g. reclassification retry). Latest-wins keeps
-// the post-intake popup check honest in that case.
-let intakeInvoked = false;
-let intakeLastIdx = -1;
-{
-  let runningIdx = 0;
-  for (const tu of toolUses(entries)) {
-    if (isIntakeSkill(tu)) {
-      intakeInvoked = true;
-      intakeLastIdx = runningIdx;
-    }
-    runningIdx++;
-  }
-}
-
-// -------- Was the four-option confirm popup fired after intake? --------
+// -------- Confirm-popup detection helpers (used in the first-pass walk) --------
 //
 // orchestrator-intake mandates a 4-option AskUserQuestion popup (Direct answer
 // / Plan only / Execute lightweight / Execute full pipeline). Skipping it means
 // the user got no chance to override the heuristic verdict — a silent contract
 // violation. But the skill ALSO uses AskUserQuestion for an optional clarify
-// gate before classification (≤3 freeform questions), so a shape-blind check
-// would false-allow runs that fired only the clarify gate. Real transcripts
-// also show model drift on labels and headers — strict equality would
-// false-block valid runs. The rule below balances both concerns:
+// gate before classification, so a shape-blind check would false-allow runs
+// that fired only the clarify gate. Model drift on labels also makes strict
+// equality unreliable. The rule below balances both:
 //   - hard structural gates: name=AskUserQuestion, exactly 1 question,
 //     multiSelect=false, exactly 4 options
 //   - label tolerance: require ≥2 of 4 canonical labels to match (after
 //     stripping ` (Recommended)` and any trailing ` — ...` suffix)
-//
-// Exception: when the originating user prompt (the first user-role entry in
-// this subagent's transcript — corresponds to the Task tool's `prompt` param)
-// contains the literal marker `[E2E_AUTO_APPROVE_MODE]`, the popup is
-// intentionally skipped. See skills/intake/orchestrator-intake/SKILL.md.
 
 const CONFIRM_POPUP_CANONICAL_LABELS = [
   /^Direct answer\b/i,
@@ -192,8 +181,6 @@ const CONFIRM_POPUP_CANONICAL_LABELS = [
 ];
 
 function stripPopupSuffixes(label) {
-  // Strip "(Recommended)" suffix and any trailing " — ..." commentary the
-  // model sometimes appends (observed: "Execute (lightweight) — overriding full").
   return String(label || '')
     .replace(/\s*\(Recommended\)\s*$/i, '')
     .trim();
@@ -214,17 +201,40 @@ function isConfirmPopup(toolUse) {
   return hits >= 2;
 }
 
+// -------- First-pass walk: anchor intake + confirm-popup --------
+//
+// Anchor on the LATEST orchestrator-intake invocation (latest-wins). Because
+// the popup helpers above are now defined, we can accumulate post-intake
+// confirm-popup presence in this same loop. Combining intake + popup
+// detection into one pass replaces what was previously two independent
+// for-loops over the same iterator.
+let intakeInvoked = false;
+let intakeLastIdx = -1;
 let confirmPopupPostIntake = false;
-if (intakeInvoked) {
+{
   let runningIdx = 0;
   for (const tu of toolUses(entries)) {
-    if (runningIdx > intakeLastIdx && isConfirmPopup(tu)) {
+    if (isIntakeSkill(tu)) {
+      intakeInvoked = true;
+      intakeLastIdx = runningIdx;
+      // Latest-wins on intake: previously seen popups now belong to a prior
+      // intake cycle and must not satisfy the post-intake check.
+      confirmPopupPostIntake = false;
+    } else if (
+      intakeLastIdx !== -1 &&
+      tu.name === 'AskUserQuestion' &&
+      isConfirmPopup(tu)
+    ) {
       confirmPopupPostIntake = true;
-      break;
     }
     runningIdx++;
   }
 }
+
+// (Confirm-popup helpers + intake/popup walk are above. The E2E marker
+// exception: when the originating user prompt contains the literal marker
+// `[E2E_AUTO_APPROVE_MODE]`, the popup is intentionally skipped — see
+// skills/intake/orchestrator-intake/SKILL.md.)
 
 // Scope the E2E marker scan to the originating user prompt only — the first
 // user-role entry in the transcript, which carries the Task tool's `prompt`
@@ -246,20 +256,7 @@ if (!intakeInvoked && !envSaysChief) {
   process.exit(0);
 }
 
-// -------- What roles did chief dispatch? --------
-
-const dispatchedRoles = new Set();
-for (const tu of toolUses(entries)) {
-  if (tu.name === 'Task') {
-    const role = bareRole(String((tu.input && tu.input.subagent_type) || ''));
-    if (role) dispatchedRoles.add(role);
-  }
-}
-
-const anyDispatch = dispatchedRoles.size > 0;
-const dispatchedExecutor = dispatchedRoles.has('executor');
-
-// -------- Did chief write task-data.md with a legitimate exit-without-dispatch path? --------
+// -------- Helpers used by the consolidated second-pass walk below --------
 
 const TASK_DATA_RE = /(^|\/)task-data\.md$/;
 const FINAL_PATH_RE = /^\s*[-*]?\s*\*?\*?final_path\*?\*?\s*[:=]\s*([A-Za-z0-9_-]+)/im;
@@ -281,46 +278,20 @@ function extractFinalPath(toolUse) {
   return m ? m[1].toLowerCase() : null;
 }
 
-let recordedFinalPath = null;
-let taskDataWritten = false;
-for (const tu of toolUses(entries)) {
-  if (!isTaskDataWrite(tu)) continue;
-  taskDataWritten = true;
-  const fp = extractFinalPath(tu);
-  if (fp) {
-    recordedFinalPath = fp;
-    // Don't break — later writes may overwrite earlier ones; take the last.
-  }
-}
-
 const EXECUTE_PATHS = new Set([
   'execution-trivial',
   'execution-simple',
   'execution-full',
 ]);
 
-const isExecutePath = recordedFinalPath && EXECUTE_PATHS.has(recordedFinalPath);
-const isStopPath =
-  recordedFinalPath === 'direct-answer' || recordedFinalPath === 'plan-only';
-
-// -------- Out-of-artifact Edit/Write detection (Layer 2 backstop) --------
+// -------- Artifact-scope helpers (used by the consolidated walk below) --------
 //
-// CAKE-5997: chief edited consumer-repo source files directly across multiple
-// dispatches. The PreToolUse source-write hook should have blocked this, but
-// when scope detection fails (env var unset, hooks not loaded in consumer
-// install), the writes go through. This is the SubagentStop retroactive
-// backstop — even if Layer 1 was bypassed, we catch it here at stop time.
-//
-// Scope: Edit and Write only. Bash-based mutations (rm / sed -i / >>) against
-// consumer-repo paths are caught by the PreToolUse `guard-orchestrator-source-
-// writes.js` hook, which already inspects Bash command strings. The
-// SubagentStop layer scans the post-hoc tool_use ledger, where Bash arguments
-// would require re-parsing the same shell-lex logic; we deliberately leave
-// that to the PreToolUse layer and keep this scan narrow.
-//
-// We compute outOfArtifactWrites before the legitimate-stop early-exit below:
-// a direct-answer / plan-only run with out-of-artifact writes is still a
-// protocol violation, so the legitimate-stop allow-path must check this list.
+// Out-of-artifact Edit/Write detection is the Layer 2 backstop for CAKE-5997
+// (chief editing consumer-repo source files directly when the PreToolUse
+// source-write hook gets bypassed). Scope: Edit and Write only — Bash-based
+// mutations are caught by `guard-orchestrator-source-writes.js`. The
+// out-of-artifact list is consumed both by the legitimate-stop early-exit
+// below and by the closure-invariants block on execute paths.
 
 const ARTIFACT = resolveArtifactRoot();
 const ARTIFACT_ROOT = ARTIFACT.root || null;
@@ -336,7 +307,7 @@ function isUnderArtifact(p) {
   // when the resolver fails. This hook stays narrow and doesn't double-block.
   if (!p || !artifactRootCanon) return true;
   try {
-    const abs = posixize(canonicalize(path.resolve(process.cwd(), p)));
+    const abs = posixize(canonicalize(path.resolve(HOOK_CWD, p)));
     return abs === artifactRootCanon || abs.startsWith(`${artifactRootCanon}/`);
   } catch (_) {
     return true;
@@ -344,13 +315,8 @@ function isUnderArtifact(p) {
 }
 
 // Well-known workflow artifact filenames at their canonical depths under
-// `/tasks/<id>/`:
-//   - tasks/<id>/{task-data,orchestration-state,orchestration-history}.{md,json}
-//   - tasks/<id>/[phase-X/]<subtask_id>/{ai-work,summary}.md
-// Even when these land outside the resolved artifact root (e.g. tests using
-// synthetic /tmp paths, or the resolver picking a different layout), they are
-// unambiguously workflow artifacts and should not trip the out-of-artifact
-// check.
+// `/tasks/<id>/` are always considered "inside the artifact root", even when
+// they land in a synthetic /tmp path used by tests.
 const ARTIFACT_FILE_PATTERN = /(^|\/)tasks\/[^/]+\/(?:phase-[A-Za-z0-9-]+\/)?(?:[^/]+\/)?(?:task-data|orchestration-state|orchestration-history|ai-work|summary)\.(?:md|json)$/;
 
 function isKnownArtifactPath(p) {
@@ -358,15 +324,60 @@ function isKnownArtifactPath(p) {
   return ARTIFACT_FILE_PATTERN.test(posixize(p));
 }
 
+function extractTaskIdFromTaskDataPath(filePath) {
+  if (!filePath) return null;
+  // Match .../tasks/<task_id>/task-data.md — task_id is the segment immediately
+  // before /task-data.md. posixize first so Windows-style paths match.
+  const m = posixize(filePath).match(/(?:^|\/)tasks\/([^/]+)\/task-data\.md$/);
+  return m ? m[1] : null;
+}
+
+// -------- Consolidated second-pass walk over the transcript --------
+//
+// One iteration over toolUses(entries) collects every signal the rest of the
+// hook needs: dispatched roles, task-data writes (final_path + task_id,
+// last-write-wins), and out-of-artifact Edit/Write paths. Replaces what was
+// previously four independent loops over the same iterator.
+
+const dispatchedRoles = new Set();
 const outOfArtifactWrites = [];
+let recordedFinalPath = null;
+let taskDataWritten = false;
+let resolvedTaskId = null;
+
 for (const tu of toolUses(entries)) {
+  if (tu.name === 'Task') {
+    const role = bareRole(String((tu.input && tu.input.subagent_type) || ''));
+    if (role) dispatchedRoles.add(role);
+    continue;
+  }
   if (tu.name !== 'Edit' && tu.name !== 'Write') continue;
+
   const fp = String((tu.input && tu.input.file_path) || '');
   if (!fp) continue;
-  if (isKnownArtifactPath(fp)) continue;
-  if (!isUnderArtifact(fp)) {
+
+  if (isTaskDataWrite(tu)) {
+    taskDataWritten = true;
+    const finalPath = extractFinalPath(tu);
+    if (finalPath) recordedFinalPath = finalPath; // last-write-wins
+    const tid = extractTaskIdFromTaskDataPath(fp);
+    if (tid) resolvedTaskId = tid; // last-write-wins
+    continue; // task-data.md is always inside the artifact root
+  }
+
+  if (!isKnownArtifactPath(fp) && !isUnderArtifact(fp)) {
     outOfArtifactWrites.push({ tool: tu.name, path: fp });
   }
+}
+
+const anyDispatch = dispatchedRoles.size > 0;
+const dispatchedExecutor = dispatchedRoles.has('executor');
+const isExecutePath = recordedFinalPath && EXECUTE_PATHS.has(recordedFinalPath);
+const isStopPath =
+  recordedFinalPath === 'direct-answer' || recordedFinalPath === 'plan-only';
+
+if (!resolvedTaskId && TASKS_ROOT) {
+  resolvedTaskId = mostRecentTaskDir(TASKS_ROOT, 'state');
 }
 
 // Allow legitimate stop-without-execution paths — UNLESS chief made
@@ -396,34 +407,13 @@ if (
   process.exit(0);
 }
 
-// -------- Resolve task_id + read orchestration-state.json (best effort) --------
+// -------- Read orchestration-state.json for the resolved task --------
 //
-// On execute paths we need the post-turn state to decide whether the orchestrator
-// reached a legitimate terminal state (phase: complete) or a legitimate
-// hand-off (pending_user_actions / blocked_gates non-empty). We resolve the
-// task_id from the most recent task-data.md write in the transcript, or fall
-// back to the most-recently-touched task directory under <artifact-root>/tasks/.
-
-function extractTaskIdFromTaskDataPath(filePath) {
-  if (!filePath) return null;
-  // Match .../tasks/<task_id>/task-data.md — task_id is the segment immediately
-  // before /task-data.md. posixize the input first so Windows-style paths
-  // (`tasks\foo\task-data.md`) match the same regex.
-  const m = posixize(filePath).match(/(?:^|\/)tasks\/([^/]+)\/task-data\.md$/);
-  return m ? m[1] : null;
-}
-
-let resolvedTaskId = null;
-for (const tu of toolUses(entries)) {
-  if (!isTaskDataWrite(tu)) continue;
-  const fp = (tu.input && (tu.input.file_path || '')) || '';
-  const tid = extractTaskIdFromTaskDataPath(fp);
-  if (tid) resolvedTaskId = tid; // last write wins
-}
-
-if (!resolvedTaskId && TASKS_ROOT) {
-  resolvedTaskId = mostRecentTaskDir(TASKS_ROOT, 'state');
-}
+// (resolvedTaskId was determined in the consolidated walk above, with the
+// mostRecentTaskDir fallback applied.) We need the post-turn state to decide
+// whether the orchestrator reached a legitimate terminal state
+// (phase: complete) or a legitimate hand-off (pending_user_actions /
+// blocked_gates non-empty).
 
 const taskDir = resolvedTaskId && TASKS_ROOT
   ? path.join(TASKS_ROOT, resolvedTaskId)
@@ -663,7 +653,7 @@ if (outOfArtifactWrites.length > 0) {
   }
   if (implSectionEmpty) {
     missing.push(
-      `<!-- section:implementation --> in ${path.relative(process.cwd(), aiWorkPath) || aiWorkPath} ` +
+      `<!-- section:implementation --> in ${path.relative(HOOK_CWD, aiWorkPath) || aiWorkPath} ` +
         `is empty. The Executor's role contract requires appending the Implementation Report ` +
         `(impl-metadata, impl-summary, impl-files-changed, impl-tests-run, impl-dynamic-skills, ` +
         `impl-unresolved-issues, impl-project-state) before returning. An empty section means ` +

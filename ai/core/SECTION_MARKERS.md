@@ -14,7 +14,7 @@ Single source of truth for `<!-- section:<name> -->` markers used in workflow ar
 
 Sub-sections are listed under their parent block as indented rows (parent must be present for children to be considered).
 
-**Casing rule:** marker names MUST be authored lowercase (`<!-- section:review -->`, never `<!-- section:Review -->`). Validators and the section-counter in `hooks/validate-artifact-chain.js` match case-insensitively as a defensive read, but mixed-case markers are protocol violations and may be rejected by future stricter validators. New markers added to this registry must be lowercase, hyphen-separated, ASCII-only.
+**Casing rule:** marker names SHOULD be authored lowercase (`<!-- section:review -->`, not `<!-- section:Review -->`). Validators and the section-counter in `hooks/validate-artifact-chain.js` deliberately match case-insensitively (`/gi`) so a stray capital won't blow up a real run, but mixed-case markers are still protocol violations and may be rejected by a future stricter validator. New markers added to this registry must be lowercase, hyphen-separated, ASCII-only.
 
 ---
 
@@ -96,7 +96,8 @@ Sub-sections are listed under their parent block as indented rows (parent must b
 | ↳ `integration-review` | `integration-check` skill | `reviewer` | O | execution | |
 | ↳ `integration-context-manifest` | `integration-check` skill | `context-minimizer` | C | execution | |
 | ↳ `integration-telemetry` | `integration-check` skill | `telemetry-summary` | C | execution | |
-| `blocker-metadata` | `blocker-escalation-report` skill (any agent) | `chief-orchestrator`, `delivery-pm` | C | any | Block written when an agent escalates. |
+| `escalation-<n>` *(parameterized: `escalation-1`, `escalation-2`, …)* | `blocker-escalation-report` skill (any agent) | `chief-orchestrator`, `reviewer` (closure audit) | C | any | Per-escalation container. `<n>` is a 1-based monotonically increasing index; one block per escalation event. Hosts the `blocker-*` child markers below. |
+| `blocker-metadata` | `blocker-escalation-report` skill (any agent) | `chief-orchestrator`, `delivery-pm` | C | any | Block written when an agent escalates; appears once inside each `escalation-N` block. |
 | ↳ `blocker-type` | `blocker-escalation-report` skill | `chief-orchestrator` | C | any | |
 | ↳ `blocker-what-is-blocked` | `blocker-escalation-report` skill | `chief-orchestrator` | C | any | |
 | ↳ `blocker-what-was-tried` | `blocker-escalation-report` skill | `chief-orchestrator` | C | any | |
@@ -161,19 +162,11 @@ If a marker name appears in both a governance doc (as anchor) AND an artifact te
 
 ---
 
-## Migration status
+## Authority and inline references
 
-**Step 0 — prerequisite:** emit `ai/core/section-markers.json` (machine-readable sidecar) so consumers can load the registry without parsing markdown. Schema: array of `{marker, parent?, writer, readers[], location, required, stages[], notes?}`. A stub JSON file with `markers: []` and the schema documented inline already exists at [`ai/core/section-markers.json`](section-markers.json) so cross-references resolve; populating it (either by generating from this table via a small script, or by making the JSON authoritative and rendering the markdown table from it) is what closes Step 0. Pick one direction and document it here.
+**This markdown table is the single source of truth.** Hooks (`validate-artifact-chain.js`, `validate-summary-telemetry.js`) and skills reference marker names by literal string; this file is the human-readable index. There is no companion machine-readable JSON. (Earlier iterations carried a `section-markers.json` stub plus a four-step migration checklist; both were retired in favour of keeping the markdown table authoritative. If a tooling layer ever needs the data in JSON form, generate it from this table on demand rather than maintaining a second source.)
 
-- [ ] **Step 0** — `ai/core/section-markers.json` populated and kept in sync with the table above (stub exists; needs `markers[]` filled — either auto-generated or authoritative)
-- [ ] `context-minimizer` consumes `section-markers.json` instead of inlining marker names — see [skills/shared/context-minimizer/SKILL.md](../../skills/shared/context-minimizer/SKILL.md) and [references/section-extraction.md](../../skills/shared/context-minimizer/references/section-extraction.md)
-- [ ] `validate-artifact-chain.js` consumes `section-markers.json` instead of hard-coded regexes
-- [ ] `validate-summary-telemetry.js` consumes `section-markers.json`
-- [ ] Writer skills replace inline marker references with anchor links into this file
-
-Until Step 0 lands, this registry is documentation-only — keep both this file and the inline references in sync when adding/renaming markers. Once Step 0 lands, `section-markers.json` becomes authoritative for tooling; the markdown table remains the human-readable view and must be regenerated or hand-synced alongside it.
-
-**Known inline-reference sites the migration sweep must touch.** When the four checkboxes above land, every literal `<!-- section:* -->` reference outside this registry needs to migrate to a registry-driven lookup or anchor link. Audit with `grep -rn '<!-- section:' .` (or `git grep` from a clone) before sweeping — the list below names the categories the sweep will encounter, not every individual hit:
+**Known inline-reference sites to keep in sync when adding/renaming a marker.** Audit with `grep -rn '<!-- section:' .` (or `git grep` from a clone). The list below names the categories the sweep will encounter, not every individual hit:
 
 - [`agents/chief-orchestrator.md`](../../agents/chief-orchestrator.md) hard-rule 10 → `<!-- section:role-boundaries -->` pointer at the constitution
 - [`ai/core/PROJECT_CONSTITUTION.md`](PROJECT_CONSTITUTION.md) → contains the `<!-- section:role-boundaries -->` and `<!-- section:definition-of-done -->` blocks themselves

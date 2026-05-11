@@ -6,8 +6,9 @@
  * performs file writes.
  *
  * Single source of truth for this string. Imported by:
- *   - hooks/check-plan-mode.js (PreToolUse blocker on Task) — uses
- *     `PLAN_MODE_MESSAGE` directly (only `/task` reaches that hook today).
+ *   - hooks/pre-task-guard.js Phase 0 (PreToolUse blocker on Task, folded
+ *     in from the former hooks/check-plan-mode.js) — uses `PLAN_MODE_MESSAGE`
+ *     directly (only `/task` reaches that hook today).
  *   - hooks/block-aiaw-task-in-plan-mode.js (UserPromptSubmit backstop) —
  *     uses `planModeMessageFor(cmd)` since multiple commands are gated.
  *

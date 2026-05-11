@@ -136,7 +136,17 @@ try {
     const line =
       `${new Date().toISOString()}\tguard-agent-reads\trole=${role}\t` +
       `category=${category}\tfile=${resolved}\n`;
+    // Snapshot the parent dir's mtime/atime BEFORE the append, then restore
+    // them after. Without this restore, appending the audit line bumps the
+    // task dir's mtime, which silently poisons `mostRecentTaskDir(_, 'dir')`
+    // callers (notably `guard-orchestrator-step0.js`) into picking the
+    // most-audit-active task instead of the most-recently-worked one.
+    let snap = null;
+    try { snap = fs.statSync(auditDir); } catch (_) {}
     fs.appendFileSync(auditPath, line, 'utf8');
+    if (snap) {
+      try { fs.utimesSync(auditDir, snap.atime, snap.mtime); } catch (_) {}
+    }
   }
 } catch (_) {}
 

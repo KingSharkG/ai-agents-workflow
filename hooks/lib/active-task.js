@@ -67,6 +67,88 @@ function taskPrefixFor(id) {
  * throw cannot fire at runtime today; any future caller deriving `mode` from
  * config or env MUST validate before passing.
  */
+// Filename of the optional recent-task index. Maintained at
+// `<tasksRoot>/.recent` and read by mostRecentTaskDir() to skip the
+// readdir+per-entry-stat fallback. The index is best-effort: any read or
+// write failure falls back to the directory walk so behaviour stays
+// correct even when the index is missing or stale.
+const RECENT_INDEX_FILENAME = '.recent';
+
+function readRecentIndex(tasksRoot, mode) {
+  const indexPath = path.join(tasksRoot, RECENT_INDEX_FILENAME);
+  let raw;
+  try {
+    raw = fs.readFileSync(indexPath, 'utf8');
+  } catch (_) {
+    return null;
+  }
+  // The index is a tiny JSON document: { state: "<id>", dir: "<id>" }.
+  // Fields are independent because each `mode` ranks dirs by a different
+  // mtime (state-file mtime vs dir mtime), so the most-recent answer can
+  // diverge between modes within the same task root.
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const id = parsed[mode];
+  if (typeof id !== 'string' || !id) return null;
+  // Verify the candidate dir still exists and (for `state` mode) still has
+  // the state file. Stale indices recover gracefully via the fallback walk.
+  const dirPath = path.join(tasksRoot, id);
+  try {
+    if (!fs.statSync(dirPath).isDirectory()) return null;
+    if (mode === 'state' && !fs.existsSync(path.join(dirPath, 'orchestration-state.json'))) {
+      return null;
+    }
+  } catch (_) {
+    return null;
+  }
+  return id;
+}
+
+/**
+ * Write or update the recent-task index. Called by validate-artifact-chain
+ * after every legitimate `orchestration-state.json` write so subsequent
+ * mostRecentTaskDir() calls hit the index instead of walking the tasks
+ * directory. Best-effort: any failure is swallowed (the worst that happens
+ * is the next mostRecentTaskDir() call falls back to the readdir walk).
+ *
+ * `mode` ('state' | 'dir') selects which field is updated. The two fields
+ * are independent because each `mostRecentTaskDir` mode ranks by a
+ * different mtime — a state-file write only freshens the state-mode answer;
+ * the dir-mode answer can legitimately point at a different task whose
+ * directory mtime was bumped by a sibling file (ai-work.md, summary.md).
+ * Updating both unconditionally would let a state write silently override
+ * a dir-mode answer that hasn't actually changed.
+ *
+ * Defaults to mode='state' for the validate-artifact-chain caller, which
+ * is the only invocation site today.
+ */
+function writeRecentIndex(tasksRoot, taskId, mode = 'state') {
+  if (mode !== 'state' && mode !== 'dir') {
+    throw new Error(
+      `writeRecentIndex: unknown mode "${mode}". Expected "state" or "dir".`,
+    );
+  }
+  if (!tasksRoot || !taskId) return;
+  const indexPath = path.join(tasksRoot, RECENT_INDEX_FILENAME);
+  let current = {};
+  try {
+    current = JSON.parse(fs.readFileSync(indexPath, 'utf8')) || {};
+    if (typeof current !== 'object') current = {};
+  } catch (_) {
+    current = {};
+  }
+  current[mode] = taskId;
+  current.updated_at = new Date().toISOString();
+  try {
+    fs.writeFileSync(indexPath, JSON.stringify(current));
+  } catch (_) {}
+}
+
 function mostRecentTaskDir(tasksRoot, mode = 'state') {
   if (mode !== 'state' && mode !== 'dir') {
     throw new Error(
@@ -74,6 +156,10 @@ function mostRecentTaskDir(tasksRoot, mode = 'state') {
     );
   }
   if (!tasksRoot || !fs.existsSync(tasksRoot)) return null;
+  // Fast path: consult the recent-task index. Falls through to the walk
+  // when the index is missing, malformed, or points at a stale entry.
+  const indexed = readRecentIndex(tasksRoot, mode);
+  if (indexed) return indexed;
   let entries;
   try {
     entries = fs.readdirSync(tasksRoot, { withFileTypes: true });
@@ -146,10 +232,27 @@ function firstUserPromptText(entries) {
   return '';
 }
 
+/**
+ * True when a parsed orchestration-state.json classifies the task as
+ * `execution-trivial`. Trivial tasks follow the compressed flow (skip
+ * Delivery PM + P1 + Lead, single subtask, optional P4) and therefore are
+ * permitted to ship a minimal task summary.md instead of the canonical
+ * multi-section template required by larger flows.
+ *
+ * Returns false for any non-object input or any other classification value
+ * (including missing classification, which means we can't prove triviality).
+ */
+function isTrivialClassification(state) {
+  return !!(state && typeof state === 'object' && state.classification === 'execution-trivial');
+}
+
 module.exports = {
   bareRole,
   parseTaskIdFromPrompt,
   taskPrefixFor,
   mostRecentTaskDir,
   firstUserPromptText,
+  isTrivialClassification,
+  writeRecentIndex,
+  RECENT_INDEX_FILENAME,
 };

@@ -6,12 +6,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/check-plan-mode.js\"",
-            "blocking": true,
-            "timeout": 5000
-          },
-          {
-            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-task-guard.js\" \"$CLAUDE_TOOL_INPUT_SUBAGENT_TYPE\"",
             "blocking": true,
             "timeout": 5000

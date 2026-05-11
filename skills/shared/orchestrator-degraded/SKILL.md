@@ -28,7 +28,7 @@ In `mode: degraded-inline`:
 
 1. Record the blocker and any required user action.
 2. Request explicit user waiver before continuing past intake / blocker documentation.
-3. Do NOT create dispatch bundles under `roles/`.
+3. Do NOT compose dispatch bundles (the inline-bundle protocol implies no dispatch). Earlier revisions warned against writing bundles to a `roles/` directory; that on-disk path no longer exists and the warning has been retired.
 4. Do NOT fabricate role-owned artifacts or claim that Lead / Executor / Reviewer / Integration Checker ran.
 5. Keep mandatory workflow gates open (`pending-integration-check`, `blocked-on-user`, etc.) until they are genuinely satisfied.
 

@@ -136,7 +136,7 @@ Each step cites the skill that owns the procedural detail.
 11. Reviewer appends `### Cycle N` to `<!-- section:review -->` and finalizes `<subtask_id>/summary.md`. Rework routing + delta bundles: see `orchestrator-dispatch` → Delta-review protocol. Rework cap: see `TRIGGER_RULES.md` → `<!-- section:rework-cap -->`.
 12. **P2 — Phase Boundary Checkpoint** (`orchestrator-user-gates`). Skip if plan has only one phase.
 13. Post-approval closure (`orchestrator-state`) → refresh task-level summary (`telemetry-summary`).
-14. **P4 — Task Completion Review** and optionally **P5 — Post-Task Retrospective** (`orchestrator-user-gates`; P5 body via `post-task-review`).
+14. **P4 — Task Completion Review**. Then **P5 — Post-Task Retrospective** when the gating rule fires (always for ≥3 subtasks or any subtask that hit a rework cycle; skipped only for ≤2-subtask tasks where every subtask was approved on the first review cycle). See `orchestrator-user-gates` SKILL → P5 for the precise rule; P5 body is generated via `post-task-review`.
 15. Task is `complete` only when the task summary exists, `workflow_state: complete`, and both `open_gates` and `pending_user_actions` are empty. **Before writing `phase: "complete"` to `orchestration-state.json`, you MUST have already written `<artifact-root>/tasks/<task_id>/summary.md` with a populated `## Status` section, an aggregate `## Changes by Phase` block, and per-subtask telemetry totals via the `telemetry-summary` skill. The `validate-artifact-chain` hook blocks the `phase: "complete"` transition when the task-level summary is missing or has an empty `## Status` — treat hook denial as your own protocol violation, never as an obstacle to bypass.**
 
 ## Escalation

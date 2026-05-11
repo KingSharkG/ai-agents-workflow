@@ -62,12 +62,12 @@ Only the following transitions are valid. Any transition not listed here is a pr
 | `execution` | `planning` | **Soft reopen** (schema_version 3+). Reviewer `needs-replan` verdict on a subtask, OR P2 phase-boundary user-elected replan. The orchestrator MUST set `previous_stage="execution"`, increment `stage_reopen_count`, snapshot the current normalized delivery-plan signature into `gates.p1_signature_at_stage_entry`, and re-dispatch `delivery-pm`. Subject to the soft cap (≥ 3 reopens trigger a `blocker-escalation-report` plus a "Continue / Abort" override gate). See "Reopen accounting" above. |
 | `blocked` | `execution` | All blocking conditions resolved (gates closed, user actions confirmed) |
 | `blocked` | `complete` | Blocking condition was the last gate; resolution completes the task |
-| `complete` | `execution` | **Reversal** (schema_version 3+). Triggered by `reversal-packet` to reopen approved work after task closure. The orchestrator MUST set `previous_stage="closure"`, increment `stage_reopen_count`, and resume execution from the targeted subtask (no `delivery-pm` re-dispatch — `reversal-packet` itself carries the plan delta). Subject to the same soft cap. |
+| `closure` | `execution` | **Reversal** (schema_version 3+). Triggered by `reversal-packet` to reopen approved work after task closure. The orchestrator MUST set `previous_stage="closure"`, increment `stage_reopen_count`, and resume execution from the targeted subtask (no `delivery-pm` re-dispatch — `reversal-packet` itself carries the plan delta). Subject to the same soft cap. Note: `closure` is the *stage* value; the corresponding *phase* is `complete`, but stage and phase are orthogonal — this row triggers off the stage transition, not the phase value. |
 
 **Invalid transitions** (never allowed):
 
 - `execution` → `planned` (cannot revert to pre-execution state — `planned` is the plan-only terminal phase)
-- `complete` → `planning` (use the reversal transition above to reopen execution; planning is not re-entered for reversals)
+- `closure` → `planning` (use the reversal transition above to reopen execution; planning is not re-entered for reversals)
 - `planned` → `planning` (plan was approved; to revise, use `/continue` then re-dispatch Delivery PM via `REPLAN`)
 
 **Note:** `answered` is a conceptual phase for `direct-answer` tasks. It never appears in a persisted `orchestration-state.json` because `direct-answer` tasks create zero artifacts.

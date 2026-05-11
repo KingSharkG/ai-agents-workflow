@@ -9,8 +9,9 @@
  * request into plan-mode planning behavior (write a plan doc / call
  * ExitPlanMode) instead of dispatching `chief-orchestrator`.
  *
- * The PreToolUse `check-plan-mode` hook only fires if the main thread
- * actually attempts `Task(chief-orchestrator)`. In plan mode the model is
+ * The PreToolUse `pre-task-guard.js` Phase 0 plan-mode check only fires if
+ * the main thread actually attempts `Task(chief-orchestrator)`. In plan mode
+ * the model is
  * strongly steered away from that path — it often never tries, and the
  * user sees no error at all, just a plan being written. This hook closes
  * that gap by blocking the prompt itself.
@@ -42,7 +43,7 @@
  *
  * All these commands have the same shape of failure: in plan mode, the
  * model is steered toward writing a plan document instead of dispatching,
- * so the PreToolUse `check-plan-mode` guard never fires and the user sees
+ * so the PreToolUse `pre-task-guard.js` Phase 0 guard never fires and the user sees
  * planning behavior instead of the canonical "press Shift+Tab" message.
  *
  * Exit semantics
@@ -51,7 +52,7 @@
  *   2 — block (stderr message surfaced to the USER)
  *
  * Note on exit codes: this hook exits 2, while the companion PreToolUse hook
- * `hooks/check-plan-mode.js` exits 1. The difference is harness-prescribed,
+ * `pre-task-guard.js` Phase 0 exits 1. The difference is harness-prescribed,
  * not stylistic. For UserPromptSubmit, exit-2 stderr is shown to the **user**
  * before any model turn runs — which is what we want here, since the
  * actionable instruction ("press Shift+Tab") is for the human. For PreToolUse,
@@ -62,7 +63,7 @@
  *
  * Kill switch
  * -----------
- *   AIAW_DISABLE_PLAN_MODE_GUARD=1 bypasses (same env as check-plan-mode).
+ *   AIAW_DISABLE_PLAN_MODE_GUARD=1 bypasses (same env as pre-task-guard.js Phase 0).
  */
 
 'use strict';

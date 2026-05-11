@@ -9,6 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { isTrivialClassification, writeRecentIndex } = require('./lib/active-task');
 
 const filePath = process.argv[2] || '';
 
@@ -148,12 +149,39 @@ const validateAiWorkDiagnosticsLocation = () => {
   }
 };
 
+// Read sibling orchestration-state.json for the active task summary, if any.
+// Returns null when the file is missing or malformed. Used to decide whether
+// the task is `execution-trivial` (and therefore allowed to ship a minimal
+// summary.md instead of the canonical multi-section template).
+const readSiblingTaskState = () => {
+  const dir = path.dirname(filePath);
+  const sibling = path.join(dir, 'orchestration-state.json');
+  if (!fs.existsSync(sibling)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(sibling, 'utf8'));
+  } catch (_) {
+    return null;
+  }
+};
+
 const validateRequiredHeadings = () => {
   if (!matched.requiredHeadings) {
     return;
   }
 
-  const missing = matched.requiredHeadings.filter((heading) => !hasHeading(heading));
+  // Trivial-flow relaxation: when the sibling orchestration-state.json
+  // classifies the task as `execution-trivial`, only require `Status`. The
+  // compressed flow (skip Delivery PM + P1 + Lead) does not produce the
+  // multi-phase pipeline data the canonical Task Summary template expects;
+  // forcing those headings would block legitimate trivial closure. Subtask
+  // Summary is unaffected (its parent dir is not `tasks/`, so it never reads
+  // a state file alongside).
+  let requiredHeadings = matched.requiredHeadings;
+  if (matched.name === 'Task Summary' && isTrivialClassification(readSiblingTaskState())) {
+    requiredHeadings = ['Status'];
+  }
+
+  const missing = requiredHeadings.filter((heading) => !hasHeading(heading));
   if (missing.length > 0) {
     console.error(
       `[validate-artifact-chain] INVALID ${matched.name}: missing required headings: ${missing.join(', ')}\n` +
@@ -464,15 +492,31 @@ if (matched.jsonValidation) {
   // and `trigger_decisions` live in `orchestration-history.json`; the hot
   // file no longer requires them. Legacy state files may still carry
   // `completed_subtasks` — tolerated (extra fields are not an error).
+  //
+  // Field-requirement matrix:
+  //   - Always required: task_id, phase, pending_subtasks, blocked_gates,
+  //     pending_user_actions.
+  //   - Required outside intake (i.e. stage absent OR stage in
+  //     {planning, execution, closure}): mode, task_summary_path. Intake-stage
+  //     state files are written before the orchestrator commits to a mode or
+  //     resolves the task summary path.
+  //   - Required when schema_version >= 2 AND stage != intake:
+  //     last_completed_seq. Mirrors pre-task-guard.js canonical-schema check
+  //     so PreToolUse and PostToolUse agree.
+  const isIntakeStage = parsed.stage === 'intake';
   const requiredFields = [
     'task_id',
-    'mode',
     'phase',
     'pending_subtasks',
     'blocked_gates',
     'pending_user_actions',
-    'task_summary_path',
   ];
+  if (!isIntakeStage) {
+    requiredFields.push('mode', 'task_summary_path');
+    if (typeof parsed.schema_version === 'number' && parsed.schema_version >= 2) {
+      requiredFields.push('last_completed_seq');
+    }
+  }
   const missingFields = requiredFields.filter((f) => !(f in parsed));
   if (missingFields.length > 0) {
     console.error(
@@ -481,9 +525,19 @@ if (matched.jsonValidation) {
     );
     process.exit(1);
   }
+  if (
+    'last_completed_seq' in parsed &&
+    (typeof parsed.last_completed_seq !== 'number' || parsed.last_completed_seq < 0)
+  ) {
+    console.error(
+      `[validate-artifact-chain] INVALID ${matched.name}: last_completed_seq must be a non-negative number; got ${JSON.stringify(parsed.last_completed_seq)}\n` +
+        `File: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
 
   const validModes = ['normal', 'degraded-inline'];
-  if (!validModes.includes(parsed.mode)) {
+  if ('mode' in parsed && !validModes.includes(parsed.mode)) {
     console.error(
       `[validate-artifact-chain] INVALID ${matched.name}: mode must be one of: ${validModes.join(', ')}; got "${parsed.mode}"\n` +
         `File: ${filePath}\n`,
@@ -573,6 +627,21 @@ if (matched.jsonValidation) {
     );
     process.exit(1);
   }
+
+  // Refresh the recent-task index so subsequent `mostRecentTaskDir` calls in
+  // hooks skip the readdir+stat walk. Best-effort — failures are swallowed.
+  // Detect the tasks-root by walking up: state file lives at
+  // <artifact-root>/tasks/<task_id>/orchestration-state.json, so the parent
+  // of the file's directory is `tasks/`. We only update the index when that
+  // grandparent is literally named "tasks" — guards against test fixtures
+  // and unrelated layouts.
+  try {
+    const taskDir = path.dirname(filePath);
+    const tasksRoot = path.dirname(taskDir);
+    if (path.basename(tasksRoot) === 'tasks') {
+      writeRecentIndex(tasksRoot, path.basename(taskDir));
+    }
+  } catch (_) {}
 
   // JSON validation passed — skip markdown-oriented checks
   process.exit(0);

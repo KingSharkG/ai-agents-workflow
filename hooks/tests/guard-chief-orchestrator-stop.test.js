@@ -403,6 +403,24 @@ test('intake + popup-skipped but [E2E_AUTO_APPROVE_MODE] marker in transcript �
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('intake + confirm-shaped popup BEFORE intake in the SAME content array → BLOCK (popup must follow intake, not precede it)', () => {
+  // Edge case for the consolidated single-pass walk: when one assistant
+  // content array contains [confirm_popup, intake_skill] in that order, the
+  // popup must NOT count as the post-intake confirm — even though it is a
+  // valid 4-option AskUserQuestion shape, the order is wrong. The walk
+  // sees popup at runningIdx=N (intakeLastIdx still -1, ignored) then
+  // intake at runningIdx=N+1 (sets confirmPopupPostIntake=false).
+  const { dir, file } = writeTranscript('block-popup-before-intake-same-msg', [
+    userLine('/ai-agents-workflow:task'),
+    assistantToolUse([askUserQuestionUse(), intakeSkillUse()]),
+    assistantToolUse([taskDataWrite('plan-only')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 2);
+  assert.match(out.stderr, /AskUserQuestion confirm popup/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('intake + AskUserQuestion BEFORE intake (clarify gate) only → BLOCK (post-intake popup still required)', () => {
   // The orchestrator-intake skill has a clarify gate that may fire
   // AskUserQuestion BEFORE classification. That call doesn't count toward the

@@ -2,7 +2,7 @@
 name: chief-orchestrator
 description: MUST BE USED for every new multi-step user task. Coordinates intake classification, routing to specialists (lead/executor/reviewer/design-agent/integration-checker/delivery-pm), enforces P1/P2/P4 user-approval gates, runs the review loop, and finalizes workflow artifacts. Invoked automatically by `/ai-agents-workflow:task`.
 model: opus
-tools: Agent(delivery-pm,design-agent,lead,executor,integration-checker,reviewer), Read, Grep, Glob, Bash, Edit, Write, Skill, AskUserQuestion
+tools: Task, Read, Grep, Glob, Bash, Edit, Write, Skill, AskUserQuestion
 permissionMode: default
 maxTurns: 14
 effort: high

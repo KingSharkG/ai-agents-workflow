@@ -201,7 +201,7 @@ Run `/ai-agents-workflow:init` in a fresh consumer repo (or use natural language
   - **Side flows** (independent of the task pipeline):
     - `skills/project-config/` (4): owned by `/init`, `/add`, `/update`, `/remove`
     - `skills/pr-lessons/` (3): owned by `/pr-lessons`; `pr-lessons-check` is also consulted by Executor and Reviewer during execution
-- `hooks/` — Node.js hook scripts plus `hooks/hooks.json`. Notable: `pre-task-guard.js` (Phases 1–4 + Phase 3.5 stage guard), `check-plan-mode.js` (blocks `Task(chief-orchestrator)` while plan mode is on), `lib/plan-mode-message.js` (canonical error message).
+- `hooks/` — Node.js hook scripts plus `hooks/hooks.json`. Notable: `pre-task-guard.js` (Phase 0 plan-mode block + Phases 1–4 + Phase 3.5 stage guard), `lib/plan-mode-check.js` + `lib/plan-mode-message.js` (plan-mode detection helper + canonical error message).
 - `commands/` — 8 user-facing slash commands (`init`, `add`, `update`, `remove`, `task`, `continue`, `pr-lessons`, `review`) namespaced as `/ai-agents-workflow:<command>`.
 - `ai/core/`, `ai/governance/`, `ai/playbooks/`, `ai/agents/` — canonical governance docs.
 
@@ -213,8 +213,7 @@ The plugin enforces workflow discipline via Node.js hooks wired through [hooks/h
 
 | Hook | Event / Matcher | Blocks when… |
 | --- | --- | --- |
-| `check-plan-mode.js` | `PreToolUse(Task)` | Native plan mode is active and `Task(chief-orchestrator)` is dispatched. |
-| `pre-task-guard.js` | `PreToolUse(Task)` | Subtask skeleton missing, P1 gate unmet, stage discipline violated, or trigger evaluation fails. |
+| `pre-task-guard.js` | `PreToolUse(Task)` | Plan mode is active (Phase 0, chief only), subtask skeleton missing, P1 gate unmet, stage discipline violated, or trigger evaluation fails. |
 | `guard-agent-reads.js` | `PreToolUse(Read)` | Audit-only (non-blocking). |
 | `guard-main-thread-mutations.js` | `PreToolUse(Edit\|Write\|Bash)` | Main thread tries to mutate `<artifact-root>` outside dispatch. |
 | `guard-orchestrator-source-writes.js` | `PreToolUse(Edit\|Write\|Bash)` | Plugin source files are written from a non-orchestrator caller. |
@@ -229,7 +228,7 @@ If a hook blocks an action, the stderr message names the exact remediation skill
 
 **Emergency kill switches** (set in your shell environment; do NOT commit to settings):
 
-- `AIAW_DISABLE_PLAN_MODE_GUARD=1` — bypass `check-plan-mode.js`. Use only when you need the orchestrator to dispatch from inside plan mode and accept that ExitPlanMode tracking is skipped.
+- `AIAW_DISABLE_PLAN_MODE_GUARD=1` — bypass `pre-task-guard.js` Phase 0 (plan-mode block on chief-orchestrator dispatch). Use only when you need the orchestrator to dispatch from inside plan mode and accept that ExitPlanMode tracking is skipped.
 - `AIAW_DISABLE_STAGE_GUARD=1` — bypass Phase 3.5 stage discipline in `pre-task-guard.js`. Use only when recovering from a corrupted `orchestration-state.json`; restore the file and unset immediately.
 
 Other guards have no kill switch by design — they enforce invariants the workflow cannot reason about if violated.

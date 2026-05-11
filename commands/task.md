@@ -17,8 +17,8 @@ This command takes precedence over any session-start "always invoke applicable s
 
 Skills remain fully available — and encouraged — inside the dispatched agents. For example, for a "review PR feedback" task, the orchestrator or Lead can invoke a code-review-style skill (e.g. `superpowers:receiving-code-review`) inside their dispatched turn to fetch and parse the PR comments. That is the right place for it.
 
-In the main thread, only the following are allowed before the `Task(chief-orchestrator)` dispatch:
-- The pre-flight checks listed below (artifact-root resolution, PROJECT_CONFIG.md existence). Plan-mode handling is owned by the `hooks/check-plan-mode.js` PreToolUse hook — it blocks the dispatch directly with the canonical message; no command-level check is needed.
+In the main thread, only the following are allowed before the `Task(chief-orchestrator)` dispatch (this matches the `PRE_DISPATCH_SKILL_ALLOWLIST` in `hooks/guard-main-thread-skills.js` — keep them in sync if you add a pre-flight skill):
+- The pre-flight checks listed below (artifact-root resolution, PROJECT_CONFIG.md existence). Plan-mode handling is owned by `hooks/pre-task-guard.js` Phase 0 (formerly the standalone `check-plan-mode.js`) — it blocks the dispatch directly with the canonical message; no command-level check is needed.
 - One optional `AskUserQuestion` if `$ARGUMENTS` is empty.
 - Invocation of the `ai-agents-workflow:resolve-artifact-root` skill (which uses `Bash`) to obtain the absolute `ARTIFACT_ROOT`.
 - `Read` of `${ARTIFACT_ROOT}/config/PROJECT_CONFIG.md` if needed for the pre-flight check.
@@ -35,7 +35,7 @@ Pre-flight:
 1. Invoke the `ai-agents-workflow:resolve-artifact-root` skill to obtain `ARTIFACT_ROOT`. On resolver failure, follow the skill's read-mostly branch (proceed only if the user confirms after the surfaced diagnostic).
 2. If `${ARTIFACT_ROOT}/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
 
-(Plan-mode handling is enforced by two hooks: the `hooks/block-aiaw-task-in-plan-mode.js` UserPromptSubmit hook rejects the prompt before the command body even runs (using `permission_mode === "plan"` from the harness payload), and the `hooks/check-plan-mode.js` PreToolUse hook is a defense-in-depth backstop on the `Task` dispatch itself. Either path surfaces the canonical "press `Shift+Tab`" message.)
+(Plan-mode handling is enforced by two hooks: the `hooks/block-aiaw-task-in-plan-mode.js` UserPromptSubmit hook rejects the prompt before the command body even runs (using `permission_mode === "plan"` from the harness payload), and `hooks/pre-task-guard.js` Phase 0 is a defense-in-depth backstop on the `Task` dispatch itself. Either path surfaces the canonical "press `Shift+Tab`" message.)
 
 Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:chief-orchestrator`, passing the task description verbatim as a new task. The orchestrator will:
 

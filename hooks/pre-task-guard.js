@@ -8,6 +8,7 @@
  * same tool input + state file.
  *
  * Pipeline (first failure short-circuits with exit 1):
+ *   Phase 0 — plan-mode check (blocking, chief only) — was check-plan-mode.js
  *   Phase 1 — parse tool input + locate active task (one-shot)
  *   Phase 2 — skeleton check  (blocking) — was guard-subtask-skeleton.js
  *   Phase 3 — P1 gate check   (blocking) — was guard-pre-dispatch-p1.js
@@ -37,10 +38,13 @@ const path = require('path');
 const { resolvePluginRoot, getPluginVersion } = require('./lib/plugin-root');
 const { resolveArtifactRoot } = require('./lib/artifact-root');
 const {
+  bareRole,
   parseTaskIdFromPrompt,
   taskPrefixFor,
   mostRecentTaskDir,
 } = require('./lib/active-task');
+const { isPlanModeActiveForTranscript } = require('./lib/plan-mode-check');
+const { PLAN_MODE_MESSAGE } = require('./lib/plan-mode-message');
 
 const PLUGIN_ROOT = resolvePluginRoot();
 const CWD = process.cwd();
@@ -55,10 +59,46 @@ const TASKS_ROOT = ARTIFACT_ROOT ? path.join(ARTIFACT_ROOT, 'tasks') : null;
 // ---------- Phase 1: parse tool input + locate active task (one-shot) ----------
 
 const rawSubagentType = process.env.CLAUDE_TOOL_INPUT_SUBAGENT_TYPE || '';
-const subagentType = rawSubagentType.includes(':')
-  ? rawSubagentType.split(':').pop()
-  : rawSubagentType;
+const subagentType = bareRole(rawSubagentType);
 const prompt = process.env.CLAUDE_TOOL_INPUT_PROMPT || '';
+
+// ---------- Phase 0: plan-mode check (blocking, chief-orchestrator only) ----------
+//
+// Block dispatch of chief-orchestrator while Claude Code's native plan mode is
+// active. The orchestrator performs file writes (task-data.md,
+// orchestration-state.json, ai-work.md skeletons) which violate plan mode's
+// read-only contract. Folded in from the standalone hooks/check-plan-mode.js.
+//
+// Kill switch: AIAW_DISABLE_PLAN_MODE_GUARD=1 bypasses this check (intended
+// only for emergency override if detection misbehaves).
+if (
+  subagentType === 'chief-orchestrator' &&
+  process.env.AIAW_DISABLE_PLAN_MODE_GUARD !== '1'
+) {
+  // Read stdin payload (best-effort, non-blocking) to recover transcript_path.
+  let payload = {};
+  try {
+    const stat = fs.fstatSync(0);
+    if (!(stat && stat.isCharacterDevice() && process.stdin.isTTY)) {
+      const raw = fs.readFileSync(0, 'utf8');
+      if (raw) {
+        try {
+          payload = JSON.parse(raw);
+        } catch (_) {
+          payload = {};
+        }
+      }
+    }
+  } catch (_) {}
+  const transcriptPath =
+    (payload && payload.transcript_path) ||
+    process.env.CLAUDE_TRANSCRIPT_PATH ||
+    '';
+  if (transcriptPath && isPlanModeActiveForTranscript(transcriptPath)) {
+    console.error(`[pre-task-guard] BLOCKED: ${PLAN_MODE_MESSAGE}\n`);
+    process.exit(1);
+  }
+}
 
 // chief-orchestrator dispatches itself only at task entry; no skeleton/state
 // invariants apply to it. Exit fast.
@@ -71,6 +111,11 @@ if (!subagentType || subagentType === 'chief-orchestrator') {
 // guard-orchestrator-source-writes blocks the orchestrator's writes once
 // legacy is detected, but without this gate a subagent dispatch could still
 // slip through when the prompt has no parseable task ID.
+//
+// Reachability: chief-orchestrator already exited above (line ~106), so the
+// `subagentType !== 'init'` allowance only matters for the side-flow `init`
+// agent dispatched from /ai-agents-workflow:init. No task-pipeline subagent
+// reaches this branch; init is the agent that scaffolds the missing folder.
 if (ARTIFACT.legacyDetected && !ARTIFACT.root && subagentType !== 'init') {
   console.error(`[pre-task-guard] BLOCKED: ${ARTIFACT.error}\n`);
   process.exit(1);
@@ -388,7 +433,12 @@ if (taskIdFromPrompt) {
 
 // ---------- Phase 3: P1 gate check (blocking) ----------
 
-const ALLOWED_BEFORE_P1 = new Set(['chief-orchestrator', 'delivery-pm', 'init']);
+// `init` is intentionally absent: it is a side-flow agent (owned by
+// /ai-agents-workflow:init), never dispatched during the task pipeline. The
+// Phase 3.5 stage gate would already block it on a v3 state file (no
+// `intake`-stage allowance); leaving it in this set was dead code that drifted
+// from the canonical chief-orchestrator contract.
+const ALLOWED_BEFORE_P1 = new Set(['chief-orchestrator', 'delivery-pm']);
 const GATED_ROLES = new Set([
   'lead',
   'executor',
@@ -399,8 +449,22 @@ const GATED_ROLES = new Set([
 
 if (GATED_ROLES.has(subagentType)) {
   if (!resolvedTaskId) {
-    // No active task we can resolve — defer. Earlier phases would have already
-    // surfaced any structural issues.
+    // Gated dispatch with no resolvable task state — block. The earlier
+    // skeleton phase only validates when the prompt carries a parseable
+    // task-id; a malformed dispatch prompt that omits the id would otherwise
+    // bypass P1 silently. Gated roles must never run without a state file we
+    // can read, so refuse explicitly here. (Non-gated roles like delivery-pm
+    // are still allowed to run pre-state — they're the ones that create it.)
+    console.error(
+      `[pre-task-guard] BLOCKED: dispatch of ${subagentType} cannot proceed because ` +
+        `no active task could be resolved from the dispatch prompt or recent task state.\n` +
+        `Resolution: the chief-orchestrator must include the task_id (and subtask_id ` +
+        `where applicable) in the Task tool prompt, and orchestration-state.json must ` +
+        `exist under <artifact-root>/tasks/<task_id>/. If this is the very first ` +
+        `subtask dispatch in a new task, run /ai-agents-workflow:task to begin the ` +
+        `pipeline rather than dispatching ${subagentType} directly.\n`,
+    );
+    process.exit(1);
   } else if (stateMalformed) {
     // The skeleton phase blocks malformed state when its taskDir resolution
     // succeeds, but its taskDir derivation is independent of the
@@ -418,7 +482,18 @@ if (GATED_ROLES.has(subagentType)) {
     );
     process.exit(1);
   } else if (!state) {
-    // Missing state file was tolerated by earlier phases — defer.
+    // resolvedTaskId pointed at a task dir, but the orchestration-state.json
+    // could not be read (file disappeared between resolve and load, or was
+    // never created). Block — gated roles must not fly blind.
+    console.error(
+      `[pre-task-guard] BLOCKED: dispatch of ${subagentType} for task ${resolvedTaskId} ` +
+        `cannot proceed because orchestration-state.json is unreadable or missing.\n` +
+        `Expected at: ${resolvedStatePath}\n` +
+        `Resolution: chief-orchestrator must write a canonical state file (see ` +
+        `\${CLAUDE_PLUGIN_ROOT}/skills/shared/orchestrator-state/SKILL.md) before ` +
+        `dispatching ${subagentType}.\n`,
+    );
+    process.exit(1);
   } else if (!Object.prototype.hasOwnProperty.call(state, 'schema_version')) {
     console.error(
       `[pre-task-guard] WARN: legacy task ${resolvedTaskId} ` +
@@ -522,9 +597,7 @@ const PROJECT_CONFIG_PATH = ARTIFACT_ROOT
   ? path.join(ARTIFACT_ROOT, 'config', 'PROJECT_CONFIG.md')
   : null;
 const ARTIFACT_PATH = process.argv[3] || process.env.ARTIFACT_PATH || '';
-const targetAgent = (process.argv[2] || rawSubagentType).includes(':')
-  ? (process.argv[2] || rawSubagentType).split(':').pop()
-  : (process.argv[2] || rawSubagentType);
+const targetAgent = bareRole(process.argv[2] || rawSubagentType);
 
 function parseKeywordSection(filePath, sectionName) {
   let raw;

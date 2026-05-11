@@ -46,7 +46,7 @@ This fast path avoids the `Glob <artifact-root>/tasks/*` traversal entirely, whi
 
 **Primary scan:**
 1. Glob `<artifact-root>/tasks/*/orchestration-state.json`.
-2. For each state file, read only `phase` and `task_id`. A task is **in-progress** when `phase` is not `"complete"` and not `"answered"`. Tasks with `phase: "planned"` are resumable.
+2. For each state file, read only `phase` and `task_id`. A task is **in-progress** when `phase` is not `"complete"`. (`phase: "answered"` is a documentation-only value for `direct-answer` tasks; those tasks never persist a state file so the scan never sees it. The defensive check is kept in case a future writer ever materializes one.) Tasks with `phase: "planned"` are resumable.
 3. Collect the set of discovered task directories.
 
 **Fallback scan (stateless tasks):**

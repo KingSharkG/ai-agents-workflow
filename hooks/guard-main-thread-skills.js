@@ -15,11 +15,23 @@
  *
  *   While a `/ai-agents-workflow:task` invocation is in flight in the main
  *   thread, no `Skill` tool may run until `Task(chief-orchestrator)` has
- *   been dispatched.
+ *   been dispatched, EXCEPT for skills on the narrow pre-flight allowlist
+ *   below (see PRE_DISPATCH_SKILL_ALLOWLIST).
  *
- * No skill is named or singled out. After dispatch, skills run inside
- * subagents (those run in their own sessions; this hook does not see them),
- * which is exactly the intended outcome.
+ * After dispatch, skills run inside subagents (those run in their own
+ * sessions; this hook does not see them), which is exactly the intended
+ * outcome.
+ *
+ * Pre-dispatch allowlist
+ * ----------------------
+ * commands/task.md and commands/continue.md run a small pre-flight before
+ * the chief-orchestrator dispatch — currently a single skill,
+ * `ai-agents-workflow:resolve-artifact-root`, which resolves ARTIFACT_ROOT
+ * via Bash. Without an allowlist this hook would block its own pre-flight,
+ * forcing the commands to fall back to direct Bash invocations of the
+ * underlying script. The allowlist is deliberately tiny: any skill on it
+ * MUST be safe to run in the main thread (no source mutation, no long-lived
+ * state, no orchestrator-pipeline side effects).
  *
  * Detection
  * ---------
@@ -44,6 +56,18 @@
 'use strict';
 
 const fs = require('fs');
+
+// Skills allowed in the main thread BEFORE chief-orchestrator dispatch.
+// Match both bare names and the namespaced `ai-agents-workflow:<name>` form.
+// Keep this set as small as possible — every entry is a hole in the
+// "dispatch first, then run skills inside subagents" invariant.
+const PRE_DISPATCH_SKILL_ALLOWLIST = new Set(['resolve-artifact-root']);
+
+function isAllowlistedSkillName(name) {
+  if (!name) return false;
+  const bare = String(name).includes(':') ? String(name).split(':').pop() : String(name);
+  return PRE_DISPATCH_SKILL_ALLOWLIST.has(bare);
+}
 
 // -------- Read stdin payload (best-effort, non-blocking) --------
 
@@ -70,6 +94,16 @@ if (stdinRaw) {
   } catch (_) {
     payload = {};
   }
+}
+
+// Pre-flight allowlist short-circuit: when the inbound Skill call names a
+// skill on PRE_DISPATCH_SKILL_ALLOWLIST, allow it regardless of dispatch
+// state. The commands' pre-flight legitimately needs `resolve-artifact-root`
+// before chief-orchestrator runs.
+const incomingSkillName =
+  (payload.tool_input && (payload.tool_input.skill || payload.tool_input.name)) || '';
+if (isAllowlistedSkillName(incomingSkillName)) {
+  process.exit(0);
 }
 
 const transcriptPath =
