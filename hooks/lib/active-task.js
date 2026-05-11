@@ -105,9 +105,51 @@ function mostRecentTaskDir(tasksRoot, mode = 'state') {
   return best;
 }
 
+/**
+ * Extract the text of the first `user`-role entry in a parsed JSONL transcript.
+ * In Claude Code subagent transcripts the first user entry corresponds to the
+ * `prompt` field passed to the Task tool — i.e. the dispatching agent's
+ * description of the work to do. Useful for scoping content scans (e.g. for
+ * sentinel markers like `[E2E_AUTO_APPROVE_MODE]`) to the originating prompt
+ * rather than the entire transcript, which would false-positive on tool
+ * results that happen to quote the marker.
+ *
+ * `entries` is an array of already-parsed JSONL objects (one per line).
+ * Returns the concatenated text content of that first user entry, or an
+ * empty string when there is no user entry or its content is unrecognized.
+ *
+ * Content shape tolerance matches the rest of the hook code: handles both
+ * `{message: {role, content}}` and flat `{role, content}` entries, and
+ * `content` as either a string or an array of `{type, text}` parts.
+ */
+function firstUserPromptText(entries) {
+  if (!Array.isArray(entries)) return '';
+  for (const entry of entries) {
+    if (!entry) continue;
+    const role =
+      (entry.message && entry.message.role) || entry.role || entry.type || null;
+    if (role !== 'user') continue;
+    const content =
+      (entry.message && entry.message.content) || entry.content || '';
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .map((part) => {
+          if (typeof part === 'string') return part;
+          if (part && typeof part.text === 'string') return part.text;
+          return '';
+        })
+        .join('\n');
+    }
+    return '';
+  }
+  return '';
+}
+
 module.exports = {
   bareRole,
   parseTaskIdFromPrompt,
   taskPrefixFor,
   mostRecentTaskDir,
+  firstUserPromptText,
 };

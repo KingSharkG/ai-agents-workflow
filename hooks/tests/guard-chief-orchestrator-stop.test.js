@@ -86,6 +86,127 @@ function unrelatedSkillUse(name) {
   };
 }
 
+// The orchestrator-intake skill mandates a four-option AskUserQuestion popup
+// after classification. The guard treats intake-invoked-but-no-AskUserQuestion
+// as a protocol violation. Every fixture that asserts a non-popup-skip outcome
+// must include this tool_use after the intake invocation.
+function askUserQuestionUse() {
+  return {
+    type: 'tool_use',
+    name: 'AskUserQuestion',
+    input: {
+      questions: [
+        {
+          question: 'Confirm classification',
+          header: 'Path',
+          multiSelect: false,
+          options: [
+            { label: 'Direct answer', description: 'd' },
+            { label: 'Plan only', description: 'p' },
+            { label: 'Execute (lightweight)', description: 'l' },
+            { label: 'Execute (full pipeline)', description: 'f' },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+// Variant with the `(Recommended)` suffix on one option — must still be
+// recognized as a confirm popup.
+function askUserQuestionUseWithRecommended() {
+  return {
+    type: 'tool_use',
+    name: 'AskUserQuestion',
+    input: {
+      questions: [
+        {
+          question: 'How should I handle this?',
+          header: 'Classification',
+          multiSelect: false,
+          options: [
+            { label: 'Direct answer', description: 'd' },
+            { label: 'Plan only (Recommended)', description: 'p' },
+            { label: 'Execute (lightweight)', description: 'l' },
+            { label: 'Execute (full pipeline)', description: 'f' },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+// Variant with model-drifted labels — must still be recognized via the
+// "≥2 of 4 canonical labels match" tolerance.
+function askUserQuestionUseDrifted() {
+  return {
+    type: 'tool_use',
+    name: 'AskUserQuestion',
+    input: {
+      questions: [
+        {
+          question: 'How should I handle this?',
+          header: 'Path',
+          multiSelect: false,
+          options: [
+            { label: 'Direct answer', description: 'd' },
+            { label: 'Plan only', description: 'p' },
+            { label: 'Run it now (drifted label)', description: 'l' },
+            { label: 'Not sure / didn\'t check', description: 'f' },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+// 3-option freeform clarify-gate AskUserQuestion — must NOT be recognized as
+// the confirm popup (different structural shape).
+function clarifyGateUse() {
+  return {
+    type: 'tool_use',
+    name: 'AskUserQuestion',
+    input: {
+      questions: [
+        {
+          question: 'What file should this target?',
+          header: 'Clarify',
+          multiSelect: false,
+          options: [
+            { label: 'src/foo.ts', description: 'f' },
+            { label: 'src/bar.ts', description: 'b' },
+            { label: 'other', description: 'o' },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+// A 4-option AskUserQuestion with completely unrelated labels — the "false
+// friend" case the shape check must reject.
+function unrelatedFourOptionPopup() {
+  return {
+    type: 'tool_use',
+    name: 'AskUserQuestion',
+    input: {
+      questions: [
+        {
+          question: 'Which artifacts should I review?',
+          header: 'Artifacts',
+          multiSelect: false,
+          options: [
+            { label: 'ai-work.md', description: 'a' },
+            { label: 'summary.md', description: 's' },
+            { label: 'task-data.md', description: 't' },
+            { label: 'orchestration-state.json', description: 'o' },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 // -------- Test harness --------
 
 function writeTranscript(label, lines) {
@@ -167,7 +288,7 @@ function test(name, fn) {
 test('intake invoked, no dispatch, no task-data → BLOCK', () => {
   const { dir, file } = writeTranscript('block-bare', [
     userLine('/ai-agents-workflow:task add a comment to foo.ts'),
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
     userLine('3'),
     // chief just answers inline — no further tool_use
   ]);
@@ -181,7 +302,7 @@ test('intake invoked, no dispatch, no task-data → BLOCK', () => {
 test('namespaced intake invoked, no dispatch, no task-data → BLOCK', () => {
   const { dir, file } = writeTranscript('block-namespaced', [
     userLine('/ai-agents-workflow:task fix typo'),
-    assistantToolUse([namespacedIntakeSkillUse()]),
+    assistantToolUse([namespacedIntakeSkillUse(), askUserQuestionUse()]),
   ]);
   const out = runHook(file);
   assert.strictEqual(out.status, 2);
@@ -195,7 +316,7 @@ test('namespaced intake invoked, no dispatch, no task-data → BLOCK', () => {
 test('intake invoked + Task(lead) dispatched → ALLOW', () => {
   const { dir, file } = writeTranscript('allow-task', [
     userLine('/ai-agents-workflow:task'),
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
     assistantToolUse([taskDispatch('delivery-pm')]),
     assistantToolUse([taskDispatch('lead')]),
   ]);
@@ -211,7 +332,7 @@ test('intake invoked + Task(lead) dispatched → ALLOW', () => {
 test('intake invoked + task-data.md with final_path direct-answer → ALLOW', () => {
   const { dir, file } = writeTranscript('allow-direct', [
     userLine('/ai-agents-workflow:task what does foo() do?'),
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
     assistantToolUse([taskDataWrite('direct-answer')]),
   ]);
   const out = runHook(file);
@@ -226,11 +347,236 @@ test('intake invoked + task-data.md with final_path direct-answer → ALLOW', ()
 test('intake invoked + task-data.md with final_path plan-only → ALLOW', () => {
   const { dir, file } = writeTranscript('allow-plan', [
     userLine('/ai-agents-workflow:task draft a plan'),
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
     assistantToolUse([taskDataWrite('plan-only')]),
   ]);
   const out = runHook(file);
   assert.strictEqual(out.status, 0, out.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// =========================================================================
+// Failure mode: intake invoked but AskUserQuestion popup skipped
+// =========================================================================
+
+test('intake invoked but no AskUserQuestion popup + final_path written → BLOCK (popup skipped)', () => {
+  // Chief invoked orchestrator-intake, then wrote final_path into task-data.md
+  // without firing the mandatory four-option AskUserQuestion popup. User never
+  // got to override the heuristic verdict.
+  const { dir, file } = writeTranscript('block-popup-skipped', [
+    userLine('/ai-agents-workflow:task something risky'),
+    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([taskDataWrite('plan-only')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 2, `expected block, got ${out.status}: ${out.stderr}`);
+  assert.match(out.stderr, /AskUserQuestion confirm popup/);
+  assert.match(out.stderr, /Confirm-and-Override Protocol/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('intake invoked but no AskUserQuestion + Task dispatched, no task-data.md → BLOCK (intake-errored)', () => {
+  // No task-data.md → intake-errored branch (chief got partway then stalled
+  // before recording a final_path). Downstream dispatches alone are not enough.
+  const { dir, file } = writeTranscript('block-intake-errored-dispatched', [
+    userLine('/ai-agents-workflow:task fix the thing'),
+    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([taskDispatch('delivery-pm')]),
+    assistantToolUse([taskDispatch('lead')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 2);
+  assert.match(out.stderr, /intake stage did not complete/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('intake + popup-skipped but [E2E_AUTO_APPROVE_MODE] marker in transcript → ALLOW', () => {
+  // The e2e harness intentionally bypasses the popup by injecting the marker.
+  // This is the only legal popup-skip path.
+  const { dir, file } = writeTranscript('allow-e2e-auto-approve', [
+    userLine('/ai-agents-workflow:task [E2E_AUTO_APPROVE_MODE] fix the bug'),
+    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([taskDataWrite('direct-answer')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 0, `expected allow, got ${out.status}: ${out.stderr}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('intake + AskUserQuestion BEFORE intake (clarify gate) only → BLOCK (post-intake popup still required)', () => {
+  // The orchestrator-intake skill has a clarify gate that may fire
+  // AskUserQuestion BEFORE classification. That call doesn't count toward the
+  // post-classification confirm popup requirement.
+  const { dir, file } = writeTranscript('block-clarify-only', [
+    userLine('/ai-agents-workflow:task vague request'),
+    assistantToolUse([askUserQuestionUse()]),       // clarify gate
+    assistantToolUse([intakeSkillUse()]),           // then intake classifies
+    assistantToolUse([taskDataWrite('plan-only')]), // then writes final_path — no confirm popup
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 2);
+  assert.match(out.stderr, /AskUserQuestion confirm popup/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// =========================================================================
+// Shape detection: confirm popup vs clarify gate vs unrelated 4-option popup
+// =========================================================================
+
+test('confirm popup with (Recommended) suffix → ALLOW', () => {
+  // Real production runs append " (Recommended)" to the heuristic-pick label.
+  // The shape check must strip that and still recognize the popup.
+  const { dir, file } = writeTranscript('allow-recommended-suffix', [
+    userLine('/ai-agents-workflow:task'),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUseWithRecommended()]),
+    assistantToolUse([taskDataWrite('plan-only')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 0, `expected allow, got ${out.status}: ${out.stderr}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('label-drifted confirm popup (only 2 of 4 canonical labels match) → ALLOW', () => {
+  // The model drifts on labels at runtime. As long as ≥2 of the 4 canonical
+  // labels match, the popup counts. Strict equality would false-block this.
+  const { dir, file } = writeTranscript('allow-drifted-labels', [
+    userLine('/ai-agents-workflow:task'),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUseDrifted()]),
+    assistantToolUse([taskDataWrite('plan-only')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 0, `expected allow, got ${out.status}: ${out.stderr}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('3-option clarify-gate AskUserQuestion after intake but no 4-option confirm → BLOCK', () => {
+  // A clarify-gate-shaped popup (3 options, freeform labels) after intake
+  // doesn't satisfy the confirm-popup requirement.
+  const { dir, file } = writeTranscript('block-clarify-shape', [
+    userLine('/ai-agents-workflow:task vague'),
+    assistantToolUse([intakeSkillUse(), clarifyGateUse()]),
+    assistantToolUse([taskDataWrite('plan-only')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 2);
+  assert.match(out.stderr, /AskUserQuestion confirm popup/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('4-option AskUserQuestion with unrelated labels ("Artifacts" false-friend) → BLOCK', () => {
+  // 4 options is the right cardinality, but the labels are nothing like the
+  // canonical confirm popup. ≥2-of-4 match rule rejects this.
+  const { dir, file } = writeTranscript('block-unrelated-4-option', [
+    userLine('/ai-agents-workflow:task'),
+    assistantToolUse([intakeSkillUse(), unrelatedFourOptionPopup()]),
+    assistantToolUse([taskDataWrite('plan-only')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 2);
+  assert.match(out.stderr, /AskUserQuestion confirm popup/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// =========================================================================
+// Distinct failure modes: popup-skipped vs intake-errored
+// =========================================================================
+
+test('intake invoked, no popup, no task-data.md → BLOCK with intake-errored reason', () => {
+  // Distinct from popup-skipped: chief invoked intake but neither popped the
+  // popup NOR wrote task-data.md. The classification process aborted
+  // mid-flight. Different remediation than popup-skipped.
+  const { dir, file } = writeTranscript('block-intake-errored', [
+    userLine('/ai-agents-workflow:task fix the thing'),
+    assistantToolUse([intakeSkillUse()]),
+    // No popup, no task-data.md write, no dispatch — chief just stopped.
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 2);
+  assert.match(out.stderr, /intake stage did not complete/);
+  assert.match(out.stderr, /aborted mid-flight/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('intake invoked, no popup, taskDataWrite present → BLOCK with popup-skipped reason (not intake-errored)', () => {
+  // popupSkipped branch: chief got far enough to record final_path but
+  // skipped the user override popup.
+  const { dir, file } = writeTranscript('block-popup-skipped-distinct', [
+    userLine('/ai-agents-workflow:task'),
+    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([taskDataWrite('plan-only')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 2);
+  assert.match(out.stderr, /recorded a final_path in task-data.md/);
+  // Must NOT pick up the intake-errored message.
+  assert.doesNotMatch(out.stderr, /aborted mid-flight/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// =========================================================================
+// E2E marker scope: must be in the originating user prompt, not just anywhere
+// =========================================================================
+
+test('[E2E_AUTO_APPROVE_MODE] only in tool_result content (not user prompt) → still BLOCK', () => {
+  // The marker can legitimately appear in a tool result (e.g. a Read of
+  // orchestrator-intake/SKILL.md which documents it). The hook must scope its
+  // marker scan to the originating user message, not the whole transcript.
+  const toolResult = JSON.stringify({
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [
+        {
+          type: 'tool_result',
+          content:
+            'When the originating task prompt contains the literal marker ' +
+            '[E2E_AUTO_APPROVE_MODE], this skill enters auto-approve mode...',
+        },
+      ],
+    },
+  });
+  const { dir, file } = writeTranscript('block-marker-in-tool-result', [
+    userLine('/ai-agents-workflow:task fix it (no marker in this user prompt)'),
+    assistantToolUse([intakeSkillUse()]),
+    toolResult, // marker appears here, NOT in the first user message
+    assistantToolUse([taskDataWrite('plan-only')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 2, `expected block: ${out.stderr}`);
+  assert.match(out.stderr, /AskUserQuestion confirm popup/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// =========================================================================
+// Latest-intake anchoring (defensive against rare reclassification retries)
+// =========================================================================
+
+test('intake invoked twice in one turn, popup after second only → ALLOW', () => {
+  // Latest-intake-wins: an earlier intake without a popup is fine as long as
+  // a later intake DOES have the popup after it.
+  const { dir, file } = writeTranscript('allow-intake-retried', [
+    userLine('/ai-agents-workflow:task'),
+    assistantToolUse([intakeSkillUse()]),                            // first intake — no popup
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),      // reclassify with popup
+    assistantToolUse([taskDataWrite('plan-only')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 0, `expected allow, got ${out.status}: ${out.stderr}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('intake invoked twice, popup only BEFORE second intake → BLOCK (popup needs to come after latest)', () => {
+  // Inverse: if the popup happens between the two intakes, the latest
+  // intake invocation has no popup after it → popupSkipped.
+  const { dir, file } = writeTranscript('block-popup-before-latest-intake', [
+    userLine('/ai-agents-workflow:task'),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),  // first intake + popup
+    assistantToolUse([intakeSkillUse()]),                        // reclassify, no popup after
+    assistantToolUse([taskDataWrite('plan-only')]),
+  ]);
+  const out = runHook(file);
+  assert.strictEqual(out.status, 2);
+  assert.match(out.stderr, /AskUserQuestion confirm popup/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -263,7 +609,7 @@ test('completely empty transcript → ALLOW', () => {
 test('stop_hook_active=true → ALLOW (no recursion)', () => {
   const { dir, file } = writeTranscript('allow-recursion', [
     userLine('/ai-agents-workflow:task'),
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
   ]);
   const out = runHook(file, { payloadOverrides: { stop_hook_active: true } });
   assert.strictEqual(out.status, 0, out.stderr);
@@ -288,7 +634,7 @@ test('malformed JSON in transcript line → ignored, intake-detection still work
   const { dir, file } = writeTranscript('malformed', [
     userLine('/ai-agents-workflow:task'),
     'this is not json',
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
     'also not json',
     assistantToolUse([taskDispatch('lead')]),
   ]);
@@ -316,7 +662,7 @@ test('intake invoked + Edit on task-data.md adding final_path direct-answer → 
   };
   const { dir, file } = writeTranscript('allow-edit', [
     userLine('/ai-agents-workflow:task what is X'),
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
     assistantToolUse([editPart]),
   ]);
   const out = runHook(file);
@@ -332,7 +678,7 @@ function executeTurn({ taskDir, subtaskId, dispatchReviewer = true, finalPath = 
   const taskDataPath = path.join(taskDir, 'task-data.md');
   const parts = [
     userLine('/ai-agents-workflow:task'),
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
     assistantToolUse([taskDataWrite(finalPath, taskDataPath)]),
     assistantToolUse([taskDispatch('executor')]),
   ];
@@ -481,7 +827,7 @@ function makeOutOfArtifactWriteScenario(label, opts = {}) {
   };
   const parts = [
     userLine('/ai-agents-workflow:task'),
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
     assistantToolUse([taskDataWrite('execution-trivial', taskDataPath)]),
     assistantToolUse([offendingEdit]),
     assistantToolUse([taskDispatch('executor')]),
@@ -526,7 +872,7 @@ test('chief Write on consumer-repo path → BLOCK', () => {
   };
   const parts = [
     userLine('/ai-agents-workflow:task'),
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
     assistantToolUse([taskDataWrite('execution-trivial', path.join(taskDir, 'task-data.md'))]),
     assistantToolUse([offendingWrite]),
     assistantToolUse([taskDispatch('executor')]),
@@ -645,7 +991,7 @@ test('chief Edit on path UNDER artifact root → ALLOW (artifact maintenance is 
   };
   const parts = [
     userLine('/ai-agents-workflow:task'),
-    assistantToolUse([intakeSkillUse()]),
+    assistantToolUse([intakeSkillUse(), askUserQuestionUse()]),
     assistantToolUse([taskDataWrite('execution-trivial', taskDataPath)]),
     assistantToolUse([artifactEdit]),
     assistantToolUse([taskDispatch('executor')]),

@@ -69,6 +69,18 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/block-aiaw-task-in-plan-mode.js\"",
+            "blocking": true,
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "hooks": [

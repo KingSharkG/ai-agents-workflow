@@ -35,7 +35,7 @@ Pre-flight:
 1. Invoke the `ai-agents-workflow:resolve-artifact-root` skill to obtain `ARTIFACT_ROOT`. On resolver failure, follow the skill's read-mostly branch (proceed only if the user confirms after the surfaced diagnostic).
 2. If `${ARTIFACT_ROOT}/config/PROJECT_CONFIG.md` does not exist in the consumer repo, surface a one-line note suggesting the user run `/ai-agents-workflow:init` first, then proceed only if the user confirms.
 
-(Plan-mode handling is enforced by the `hooks/check-plan-mode.js` PreToolUse hook — when plan mode is active, the dispatch is blocked at the harness level with a clear message instructing the user to press `Shift+Tab`.)
+(Plan-mode handling is enforced by two hooks: the `hooks/block-aiaw-task-in-plan-mode.js` UserPromptSubmit hook rejects the prompt before the command body even runs (using `permission_mode === "plan"` from the harness payload), and the `hooks/check-plan-mode.js` PreToolUse hook is a defense-in-depth backstop on the `Task` dispatch itself. Either path surfaces the canonical "press `Shift+Tab`" message.)
 
 Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:chief-orchestrator`, passing the task description verbatim as a new task. The orchestrator will:
 

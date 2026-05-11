@@ -62,7 +62,7 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveArtifactRoot, canonicalize, posixize } = require('./lib/artifact-root');
-const { bareRole, mostRecentTaskDir } = require('./lib/active-task');
+const { bareRole, mostRecentTaskDir, firstUserPromptText } = require('./lib/active-task');
 
 // -------- Read stdin payload (best-effort, non-blocking) --------
 
@@ -146,13 +146,94 @@ function isIntakeSkill(toolUse) {
   return name === 'orchestrator-intake' || name.endsWith(':orchestrator-intake');
 }
 
+// Anchor on the LATEST orchestrator-intake invocation, not the first. Each
+// chief subagent runs in its own JSONL transcript, so multi-task false-allows
+// across sessions can't happen — but a model could invoke intake more than
+// once within a single turn (e.g. reclassification retry). Latest-wins keeps
+// the post-intake popup check honest in that case.
 let intakeInvoked = false;
-for (const tu of toolUses(entries)) {
-  if (isIntakeSkill(tu)) {
-    intakeInvoked = true;
-    break;
+let intakeLastIdx = -1;
+{
+  let runningIdx = 0;
+  for (const tu of toolUses(entries)) {
+    if (isIntakeSkill(tu)) {
+      intakeInvoked = true;
+      intakeLastIdx = runningIdx;
+    }
+    runningIdx++;
   }
 }
+
+// -------- Was the four-option confirm popup fired after intake? --------
+//
+// orchestrator-intake mandates a 4-option AskUserQuestion popup (Direct answer
+// / Plan only / Execute lightweight / Execute full pipeline). Skipping it means
+// the user got no chance to override the heuristic verdict — a silent contract
+// violation. But the skill ALSO uses AskUserQuestion for an optional clarify
+// gate before classification (≤3 freeform questions), so a shape-blind check
+// would false-allow runs that fired only the clarify gate. Real transcripts
+// also show model drift on labels and headers — strict equality would
+// false-block valid runs. The rule below balances both concerns:
+//   - hard structural gates: name=AskUserQuestion, exactly 1 question,
+//     multiSelect=false, exactly 4 options
+//   - label tolerance: require ≥2 of 4 canonical labels to match (after
+//     stripping ` (Recommended)` and any trailing ` — ...` suffix)
+//
+// Exception: when the originating user prompt (the first user-role entry in
+// this subagent's transcript — corresponds to the Task tool's `prompt` param)
+// contains the literal marker `[E2E_AUTO_APPROVE_MODE]`, the popup is
+// intentionally skipped. See skills/intake/orchestrator-intake/SKILL.md.
+
+const CONFIRM_POPUP_CANONICAL_LABELS = [
+  /^Direct answer\b/i,
+  /^Plan only\b/i,
+  /^Execute \(lightweight\)/i,
+  /^Execute \(full pipeline\)/i,
+];
+
+function stripPopupSuffixes(label) {
+  // Strip "(Recommended)" suffix and any trailing " — ..." commentary the
+  // model sometimes appends (observed: "Execute (lightweight) — overriding full").
+  return String(label || '')
+    .replace(/\s*\(Recommended\)\s*$/i, '')
+    .trim();
+}
+
+function isConfirmPopup(toolUse) {
+  if (!toolUse || toolUse.name !== 'AskUserQuestion') return false;
+  const qs = toolUse.input && toolUse.input.questions;
+  if (!Array.isArray(qs) || qs.length !== 1) return false;
+  const q = qs[0];
+  if (q && q.multiSelect === true) return false;
+  if (!q || !Array.isArray(q.options) || q.options.length !== 4) return false;
+  const labels = q.options.map((o) => stripPopupSuffixes(o && o.label));
+  let hits = 0;
+  for (const re of CONFIRM_POPUP_CANONICAL_LABELS) {
+    if (labels.some((l) => re.test(l))) hits++;
+  }
+  return hits >= 2;
+}
+
+let confirmPopupPostIntake = false;
+if (intakeInvoked) {
+  let runningIdx = 0;
+  for (const tu of toolUses(entries)) {
+    if (runningIdx > intakeLastIdx && isConfirmPopup(tu)) {
+      confirmPopupPostIntake = true;
+      break;
+    }
+    runningIdx++;
+  }
+}
+
+// Scope the E2E marker scan to the originating user prompt only — the first
+// user-role entry in the transcript, which carries the Task tool's `prompt`
+// field. Scanning the whole transcript would false-positive on tool results
+// that happen to quote the marker (e.g. a Read of orchestrator-intake/SKILL.md
+// which documents it).
+const e2eAutoApprove = intakeInvoked
+  ? firstUserPromptText(entries).includes('[E2E_AUTO_APPROVE_MODE]')
+  : false;
 
 // Secondary scoping: when chief never invoked orchestrator-intake at all
 // (CAKE-5997 mode — chief silently skipped Step 0), the intake-invoked
@@ -201,8 +282,10 @@ function extractFinalPath(toolUse) {
 }
 
 let recordedFinalPath = null;
+let taskDataWritten = false;
 for (const tu of toolUses(entries)) {
   if (!isTaskDataWrite(tu)) continue;
+  taskDataWritten = true;
   const fp = extractFinalPath(tu);
   if (fp) {
     recordedFinalPath = fp;
@@ -288,8 +371,28 @@ for (const tu of toolUses(entries)) {
 
 // Allow legitimate stop-without-execution paths — UNLESS chief made
 // out-of-artifact Edit/Write calls in the same turn (CAKE-5997 mode), in
-// which case the legitimate-stop path is moot.
-if (isStopPath && !anyDispatch && outOfArtifactWrites.length === 0) {
+// which case the legitimate-stop path is moot. Also UNLESS the intake
+// classification popup was skipped OR intake errored mid-flight (see
+// intakePartialFailure below).
+// Two distinct failure modes share the "intake fired but no popup" branch:
+//   - "popup skipped" — task-data.md WAS written, so chief committed to a path
+//     without showing the user the four-option override popup.
+//   - "intake errored" — task-data.md was NOT written either; chief invoked
+//     the skill, never popped the popup, never recorded a final_path. The
+//     classification process itself failed mid-flight. Same root block, but
+//     different remediation advice for the user.
+const popupSkipped =
+  intakeInvoked && !confirmPopupPostIntake && taskDataWritten && !e2eAutoApprove;
+const intakeErrored =
+  intakeInvoked && !confirmPopupPostIntake && !taskDataWritten && !e2eAutoApprove;
+const intakePartialFailure = popupSkipped || intakeErrored;
+
+if (
+  isStopPath &&
+  !anyDispatch &&
+  outOfArtifactWrites.length === 0 &&
+  !intakePartialFailure
+) {
   process.exit(0);
 }
 
@@ -445,7 +548,8 @@ if (isExecutePath && dispatchedExecutor) {
     stateLooksTerminal &&
     !implSectionEmpty &&
     reviewerOk &&
-    outOfArtifactWrites.length === 0
+    outOfArtifactWrites.length === 0 &&
+    !intakePartialFailure
   ) {
     process.exit(0);
   }
@@ -464,7 +568,8 @@ if (
   !recordedFinalPath &&
   anyDispatch &&
   outOfArtifactWrites.length === 0 &&
-  intakeInvoked
+  intakeInvoked &&
+  !intakePartialFailure
 ) {
   process.exit(0);
 }
@@ -504,6 +609,34 @@ if (outOfArtifactWrites.length > 0) {
     `Step 0 (intake classification + 4-option AskUserQuestion popup + task-data.md) ` +
     `is mandatory — there is no path that lets chief skip it. This is the CAKE-5997 ` +
     `silent-skip-Step-0 failure mode.`;
+} else if (popupSkipped) {
+  // Step 0 partial-skip: chief invoked orchestrator-intake, wrote task-data.md
+  // with a final_path, but never fired the mandatory four-option
+  // AskUserQuestion confirm popup. The user got no chance to override the
+  // heuristic verdict before the pipeline committed to a path.
+  reason =
+    `chief-orchestrator invoked orchestrator-intake and recorded a final_path in ` +
+    `task-data.md, but never fired the mandatory four-option AskUserQuestion ` +
+    `confirm popup (Direct answer / Plan only / Execute (lightweight) / ` +
+    `Execute (full pipeline)). The popup is non-negotiable for every production ` +
+    `request — see skills/intake/orchestrator-intake/SKILL.md "Confirm-and-Override ` +
+    `Protocol". The only legal skip path is the [E2E_AUTO_APPROVE_MODE] marker in ` +
+    `the originating task prompt, which was not present in this turn. ` +
+    `Re-run Step 0 and present the popup before any further dispatch.`;
+} else if (intakeErrored) {
+  // Distinct from popupSkipped: chief invoked the intake skill but didn't
+  // make it as far as writing task-data.md OR firing the popup. The
+  // classification process aborted mid-flight (often a skill load error,
+  // an unhandled exception, or chief errored after the Skill returned but
+  // before writing anything). Different remediation.
+  reason =
+    `chief-orchestrator invoked orchestrator-intake but the intake stage did not ` +
+    `complete: no four-option AskUserQuestion confirm popup was fired AND no ` +
+    `task-data.md was written. The intake classification process aborted mid-flight ` +
+    `(likely a skill load error or chief errored after the Skill call returned). ` +
+    `Re-run /ai-agents-workflow:task with the same description. If the failure ` +
+    `repeats, surface the diagnostic from the Skill invocation directly per the ` +
+    `"Abort on missing skill" hard rule rather than continuing silently.`;
 } else if (isExecutePath && !dispatchedExecutor) {
   reason =
     `final_path is "${recordedFinalPath}" but no Task(executor) dispatch ` +
