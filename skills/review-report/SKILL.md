@@ -63,6 +63,8 @@ On the first cycle, number findings sequentially: `F-001`, `F-002`, etc. On subs
 
 **When unsure whether two findings are "the same"**: if the root-cause-category, location, and rework-direction all match and the new description would repeat the prior one, reuse the ID. If any of those three diverge in a material way, assign a new ID.
 
+**Location equivalence after refactor:** if the Executor moved the code without resolving the underlying defect, the finding is still "the same" — reuse the ID with `status: persisted`. Location equivalence is: same file (post-rename counts as same file when the rename is recorded in `impl-files-changed`), OR same module within one rename hop. A finding that moves across module boundaries gets a new ID, even if the underlying cause is identical.
+
 ## Related skills
 
 - `context-minimizer` → "Executor rework bundle (cycle N > 2) — finding-ID delta" — the reader of stable IDs. The delta protocol only works when IDs survive across cycles as specified above.
@@ -81,5 +83,6 @@ On the first cycle, number findings sequentially: `F-001`, `F-002`, etc. On subs
   - `State`: `pass | fail | deferred | blocked | pending`
   - `Evidence`: `executed | inspected | deferred | blocked | pending`
 - Runtime, auth-flow, network, device, simulator, and manual-QA behaviors may be `State: pass` only when `Evidence: executed`.
+- **Evidence ownership:** the Lead writes the initial signal rows with `State: pending, Evidence: pending` when shaping the TEP. The Executor updates `Evidence` per implementation outcome (`executed` after running the test/flow; `inspected` for static checks; `deferred` / `blocked` when not possible). The Reviewer finalizes both `State` and `Evidence` on approval — stale `pending` rows at verdict time are invalid and block approval.
 - If review is clean but an external gate remains open, set `workflow_state` accordingly (`blocked-on-user` or `pending-integration-check`) instead of overstating the subtask as complete.
 - Do not leave stale text like "skeleton summary" or "reviewer fills this later" in the finalized `summary.md`.

@@ -17,8 +17,21 @@ Portable multi-agent governance layer. Packages the orchestration, lead/executor
   - **Side-flow groups** (independent of the task pipeline; driven by their own slash commands):
     - `project-config` — owned by `/ai-agents-workflow:init|add|update|remove`: `project-config-template`, `project-config-review`, `project-config-mutate`, `project-discovery`
     - `pr-lessons` — owned by `/ai-agents-workflow:pr-lessons` (with `pr-lessons-check` consulted by Executor and Reviewer during execution): `pr-lesson-extraction`, `pr-lessons-check`, `pr-lessons-store`
-- `commands/` — seven user-facing slash commands (`init`, `add`, `update`, `remove`, `task`, `continue`, `pr-lessons`) that namespace as `/ai-agents-workflow:<command>`; thin entry-points dispatching the `init`, `chief-orchestrator`, `resume-orchestrator`, or `pr-lessons-harvester` subagent
-- `hooks/` — Node.js hook scripts wired via `hooks/hooks.json`. Notable: `pre-task-guard` (Phase 0 plan-mode block on `Task(chief-orchestrator)` + skeleton + P1 gate + Phase 3.5 stage guard + trigger evaluation; the plan-mode block was folded in from the former standalone `check-plan-mode.js`), `guard-agent-reads`, `guard-main-thread-mutations`, `guard-main-thread-skills` (allowlists `resolve-artifact-root` for command pre-flights), `guard-orchestrator-source-writes`, `guard-chief-orchestrator-stop`, `validate-artifact-chain` and `validate-summary-telemetry` (PostToolUse). `hooks/lib/plan-mode-check.js` is the shared plan-mode banner detector; `hooks/lib/plan-mode-message.js` holds the canonical user-facing message.
+- `commands/` — eight user-facing slash commands (`init`, `add`, `update`, `remove`, `task`, `continue`, `pr-lessons`, `review`) that namespace as `/ai-agents-workflow:<command>`; thin entry-points dispatching the `init`, `chief-orchestrator`, `resume-orchestrator`, or `pr-lessons-harvester` subagent (or, for `review`, running entirely in the main thread)
+- `hooks/` — Node.js hook scripts wired via `hooks/hooks.json`. Notable:
+  - **UserPromptSubmit / blocking:**
+    - `block-aiaw-task-in-plan-mode` — first-line plan-mode backstop on `/ai-agents-workflow:*` commands, ahead of `pre-task-guard` Phase 0.
+  - **PreToolUse / blocking:**
+    - `pre-task-guard` — Phase 0 plan-mode block on `Task(chief-orchestrator)` + skeleton + P1 gate + Phase 3.5 stage guard + trigger evaluation (the plan-mode block was folded in from the former standalone `check-plan-mode.js`).
+    - `guard-main-thread-mutations`, `guard-orchestrator-source-writes`, `guard-orchestrator-step0` — write-side guards.
+    - `guard-main-thread-skills` — Skill-call guard (allowlists `resolve-artifact-root` for command pre-flights).
+  - **PreToolUse / non-blocking (audit-only):**
+    - `guard-agent-reads` — Read guard.
+  - **SubagentStop / blocking:**
+    - `guard-chief-orchestrator-stop` — structural backstop on chief stop.
+  - **PostToolUse / non-blocking warnings:**
+    - `validate-artifact-chain`, `validate-summary-telemetry`, `validate-orchestration-state-write`.
+  - **Shared `hooks/lib/`:** `plan-mode-check.js` (banner detector), `plan-mode-message.js` (canonical "press Shift+Tab" message), `hook-log.js` (shared append-only writer for `<artifact-root>/tasks/<task_id>/hooks.log`).
 - `ai/core/PROJECT_CONSTITUTION.md` — workflow rules, Definition of Done
 - `ai/governance/` — trigger rules, review checklist, artifact discipline, resolution policy (helper plugins/skills)
 - `ai/playbooks/ORCHESTRATION.md` — default flow (Step 0 intake classification through Step 15 completion), dispatch bundles, orchestrator state, token-saving rules

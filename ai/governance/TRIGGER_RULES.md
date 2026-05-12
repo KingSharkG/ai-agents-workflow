@@ -89,13 +89,22 @@ Run if:
 - request/response contracts changed
 - auth expectations changed
 - nullability/field shape may differ
-- the Delivery Plan marks `integration_gate: required`
+- the subtask's Delivery Plan entry sets `integration_concern: true` (free-text flag the Delivery PM may add to surface non-obvious cross-domain risk; not a registered marker)
 
-**On `verdict: NOT ok`:** The Integration Checker MUST include `fix_owner: fe | be | both` in the report with a one-sentence rationale identifying which side introduced the mismatch. The Orchestrator routes the fix to the identified executor(s). The Reviewer MUST NOT approve the subtask until a follow-up Integration Checker run returns `verdict: ok`. The Reviewer cannot substitute their own integration check for IC's verdict.
+**Verdict enum:** `verdict: ok` | `verdict: not-ok` | `verdict: insufficient-context`. Emit exactly this literal under `<!-- section:integration-verdict -->`; the `validate-artifact-chain.js` hook greps for `verdict: ok` and rejects any other spelling.
+
+**On `verdict: not-ok`:** The Integration Checker MUST include `fix_owner: fe | be | both` in the report with a one-sentence rationale identifying which side introduced the mismatch. The Orchestrator routes the fix to the identified executor(s). The Reviewer MUST NOT approve the subtask until a follow-up Integration Checker run returns `verdict: ok`. The Reviewer cannot substitute their own integration check for IC's verdict.
+
+**On `verdict: insufficient-context`:** The Integration Checker emits a `blocker-escalation-report` with `route_to: user` rather than `fix_owner`. The subtask remains in `pending-integration-check` until the user resolves the missing context and IC is redispatched.
 
 **Mandatory gate rule:** If the subtask spec or project rule says the IC gate is required, the subtask's `workflow_state` remains `pending-integration-check` until the IC returns `verdict: ok`. A clean code review alone is insufficient to close that subtask. The `validate-artifact-chain` hook enforces this: a subtask summary with `review_verdict: approved` will be rejected if the sibling `ai-work.md` has a populated integration-check section without `verdict: ok`.
 
-**Contract-only mode (P2 gate):** When dispatched via the P2 phase boundary checkpoint, IC runs in "contract-only" mode: it compares only the contract surfaces (API types, request/response shapes, auth expectations) established during the completed phase against the consumer expectations in the next phase. It does NOT inspect implementation details, test coverage, or code quality. The dispatch bundle omits `impl-files-changed` and `impl-tests-run` sections. The IC report is written to a dedicated `ai-work.md` in a temporary `phase-boundary-check/` directory, not to any subtask's `ai-work.md`.
+**Contract-only mode (P2 gate):** When dispatched via the P2 phase boundary checkpoint, IC runs in "contract-only" mode: it compares only the contract surfaces (API types, request/response shapes, auth expectations) established during the completed phase against the consumer expectations in the next phase. It does NOT inspect implementation details, test coverage, or code quality.
+
+- **Dispatch envelope.** Chief-orchestrator dispatches `Task(integration-checker)` with `phase_boundary_check: true` as a fact line inside the inline dispatch bundle (`<!-- phase-boundary-check: true -->`). The bundle omits `impl-files-changed` and `impl-tests-run` from the agent's input (they'd be misleading at a phase boundary — no single subtask is being checked).
+- **Output path.** The IC report is written to `<artifact-root>/tasks/<task_id>/phase-boundary-check/<completed_phase_id>/ai-work.md` — a dedicated path NOT under any subtask. The orchestrator pre-creates the directory and an `ai-work.md` skeleton with only the `<!-- section:integration-check -->` placeholder. summary.md is co-located.
+- **P2 consumer.** After IC returns, the chief-orchestrator re-presents the P2 menu with the contract-only verdict prepended to the option list. On `verdict: ok`, P2 proceeds normally to the next phase. On `verdict: not-ok`, the orchestrator presents a forced choice: "Re-open phase `<completed_phase_id>` to fix contract mismatches (recommended)" / "Override and proceed anyway (records `exit_reason: overridden-continue` in stage_history)". Re-open reuses the standard execution stage rewind path.
+- **Stage discipline.** The phase-boundary check runs inside the execution stage; no stage transition. The directory is cleaned up at task closure (`roles/` policy in `${CLAUDE_PLUGIN_ROOT}/skills/context-minimizer/SKILL.md`).
 
 <!-- /section:integration-trigger -->
 

@@ -8,22 +8,48 @@ Node.js scripts wired by the Claude Code harness via `hooks.json`. Every hook is
 hooks/
 ├── hooks.json                                  # harness config (matchers → scripts)
 ├── pre-task-guard.js                           # PreToolUse Task — blocking
+├── block-aiaw-task-in-plan-mode.js             # UserPromptSubmit — blocking on plan mode
 ├── guard-agent-reads.js                        # PreToolUse Read — non-blocking warning
+├── guard-main-thread-mutations.js              # PreToolUse Edit|Write|Bash — blocking
+├── guard-main-thread-skills.js                 # PreToolUse Skill — blocking
 ├── guard-orchestrator-source-writes.js         # PreToolUse Edit|Write|Bash — blocking
+├── guard-orchestrator-step0.js                 # PreToolUse Edit|Write|Task — blocking
+├── guard-chief-orchestrator-stop.js            # SubagentStop — blocking
 ├── validate-artifact-chain.js                  # PostToolUse Write|Edit — blocking on schema violations
 ├── validate-summary-telemetry.js               # PostToolUse Write|Edit — non-blocking warning
+├── validate-orchestration-state-write.js       # PostToolUse Write|Edit — non-blocking warning
 ├── lib/
 │   ├── artifact-root.js                        # resolver: probes for the project's artifact root
-│   └── plugin-root.js                          # resolver: locates the plugin install dir
+│   ├── plugin-root.js                          # resolver: locates the plugin install dir
+│   ├── active-task.js                          # task-id parsing + recent-task-dir picker
+│   ├── plan-mode-check.js                      # plan-mode banner detector
+│   ├── plan-mode-message.js                    # canonical "press Shift+Tab" message
+│   ├── section-marker-lookup.js                # `<!-- section:* -->` registry-sync helper
+│   └── hook-log.js                             # shared append-only `<task>/hooks.log` writer
 ├── bin/
 │   ├── resolve-artifact-root.js                # CLI wrapper around lib/artifact-root.js
 │   └── write-additional-dir.js                 # atomic JSON merge into .claude/settings.local.json
 └── tests/
     ├── run-all.js                              # aggregate runner — exits non-zero if any suite fails
+    ├── active-task.test.js
+    ├── active-task.recent-index.test.js
     ├── artifact-root.test.js
-    ├── validate-artifact-chain.test.js
+    ├── block-aiaw-task-in-plan-mode.test.js
+    ├── guard-agent-reads.test.js
+    ├── guard-chief-orchestrator-stop.test.js
+    ├── guard-main-thread-mutations.test.js
+    ├── guard-main-thread-skills.test.js
+    ├── guard-main-thread-skills.allowlist.test.js
     ├── guard-orchestrator-source-writes.test.js
-    └── pre-task-guard.test.js
+    ├── guard-orchestrator-step0.test.js
+    ├── pre-task-guard.test.js
+    ├── pre-task-guard.defer-tightening.test.js
+    ├── pre-task-guard.plan-mode.test.js
+    ├── pre-task-guard.stage.test.js
+    ├── validate-artifact-chain.test.js
+    ├── validate-artifact-chain.intake.test.js
+    ├── validate-orchestration-state-write.test.js
+    └── validate-summary-telemetry.test.js
 ```
 
 ## Hook contracts
@@ -31,10 +57,11 @@ hooks/
 | File | Tool matcher | Blocking? | What it enforces | Tests |
 |---|---|---|---|---|
 | `pre-task-guard.js` | `Task` | yes | (0) Plan-mode block on `Task(chief-orchestrator)` while Claude Code's native plan mode is active (folded in from the former `check-plan-mode.js`); (1) Caller is exempt (chief-orchestrator) or task scaffolding exists; (2) ai-work.md skeleton present for the dispatched subtask; (3) `gates.p1_approved === true` for gated roles; (4) stage-discipline check for v3 state files; (5) legacy `./ai-workflow-data/` blocks all non-orchestrator/non-init dispatches; (6) emits trigger-keyword assessment to stdout (non-blocking). Kill switch for Phase 0 only: `AIAW_DISABLE_PLAN_MODE_GUARD=1`. | `pre-task-guard.test.js`, `pre-task-guard.stage.test.js`, `pre-task-guard.plan-mode.test.js`, `pre-task-guard.defer-tightening.test.js` |
-| `guard-agent-reads.js` | `Read` | no | Warns when an agent reads governance files, canonical role contracts, `PROJECT_CONFIG.md`, or the derived domain-contexts cache directly instead of via dispatch bundle. | (no direct suite — covered indirectly) |
+| `guard-agent-reads.js` | `Read` | no | Warns when an agent reads governance files, canonical role contracts, `PROJECT_CONFIG.md`, or the derived domain-contexts cache directly instead of via dispatch bundle. | `guard-agent-reads.test.js` |
 | `guard-orchestrator-source-writes.js` | `Edit \| Write \| Bash` | yes | The chief-orchestrator may only Edit/Write inside the resolved artifact root. Bash output redirection and mutators (`rm`, `mv`, `cp`, `sed -i`, `touch`, etc.) targeting paths outside the artifact root are denied. A list of forbidden command prefixes (`git commit`, `npm install`, etc.) is always denied. Non-orchestrator callers and the top-level user are exempt. | `guard-orchestrator-source-writes.test.js` |
 | `validate-artifact-chain.js` | `Write \| Edit` | yes | Per-artifact schema checks: required fields, required headings, required section markers, paired open/close markers, JSON shape for `orchestration-state.json`, integration-check verdict gating, telemetry-belongs-in-summary, etc. | `validate-artifact-chain.test.js` |
-| `validate-summary-telemetry.js` | `Write \| Edit` | no | Warns when a subtask `summary.md` has a verdict but the `## Telemetry` or `## Context Manifest` section is empty/missing. | (no direct suite — small surface) |
+| `validate-summary-telemetry.js` | `Write \| Edit` | no | Warns when a subtask `summary.md` has a verdict but the `## Telemetry` or `## Context Manifest` section is empty/missing. | `validate-summary-telemetry.test.js` |
+| `validate-orchestration-state-write.js` | `Write \| Edit` | no | Warns when an `orchestration-state.json` write is malformed: not valid JSON, missing required fields per `schema_version`, bad `phase` / `stage` enum, half-open `stage_history` entries, or a consecutive-entry transition not in the Phase Transition Table. Appends a durable line to `<artifact-root>/tasks/<task_id>/hooks.log` on every WARN via `lib/hook-log.js`. | `validate-orchestration-state-write.test.js` |
 | `block-aiaw-task-in-plan-mode.js` | UserPromptSubmit (event, not Tool matcher) | yes | Backstop for the slash-command path: blocks `/ai-agents-workflow:{task,continue,init,add,update,remove,pr-lessons,review}` while the harness reports `permission_mode === "plan"`. Catches the case where plan mode would otherwise steer the model into writing a plan document instead of dispatching, so `pre-task-guard.js` Phase 0 (PreToolUse on `Task`) never fires. Exits 2 with the canonical message on stderr (surfaced to the user before any model turn runs). Kill switch: `AIAW_DISABLE_PLAN_MODE_GUARD=1`. | `block-aiaw-task-in-plan-mode.test.js` |
 | `guard-chief-orchestrator-stop.js` | SubagentStop | yes | Structural backstop on chief-orchestrator stop: detects intake skipped/errored/popup-skipped, missing executor/reviewer dispatch on execute paths, missing terminal state, out-of-artifact chief writes, empty `<!-- section:implementation -->`. Exits 2 with a specific reason naming each missing invariant. | `guard-chief-orchestrator-stop.test.js` |
 
@@ -45,6 +72,8 @@ hooks/
 - **`active-task.js`** — exports `bareRole()`, `parseTaskIdFromPrompt()`, `taskPrefixFor()`, `mostRecentTaskDir()`, `firstUserPromptText()`, `isTrivialClassification()`, `writeRecentIndex()`, `RECENT_INDEX_FILENAME`. Helpers for resolving active-task identity from hook context (task-id regexes, recent-task-dir picking) plus a tolerant first-user-prompt extractor used by `guard-chief-orchestrator-stop.js` to scope content scans (e.g. for `[E2E_AUTO_APPROVE_MODE]`) to the subagent's input prompt instead of the whole transcript. `mostRecentTaskDir()` consults the optional `<tasksRoot>/.recent` index (a tiny JSON document refreshed by `validate-artifact-chain.js` after every legitimate state-file write) before falling back to a `readdir` + per-entry `stat` walk — this keeps hook startup cheap as tasks accumulate. `isTrivialClassification()` reads `state.classification === 'execution-trivial'` so the validator and stop hook can relax the canonical-summary requirement for trivial tasks.
 - **`plan-mode-check.js`** — exports `isPlanModeActiveForTranscript(path)` and the `PLAN_MODE_BANNER` constant. Reads a JSONL transcript and returns `true` iff the banner appears in the most-recent user/system block. Consumed by `pre-task-guard.js` Phase 0 and by `pre-task-guard.plan-mode.test.js`.
 - **`plan-mode-message.js`** — single source of truth for the user-facing "press Shift+Tab" message. Exports `PLAN_MODE_MESSAGE` (the historical wording for `/ai-agents-workflow:task`, preserved verbatim) and `planModeMessageFor(command)` (command-aware variant for other gated commands). The constant is computed from the function so they cannot drift.
+- **`section-marker-lookup.js`** — checks whether a given `<!-- section:NAME -->` marker is registered in `ai/core/SECTION_MARKERS.md`. Used by the e2e static-mode check #8 (marker-registry sync) and available to any future validator that needs registry-sync verification.
+- **`hook-log.js`** — append-only writer for `<artifact-root>/tasks/<task_id>/hooks.log`. Exports `append({taskId, hook, decision, reason})` and `taskIdFromFilePath(p)` (extract `task_id` from a path under the artifact root, canonicalized to survive macOS `/var/folders` symlinks). Best-effort: any I/O failure is swallowed silently — hook-logging never breaks a hook. Currently consumed by `validate-orchestration-state-write.js`; available to any guard/validator that wants a durable trace beyond stderr.
 
 ## CLI helpers (`hooks/bin/`)
 

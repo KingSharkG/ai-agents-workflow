@@ -54,7 +54,7 @@ This fast path avoids the `Glob <artifact-root>/tasks/*` traversal entirely, whi
 5. Exclude any task directory already found in primary scan.
 6. For each remaining task (has `task-data.md` but no `orchestration-state.json`), infer state from artifacts:
    - `task_id`: directory name (e.g., `TP-003`).
-   - Glob `<artifact-root>/tasks/<task_id>/<task_id>-*/summary.md` to find subtask summaries. Grep each for `verdict:` — if present, that subtask is complete.
+   - Glob `<artifact-root>/tasks/<task_id>/<task_id>-*/summary.md` to find subtask summaries. Grep each for `verdict:` — if present, that subtask is complete. **Error handling:** if a summary.md is unreadable, malformed, or has `verdict:` but no recognizable value, treat that subtask as **incomplete** (do not classify as completed on ambiguous evidence) and surface a clarifying question to the user before resuming — better to ask than to silently skip work. Don't infer phase from a partially-written summary.
    - Grep `task-data.md` for `<!-- section:delivery-plan -->` to check if a plan exists.
    - Inferred phase:
      - Subtask summaries with `verdict:` exist → `phase: "execution"`

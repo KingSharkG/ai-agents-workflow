@@ -140,7 +140,7 @@ When `pending_subtasks` empty AND last Reviewer verdict was `approved` AND `bloc
 ### Stage exit (terminal closure entry shape)
 
 - **P4 fired and approved** → entry has `exited_at` set and `exit_reason: p4-approved`. Task is `complete`.
-- **P4 skipped** (plan-only, trivial-default) → terminal entry stays open: `exited_at: null, exit_reason: null`. Task completion is signaled by `phase: complete`, not by closing the closure `stage_history` entry.
+- **P4 skipped** (plan-only, trivial-default) → close the closure entry with `exited_at` set to the closure-completion timestamp and `exit_reason: completed-without-p4`. Task completion is signaled by both `phase: complete` AND the closed terminal entry — readers no longer need to special-case open terminal entries.
 - **Reversal** (non-terminal exit from closure) → entry has `exited_at` set and `exit_reason: reversal`, then a fresh `execution` entry is appended with `previous_stage: "closure"`, `stage_reopen_count++`. See `orchestrator-dispatch` SKILL → "Reopen detection".
 
 <!-- /section:default-flow -->
@@ -164,7 +164,7 @@ The trivial path bypasses Delivery PM, the P1 gate, and Lead. It is reserved for
 3. **Step 6** — Create the single subtask directory + `ai-work.md` skeleton + `summary.md` skeleton. Compose the dispatch bundle via `context-minimizer` and embed it inline in the Executor Task prompt (no role-bundle files are written for any classification).
 4. **Step 9** — Dispatch Executor with the full TEP carried inline in the Task `prompt` parameter. The TEP must include: spec (verbatim user request), target_files (single path), context_bundle (only if non-trivial signatures are involved), acceptance_signals. Lead is not invoked. Executor still consults `pr-lessons-check` before claiming complete. **Executor MUST invoke the `implementation-report` skill and append its output to `<!-- section:implementation -->` in `ai-work.md` before returning** — an empty section is a contract violation that `guard-chief-orchestrator-stop` will block. This applies to the trivial path identically to simple/full; the trivial compression skips the *upstream* stages, not the artifact write.
 5. **Step 11** — Reviewer reads `ai-work.md` directly and appends `### Cycle 1` to `<!-- section:review -->`. If pass, finalize `summary.md`. If fail, normal Cycle N rework loop applies. Reviewer also consults `pr-lessons-check`.
-6. **Closure** — Steps 13 + 13b + 15. **Skip P2** (single phase) and **skip P4** by default — present a one-line completion message instead. The user can request a full P4 review if desired. The closure `stage_history` entry stays open (`exited_at: null, exit_reason: null`); task completion is signaled by `phase: complete`.
+6. **Closure** — Steps 13 + 13b + 15. **Skip P2** (single phase) and **skip P4** by default — present a one-line completion message instead. The user can request a full P4 review by replying with "review" / "run P4" in the same turn; if they do, fire P4 normally. The closure `stage_history` entry closes with `exited_at` set and `exit_reason: completed-without-p4` (the previously-documented "leave open with null" behavior is superseded by this exit reason).
 7. **`orchestration-history.json` is not written** for trivial tasks — there is exactly one completed subtask and the hot state captures it.
 
 Hook behavior on the trivial path:
@@ -191,12 +191,14 @@ If at any point during execution a trivial task reveals hidden complexity (Revie
 
 - `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION-RESUME.md` — resume entry point and resume codes (stage-aware)
 
-## Related skills (post-folder-reorg paths)
+## Related skills
 
-- `intake/orchestrator-intake` — Step 0 classification
-- `shared/orchestrator-dispatch` — bundle protocol, skeleton, checklist, artifact gate, token-saving, delta-review, **reopen detection**
-- `shared/orchestrator-state` — state schema, **stage discipline**, phase transitions, post-approval closure, auto-diff procedure
-- `shared/orchestrator-telemetry` — telemetry and context manifest rules
-- `shared/orchestrator-degraded` — dispatch failure handling, degraded-inline mode
-- `shared/orchestrator-user-gates` — P1 / P2 / P4 / P5
-- `shared/pr-lessons-check` — consulted by Executor (mandatory) and Reviewer (mandatory); optionally by Lead
+(Plugin uses a flat skill layout — paths are `skills/<name>/SKILL.md`, not `skills/<stage>/<name>/SKILL.md`. The `stage:` frontmatter on each SKILL.md records its conceptual grouping. See `${CLAUDE_PLUGIN_ROOT}/CLAUDE.md` → "Layout" for the rationale and the conceptual-group breakdown.)
+
+- `orchestrator-intake` — Step 0 classification
+- `orchestrator-dispatch` — bundle protocol, skeleton, checklist, artifact gate, token-saving, delta-review, **reopen detection**
+- `orchestrator-state` — state schema, **stage discipline**, phase transitions, post-approval closure, auto-diff procedure
+- `orchestrator-telemetry` — telemetry and context manifest rules
+- `orchestrator-degraded` — dispatch failure handling, degraded-inline mode
+- `orchestrator-user-gates` — P1 / P2 / P4 / P5
+- `pr-lessons-check` — consulted by Executor (mandatory) and Reviewer (mandatory); optionally by Lead

@@ -251,8 +251,50 @@ const e2eAutoApprove = intakeInvoked
 const envSaysChief = bareRole(process.env.CLAUDE_SUBAGENT_TYPE || '') === 'chief-orchestrator';
 
 if (!intakeInvoked && !envSaysChief) {
-  // Either this is not chief's transcript, or chief errored out before
-  // classification AND we have no env signal either. Allow.
+  // Either this is not chief's transcript (legitimate non-chief stop — any
+  // dispatched subagent fires SubagentStop too), OR chief errored out before
+  // classification AND we have no env signal either (the real CAKE-5997 mode).
+  // We cannot disambiguate from hook context, so we still allow — exiting non-
+  // zero would block every legitimate non-chief stop. To keep the second case
+  // observable instead of fully silent:
+  //   - if AIAW_DEBUG=1 is set, emit a one-line stderr trace
+  //   - best-effort append to <artifact-root>/tasks/<task_id>/hooks.log via
+  //     hook-log (no-op when no task_id can be resolved from cwd, which is the
+  //     legitimate-non-chief case)
+  // Together these turn the silent path into an auditable one without
+  // changing the allow decision.
+  if (process.env.AIAW_DEBUG === '1') {
+    process.stderr.write(
+      '[guard-chief-orchestrator-stop] skip: no intake-invocation signal AND no CLAUDE_SUBAGENT_TYPE=chief-orchestrator. ' +
+        'Allowing (this is normal for non-chief subagent stops; if you expected this to be chief, ' +
+        'check whether `orchestrator-intake` was invoked and CLAUDE_SUBAGENT_TYPE was set correctly).\n',
+    );
+  }
+  try {
+    const hookLog = require('./lib/hook-log');
+    // Best-effort: try to resolve task_id from the most recent task dir under
+    // the artifact root. If no task_id is resolvable (most non-chief stops),
+    // the call returns false and we move on.
+    const { resolveArtifactRoot } = require('./lib/artifact-root');
+    const { mostRecentTaskDir } = require('./lib/active-task');
+    const ARTIFACT = resolveArtifactRoot();
+    if (ARTIFACT.root) {
+      const tasksRoot = require('path').join(ARTIFACT.root, 'tasks');
+      // Returns the task-id string (or null), not an object.
+      const recentTaskId = mostRecentTaskDir(tasksRoot, 'state');
+      if (recentTaskId) {
+        hookLog.append({
+          taskId: recentTaskId,
+          hook: 'guard-chief-orchestrator-stop',
+          decision: 'skip',
+          reason:
+            'no intake-invocation signal and CLAUDE_SUBAGENT_TYPE!=chief-orchestrator; cannot disambiguate chief-errored-out from legitimate non-chief stop',
+        });
+      }
+    }
+  } catch (_e) {
+    // Hook-log is best-effort — never throw from a guard hook.
+  }
   process.exit(0);
 }
 

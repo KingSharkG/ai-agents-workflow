@@ -87,7 +87,7 @@ For tasks with ≥3 ultra-light subtasks, the Orchestrator MUST append an `<!-- 
 
 ### Ultra-light eligibility timing
 
-The orchestrator evaluates ultra-light eligibility at **skeleton creation time** (Step 6 of the default flow), not during Delivery PM planning. The Delivery PM may flag `complexity: low` but does not determine ultra-light status — that requires the orchestrator to also verify no Lead/Design Agent trigger fired and no endpoint/schema/auth change is involved. The ultra-light index (for ≥3 ultra-light subtasks) is appended to the delivery-plan section after all subtasks are complete, during the P4 gate.
+The orchestrator evaluates ultra-light eligibility at **skeleton creation time** (Step 6 of the default flow), not during Delivery PM planning. The Delivery PM may flag `complexity: low` but does not determine ultra-light status — that requires the orchestrator to also verify no Lead/Design Agent trigger fired and no endpoint/schema/auth change is involved. The ultra-light index (for ≥3 ultra-light subtasks) is appended to the delivery-plan section after all subtasks are complete, during the P4 gate. This is an explicit rollup-append exception to the "planning artifacts immutable after P1" rule: the orchestrator is recording aggregate outcomes, not mutating the plan itself. No other agent may append to `<!-- section:delivery-plan -->` post-P1.
 
 ### Constraints
 
@@ -270,7 +270,7 @@ Verdicts are used in three contexts with distinct allowed values. Agents and hoo
 | `pending` | Review has not started (skeleton default) |
 | `approved` | Implementation meets acceptance criteria; no unresolved high/medium findings |
 | `changes_requested` | Rework required; findings listed in `review-findings` |
-| `needs-replan` | Rework cap exhausted with unresolved high/medium findings; subtask returns to Delivery PM |
+| `needs-replan` | Rework cap exhausted with unresolved high/medium findings; subtask returns to Delivery PM via a soft `execution → planning` stage reopen (see `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/references/stage-discipline.md`). Delivery PM re-scopes; the chief-orchestrator re-fires P1 if the resulting plan signature differs from `gates.p1_signature_at_stage_entry`. |
 
 ### Integration Verdict (`verdict` in `<!-- section:integration-check -->`)
 

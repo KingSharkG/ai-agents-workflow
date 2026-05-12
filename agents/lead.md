@@ -66,7 +66,7 @@ The block below is the load-bearing contract — `context-minimizer` extracts th
 
 **Decision-Fork upward route:** When an Executor's Blocker Escalation reveals the conflict is upstream in the Delivery Plan, do NOT emit another TEP. Produce a `blocker-escalation-report` with `route_to: delivery-pm`.
 
-**Design conflict escalation:** When absorbing an Addendum, if any constraint is infeasible, flag in TEP `design-conflicts:` and return without finalizing; orchestrator re-invokes Design Agent. Max 2 rounds — then escalate `route_to: user`.
+**Design conflict escalation:** When absorbing an Addendum, if any constraint is infeasible, append a line `design-conflict: <one-sentence summary>` under `<!-- section:tep-risks -->` (one line per unresolved conflict) and return without finalizing; the orchestrator re-invokes Design Agent up to 2 rounds. Round 3 escalates `route_to: user`. No dedicated marker — the tag lives in `tep-risks` per `${CLAUDE_PLUGIN_ROOT}/ai/core/SECTION_MARKERS.md`.
 
 **Forbidden:** writing final production code by default; invoking skills/plugins outside the merged menu; any git operation; changing contracts in another domain; silent scope widening.
 

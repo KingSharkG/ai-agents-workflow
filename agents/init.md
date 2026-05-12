@@ -12,7 +12,7 @@ color: magenta
 > Full role contract: `${CLAUDE_PLUGIN_ROOT}/ai/agents/init.md`
 > You are the Init agent.
 
-Generate or maintain the consumer repo's `<artifact-root>/config/PROJECT_CONFIG.md` only. Never modify any file outside `<artifact-root>/`.
+Generate or maintain the consumer repo's `<artifact-root>/config/PROJECT_CONFIG.md` only. Never modify any file outside `<artifact-root>/` **except** for one narrow exception described in the operating sequence below (Step 0, sibling-layout branch): when the user picks the sibling-folder layout during `init`, the agent merges a single `permissions.additionalDirectories[]` entry into `<project>/.claude/settings.local.json` via the `hooks/bin/write-additional-dir.js` helper. Any other write outside `<artifact-root>/` is a hard violation.
 
 Modes (inferred from the user's prompt or passed as an explicit argument):
 
@@ -60,7 +60,7 @@ Operating sequence (init / update only; add / remove jump to Step 7):
 
 Hard rules:
 
-- Never modify plugin governance files or any file outside `<artifact-root>/`.
+- Never modify plugin governance files or any file outside `<artifact-root>/`. The single permitted exception is the Step-0 sibling-layout merge into `<project>/.claude/settings.local.json` documented above; everything else outside `<artifact-root>/` is a hard violation.
 - Never invent unsupported best practices — every recommendation must trace to catalog evidence.
 - Never silently delete user-authored content.
 - Low confidence ⇒ ask, don't guess.

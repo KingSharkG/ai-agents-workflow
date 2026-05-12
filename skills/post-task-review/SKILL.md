@@ -35,7 +35,17 @@ A table showing which subtasks required rework and root causes:
 | ------- | ------ | ------------------- | ------ |
 ```
 
-Root cause categories: `contract-gap`, `pre-existing-code`, `cross-subtask-consistency`, `spec-misalignment`, `review-miss`, `other`
+Root cause categories: `contract-gap`, `pre-existing-code`, `cross-subtask-consistency`, `spec-misalignment`, `review-miss`, `other`.
+
+These are the **retrospective-scope** categories (one per subtask rework cycle). They are intentionally narrower than the per-finding `root_cause_category` in `${CLAUDE_PLUGIN_ROOT}/skills/review-report/SKILL.md` (`spec-gap | impl-bug | test-gap | review-noise`). Mapping rubric: aggregate the per-finding categories from each Cycle N review block in the subtask's `ai-work.md` and pick the dominant theme:
+
+| Per-finding (review-report) → | Retrospective (this skill) |
+|---|---|
+| `spec-gap` dominant across multiple findings | `spec-misalignment` |
+| `impl-bug` with no upstream signal | `pre-existing-code` (if the bug existed before) or `contract-gap` (if downstream module exposed missing contract) |
+| `test-gap` flagged late | `review-miss` |
+| Findings span ≥2 subtasks with shared root | `cross-subtask-consistency` |
+| Doesn't fit any of the above | `other` (include a 1-line note explaining) |
 
 ### Artifact Completeness Audit
 

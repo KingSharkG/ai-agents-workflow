@@ -20,7 +20,7 @@ If the assembled context exceeds the ceiling, re-excerpt until it fits — never
 
 The bundle composes whatever `plugins:` and `skills:` are listed in the consumer's `PROJECT_CONFIG.md` for the target domain. Workflow integrity is enforced at the artifact-acceptance gate (Reviewer reading `ai-work.md`), not by filtering the skill list.
 
-**Why inline.** Writing the bundle to `roles/<role>.md` and then telling the agent to `Read` it costs one extra disk write, one PostToolUse hook fire, and one extra Read in the subagent — for content the orchestrator already has in memory at dispatch time. Subagent system prompts already accept multi-KB payloads; inlining is the platform-idiomatic delivery. The bundle audit line in `summary.md` preserves the only data future review actually needs (what was sent, how big, which sections). Old `roles/` directories from pre-inline tasks are vestigial and may be deleted.
+**Why inline.** Writing the bundle to `roles/<role>.md` and then telling the agent to `Read` it costs one extra disk write, one PostToolUse hook fire, and one extra Read in the subagent — for content the orchestrator already has in memory at dispatch time. Subagent system prompts already accept multi-KB payloads; inlining is the platform-idiomatic delivery. The bundle audit line in `summary.md` preserves the only data future review actually needs (what was sent, how big, which sections). Old `roles/` directories from pre-inline tasks are vestigial; the chief-orchestrator MAY delete any `<artifact-root>/tasks/<task_id>/[phase-X/]<subtask_id>/roles/` directory it encounters during post-task closure (Step 14, P4) — this is a one-shot cleanup, not a per-dispatch action.
 
 ## Project-Level Context Cache (consumption protocol)
 

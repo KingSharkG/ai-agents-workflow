@@ -34,6 +34,10 @@ Stable source of truth for project-wide engineering, orchestration, and governan
 
 All project-specific rules — stack, domains, baselines (fe, be, api, auth), commands, paths, naming conventions, environments, quality gates, and role overlays — live in `<artifact-root>/config/PROJECT_CONFIG.md`. This document holds only portable governance; adding a new domain or swapping the stack must not require edits here.
 
+## Naming Convention
+
+Agent and role identifiers use **kebab-case** in code, IDs, file paths, frontmatter, dispatch arguments, and structured artifact fields: `chief-orchestrator`, `delivery-pm`, `design-agent`, `integration-checker`. Use **Title Case** only in plain English prose (e.g. "the Chief Orchestrator routes…"). Mixed casing in code or markers is a hard violation; mixed casing in prose is a nit. Hooks and validators match identifiers case-insensitively as a courtesy, but new code MUST author lowercase kebab-case to stay forward-compatible with stricter validators.
+
 ## Global Workflow Rules
 
 - Every agent works in a fresh context.
@@ -59,13 +63,15 @@ The canonical list of `<!-- section:* -->` markers used in these artifacts — i
 
 ## Definition of Done
 
-A subtask is done only when:
+A subtask is done only when **all** of the following hold:
 
 - code is implemented
 - relevant tests pass
-- Reviewer approves
+- Reviewer approves with `review_verdict: approved` and zero unresolved high/medium confidence-filtered findings (see `${CLAUDE_PLUGIN_ROOT}/ai/governance/REVIEW_CHECKLIST.md` → `<!-- section:severity -->`)
 - architecture issues are closed or explicitly waived
-- `<subtask_id>/summary.md` exists (written by Reviewer on approval)
+- if the Integration Checker was triggered (per `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:integration-trigger -->`), its report carries `verdict: ok`
+- every acceptance signal in `<subtask_id>/summary.md` is `State: pass` with an appropriate `Evidence` (`executed` for runtime/auth/network/device/manual-QA; `inspected` for static/type/layout). `deferred` / `blocked` / `pending` rows MUST be explicitly escalated, not silently treated as done.
+- `<subtask_id>/summary.md` exists, is finalized (no placeholder text), and `workflow_state` is one of `approved | blocked-on-user | pending-integration-check` (NOT `in-progress` / `needs-replan`)
 
 <!-- /section:definition-of-done -->
 

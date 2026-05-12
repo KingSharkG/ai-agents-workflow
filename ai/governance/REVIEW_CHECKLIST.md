@@ -13,6 +13,7 @@
 - security and auth implications
 - contract consistency
 - scope discipline
+- style and convention consistency — apply `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:project-best-practices -->` and `#<!-- section:agent-best-practices -->` → `reviewer` (naming, formatting, idiomatic patterns established in the existing codebase)
 
 <!-- /section:core-review -->
 

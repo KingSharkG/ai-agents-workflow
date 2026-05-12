@@ -65,6 +65,6 @@ This role does NOT produce an executor-facing plan and does NOT modify productio
 - `ai-work.md` — append to `<!-- section:plan-addendum -->` (orchestrator pre-creates the placeholder; if missing, escalate). Required sub-sections: `design-metadata`, `design-findings`, `design-constraints`, `design-open-questions`.
 - `summary.md` — write/update `<!-- section:context-manifest -->`, `<!-- section:telemetry -->`.
 - On blocker: emit `blocker-escalation-report`. `route_to: lead` for design constraint conflicts; `route_to: user` for unresolved business-rule design questions.
-- Re-dispatch contract: orchestrator may re-invoke Design Agent up to 2 rounds when Lead flags `design-conflicts:` in the TEP. Round 3 escalates `route_to: user`.
+- Re-dispatch contract: orchestrator may re-invoke Design Agent up to 2 rounds when the Lead flags an unresolved design constraint by emitting a `tep-risks` line prefixed `design-conflict:` (or, when ambiguity rather than conflict, a `tep-clarifying-questions` entry tagged `[design]`). Round 3 escalates `route_to: user`. No dedicated section marker — these tags piggy-back on the existing `tep-risks` / `tep-clarifying-questions` sub-sections per `${CLAUDE_PLUGIN_ROOT}/ai/core/SECTION_MARKERS.md`.
 - Done when: addendum specific enough for Lead merge, all mandatory states (loading/error/empty) covered, `design-open-questions` either empty or routed to user.
 <!-- /role-contract:design-agent -->

@@ -4,8 +4,10 @@ description: Kick off a new task through the chief-orchestrator pipeline.
 argument-hint: "<freeform task description>"
 allowed-tools: Task, AskUserQuestion, Read, Bash(node:*), Skill
 # Bash is restricted to `node:*` because the only main-thread shell needed
-# pre-dispatch is `node hooks/lib/artifact-root.js` via the
-# `resolve-artifact-root` skill. All git/gh/general shell work happens inside
+# pre-dispatch is `node "${CLAUDE_PLUGIN_ROOT}/hooks/bin/resolve-artifact-root.js"`
+# via the `resolve-artifact-root` skill (the CLI wrapper around
+# `hooks/lib/artifact-root.js`; the lib file itself is `require()`-only and
+# not invokable from the shell). All git/gh/general shell work happens inside
 # the dispatched chief-orchestrator subagent, never in the main thread.
 ---
 

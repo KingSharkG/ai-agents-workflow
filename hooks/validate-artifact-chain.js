@@ -17,6 +17,18 @@ if (!filePath || !fs.existsSync(filePath)) {
   process.exit(0);
 }
 
+// Path exemption: phase-boundary-check IC reports live at
+// `<artifact-root>/tasks/<task_id>/phase-boundary-check/<phase_id>/ai-work.md`
+// and intentionally carry ONLY the integration-check section (per
+// `ai/governance/TRIGGER_RULES.md` → contract-only IC). They are NOT subtask
+// artifacts — no Lead/Executor/Reviewer ever touches them — so the
+// ai-work.md schema (`spec`/`implementation`/`review`) does not apply.
+// Skip the validator entirely for these files; the IC verdict is enforced at
+// the P2 gate, not via the artifact-chain hook.
+if (filePath.includes(`${path.sep}phase-boundary-check${path.sep}`)) {
+  process.exit(0);
+}
+
 const content = fs.readFileSync(filePath, 'utf8');
 const fileName = path.basename(filePath).toLowerCase();
 const lc = content.toLowerCase();

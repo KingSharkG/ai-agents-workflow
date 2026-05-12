@@ -10,7 +10,11 @@ The orchestrator persists state across two files inside `<artifact-root>/tasks/<
   "task_id": "<task_id>",
   "classification": "direct-answer | plan-only | execution-trivial | execution-simple | execution-full",
   "mode": "normal | degraded-inline",
-  "phase": "planning | planned | execution | blocked | answered | complete",
+  "phase": "planning | planned | execution | blocked | complete",
+  // ^ Note: `answered` exists in the conceptual enum for `direct-answer` tasks
+  //   but never appears in a persisted state file — those tasks create zero
+  //   artifacts. Listed here for completeness only; readers MUST NOT treat its
+  //   absence from a persisted file as malformed.
   "stage": "intake | planning | execution | closure",
   "previous_stage": null,
   "stage_history": [
@@ -42,19 +46,48 @@ The orchestrator persists state across two files inside `<artifact-root>/tasks/<
 }
 ```
 
+### Field reference (scannable summary)
+
+| Field | Type | Required? | Mutable? | Notes |
+|---|---|---|---|---|
+| `schema_version` | int | Y | once (on upgrade) | Currently `3` |
+| `task_id` | string | Y | no | Mirrored in history file as consistency key |
+| `classification` | enum | Y | once (P1 override only) | `direct-answer \| plan-only \| execution-trivial \| execution-simple \| execution-full` |
+| `mode` | enum | Y | yes (degraded recovery) | `normal \| degraded-inline` |
+| `phase` | enum | Y | yes | `planning \| planned \| execution \| blocked \| complete` (`answered` conceptual-only — see schema example) |
+| `stage` | enum | Y (v3+) | yes (on transition) | `intake \| planning \| execution \| closure` |
+| `previous_stage` | enum or null | Y (v3+) | yes (on transition) | `null` on first stage entry |
+| `stage_history[]` | array | Y (v3+) | append-only | `{ stage, entered_at, exited_at, exit_reason }` per entry |
+| `stage_reopen_count` | int ≥ 0 | Y (v3+) | yes (incr only) | Soft cap at `>= 3` |
+| `current_subtask` | string or null | Y | yes | Set when first agent dispatches; cleared on subtask close |
+| `pending_subtasks[]` | array | Y | yes | Consumed FIFO per plan order |
+| `pending_subtasks_needing_rereview[]` | array | Y (v3+) | yes | Filled by auto-diff on reopen; cleared on re-approval |
+| `last_completed_seq` | int ≥ 0 | Y | yes (incr only) | Mirrors `history.completed_subtasks.length` |
+| `blocked_gates[]` | array | Y | yes | Open workflow gates |
+| `pending_user_actions[]` | array | Y | yes | External actions waited on |
+| `subtask_offsets` | object | Y | once (after Delivery PM) | Subtask → line range in `task-data.md` |
+| `gates.p1_approved` | bool | Y | yes | Reset on `Revise plan` |
+| `gates.p1_approved_at` | ISO-8601 or null | Y | yes | Set on Approve, cleared on Revise |
+| `gates.p1_approved_signature` | sha256 hex or null | Y | yes | Set on Approve, cleared on Revise |
+| `gates.p1_revise_count` | int ≥ 0 | Y | yes (incr only) | Lifetime counter, soft cap at 5 |
+| `gates.p1_signature_at_stage_entry` | sha256 hex or null | Y (v3+) | yes | Snapshot on every entry to `planning` |
+| `task_summary_path` | string | Y (post-intake) | once | Canonical task-level summary path |
+
+(Each row's full semantics live in the prose below — the table is for scannability; the prose is authoritative on edge cases.)
+
 **`schema_version`** — integer. Current value is `3`. The v2→v3 bump adds the top-level lifecycle stage tracking (`stage`, `previous_stage`, `stage_history[]`, `stage_reopen_count`, `pending_subtasks_needing_rereview[]`, `gates.p1_signature_at_stage_entry`). v3 has **no migration path** — see "Migration" below.
 
 **`stage`** — string. The coarse-grained lifecycle stage of the task. One of `intake | planning | execution | closure`. Coexists with the finer-grained `phase` field (which describes execution-cursor state inside a stage). Every state mutation MUST set this field; the orchestrator is responsible for stage transitions per the rules in `SKILL.md` → "Stage Discipline".
 
 **`previous_stage`** — string or null. The stage the task was in immediately before the current `stage`. Used to disambiguate stage reopens (e.g., `previous_stage: "execution"` after a `needs-replan` rewinds to `planning`). `null` on the very first stage entry.
 
-**`stage_history[]`** — array of `{ stage, entered_at, exited_at, exit_reason }` objects, one per stage entry, in chronological order. The most recent entry corresponds to the current `stage`; if the current stage is non-terminal in this lifecycle the entry is "open" with `exited_at: null` and `exit_reason: null`. Closed entries have both fields set. `exit_reason` enum: `classified | p1-approved-execute | p1-approved-stop | p1-signature-unchanged | p1-rejected | needs-replan | p2-replan | reversal | all-subtasks-approved | p4-approved | escalated | overridden-continue`.
+**`stage_history[]`** — array of `{ stage, entered_at, exited_at, exit_reason }` objects, one per stage entry, in chronological order. The most recent entry corresponds to the current `stage`; if the current stage is non-terminal in this lifecycle the entry is "open" with `exited_at: null` and `exit_reason: null`. Closed entries have both fields set. `exit_reason` enum: `classified | p1-approved-execute | p1-approved-stop | p1-signature-unchanged | p1-rejected | needs-replan | p2-replan | reversal | all-subtasks-approved | p4-approved | completed-without-p4 | escalated | overridden-continue`. The `completed-without-p4` value is used for closure entries that terminate the task without firing P4 (the documented default for `plan-only` and `execution-trivial` paths); it lets the closure entry be closed cleanly rather than left open with `exited_at: null`.
 
 **`stage_reopen_count`** — non-negative integer. Counts the number of times the task has rewound to an earlier stage (`execution → planning` for needs-replan / p2-replan, `closure → execution` for reversal). Initialized to `0`. Incremented after each successful reopen. The `orchestrator-user-gates` skill enforces a soft cap at `>= 3` — the would-be 4th reopen triggers a `blocker-escalation-report` AND a "Continue anyway / Abort task" P-gate.
 
-**`pending_subtasks_needing_rereview[]`** — array of subtask IDs that must re-enter the review cycle after a reopen, populated by the auto-diff procedure (`SKILL.md` → "Auto-diff for affected subtasks"). Subtasks not in this list retain their prior `verdict: approved` status across the reopen.
+**`pending_subtasks_needing_rereview[]`** — array of subtask IDs that must re-enter the review cycle after a reopen, populated by the auto-diff procedure (`SKILL.md` → "Auto-diff for affected subtasks"). Subtasks not in this list retain their prior `verdict: approved` status across the reopen. **Clear point:** each subtask ID is removed from this array the moment its re-review completes with `verdict: approved` (post-approval closure step in `SKILL.md`). The array is `[]` when all queued re-reviews have closed; the orchestrator MUST NOT carry stale IDs into a subsequent reopen — the next reopen's auto-diff overwrites the array from scratch, but cleanup-on-close keeps the field meaningful as a live "who still owes a re-review" cursor.
 
-**`gates.p1_signature_at_stage_entry`** — sha256 hex digest of the normalized delivery-plan section bytes captured at the moment the task last entered (or re-entered) the execution stage. After a `needs-replan` / `p2-replan` reopen, the orchestrator compares the new plan's signature against this snapshot to decide whether P1 must re-fire (mismatch) or the re-entry is silent (match). `null` for tasks that have not yet entered execution stage and for paths that bypass execution (direct-answer, plan-only).
+**`gates.p1_signature_at_stage_entry`** — sha256 hex digest of the normalized delivery-plan section bytes, snapshotted on **every** entry to `planning` (both the initial `intake → planning` transition AND any `execution → planning` soft reopen). Per `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/references/stage-discipline.md`, this gives the orchestrator a stable baseline to compare against on the next `planning → execution` transition: if the new plan's signature matches the snapshot, the re-entry is silent; if it differs, P1 must re-fire. In a persisted state file, `null` appears only for `execution-trivial` tasks (which jump `intake → execution` and never enter the planning stage). Direct-answer tasks never persist a state file at all, so the field is conceptually `null` for them but never observed on disk.
 
 **`gates.p1_approved`** — boolean. The orchestrator sets this to `true` only after `AskUserQuestion` returns `Approve plan` at the P1 gate. Any subsequent `Revise plan` resets it to `false` (and clears the timestamp + signature) before re-presenting the revised plan. The runtime hook `pre-task-guard.js` (Phase 3) reads this field to block subtask agent dispatches (`lead`, `executor`, `reviewer`, `design-agent`, `integration-checker`) when it is not `true`.
 
@@ -111,9 +144,12 @@ The runtime hook `pre-task-guard.js` (Phase 3) allows dispatch on missing `schem
 
 ### Legacy field split (history vs hot state)
 
+**Owner:** the `orchestrator-state` skill performs this split — it owns every write to both state files, and any reader that encounters legacy fields in the hot file delegates to the skill before continuing. No other skill or hook should attempt the split.
+
 On first read after upgrade, if `orchestration-history.json` is absent but `orchestration-state.json` contains `completed_subtasks` or `trigger_decisions`, split the state:
 
 1. Read the current `orchestration-state.json`.
 2. Extract `completed_subtasks` and `trigger_decisions` into a new `orchestration-history.json`; set `task_id` from the hot file.
 3. Rewrite `orchestration-state.json` without those fields.
 4. Both writes go through temp-file + rename for atomicity. The history file is written first, so a crash mid-migration leaves the hot file intact with the legacy fields (readers that see legacy fields in the hot file must tolerate them for one more dispatch cycle).
+5. Emit a `legacy-split-migrated` telemetry line into the task-level `summary.md` so retrospective captures the migration event.

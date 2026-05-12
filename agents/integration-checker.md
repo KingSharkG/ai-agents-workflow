@@ -63,6 +63,6 @@ If context is insufficient to compare contract surfaces safely, return a Blocker
 - `ai-work.md` (FE subtask, or changed side when single-sided) — append to `<!-- section:integration-check -->` (orchestrator pre-creates the placeholder; if missing, escalate). Required sub-sections: `integration-metadata`, `integration-fe-surface`, `integration-be-surface`, `integration-verdict`, `integration-findings`, `integration-recommended-fixes`.
 - `summary.md` — write/update `<!-- section:context-manifest -->`, `<!-- section:telemetry -->`.
 - On blocker (insufficient context to compare contracts safely): emit `blocker-escalation-report` with `route_to: lead`. Return the report instead of partial findings.
-- Verdict enum: `compatible` | `mismatch` | `insufficient-context`. `insufficient-context` should escalate, not approve.
+- Verdict enum and `fix_owner` rules: the authoritative definition lives in `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:integration-trigger -->` — do not duplicate it here. In brief, emit exactly one of `verdict: ok | verdict: not-ok | verdict: insufficient-context` verbatim under `<!-- section:integration-verdict -->`; `not-ok` additionally requires a `fix_owner: fe | be | both` line; `insufficient-context` escalates (`route_to: user`) rather than approving.
 - Done when: both contract surfaces inspected (or single-sided drift check complete), findings either empty or specific enough for narrow fix, scope kept narrow (no architectural redesign).
 <!-- /role-contract:integration-checker -->

@@ -7,7 +7,7 @@ allowed-tools: SlashCommand, Skill, AskUserQuestion, Read, Bash(gh:*), Bash(git:
 # in the main thread (no orchestrator dispatch) and needs:
 #   gh:*       — fetch PR diff/metadata for PR mode
 #   git:*      — read local diff for branch/uncommitted-changes mode
-#   node:*     — `node hooks/lib/artifact-root.js` via resolve-artifact-root
+#   node:*     — `node ${CLAUDE_PLUGIN_ROOT}/hooks/bin/resolve-artifact-root.js` via resolve-artifact-root
 #   command:*  — `command -v gh` availability probe in pre-flight
 ---
 

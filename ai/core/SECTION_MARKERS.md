@@ -103,12 +103,6 @@ Sub-sections are listed under their parent block as indented rows (parent must b
 | ↳ `blocker-what-was-tried` | `blocker-escalation-report` skill | `chief-orchestrator` | C | any | |
 | ↳ `blocker-required-input` | `blocker-escalation-report` skill | `chief-orchestrator` | C | any | |
 | ↳ `blocker-suggested-rerouting` | `blocker-escalation-report` skill | `chief-orchestrator` | O | any | `route_to:` enum |
-| `reversal-metadata` | `reversal-packet` skill (orchestrator) | `chief-orchestrator`, dispatched agents | C | closure→execution | Soft-transition reopen. |
-| ↳ `reversal-reason` | `reversal-packet` skill | dispatched agents | C | closure→execution | |
-| ↳ `reversal-scope` | `reversal-packet` skill | dispatched agents | C | closure→execution | |
-| ↳ `reversal-proposed-action` | `reversal-packet` skill | `chief-orchestrator` | C | closure→execution | |
-| ↳ `reversal-context-manifest` | `reversal-packet` skill | `context-minimizer` | C | closure→execution | |
-| ↳ `reversal-telemetry` | `reversal-packet` skill | `telemetry-summary` | C | closure→execution | |
 | `pr-lessons` | `context-minimizer` (injected into bundles) | `executor`, `reviewer` | C | execution | Injected when `<artifact-root>/knowledge/pr-lessons.md` is non-empty. |
 
 ## summary.md (per-subtask diagnostics + audit)
@@ -122,6 +116,21 @@ Sub-sections are listed under their parent block as indented rows (parent must b
 | `domain-role-checks` | `reviewer` | `chief-orchestrator` | O | execution | |
 | `domain-validation-note` | `reviewer` | `chief-orchestrator` | O | execution | |
 | `domain-clarifications` | any agent | `chief-orchestrator` | O | any | |
+
+## reversal-&lt;subtask_id&gt;-&lt;NN&gt;.md (standalone soft-reopen artifact)
+
+Written by the `reversal-packet` skill at `<artifact-root>/tasks/<task_id>/reversal-<subtask_id>-<NN>.md` when a closed subtask must be reopened (closure→execution soft transition). The file is a terminal artifact for its cycle; the resulting rework produces its own ai-work.md / summary.md chain in a fresh subtask directory.
+
+> **Enforcement note.** The `required? Y` markers below are contract-level requirements for the `reversal-packet` skill — they are not currently enforced by `hooks/validate-artifact-chain.js`, which detects artifacts by basename (`ai-work.md`, `summary.md`, `task-data.md`) and does not yet match the `reversal-<subtask_id>-<NN>.md` pattern. A malformed reversal packet will surface at the dispatched-agent contract level (the agents reading the packet expect these blocks), not at write time. If you need write-time enforcement, extend the validator's filename-detection list.
+
+| marker | writer | readers | required? | stage(s) | notes |
+|---|---|---|---|---|---|
+| `reversal-metadata` | `reversal-packet` skill (orchestrator) | `chief-orchestrator`, dispatched agents | Y | closure→execution | Root block. |
+| ↳ `reversal-reason` | `reversal-packet` skill | dispatched agents | Y | closure→execution | |
+| ↳ `reversal-scope` | `reversal-packet` skill | dispatched agents | Y | closure→execution | |
+| ↳ `reversal-proposed-action` | `reversal-packet` skill | `chief-orchestrator` | Y | closure→execution | |
+| ↳ `reversal-context-manifest` | `reversal-packet` skill | `context-minimizer` | Y | closure→execution | |
+| ↳ `reversal-telemetry` | `reversal-packet` skill | `telemetry-summary` | Y | closure→execution | |
 
 ## task-data.md (task-level artifact, only when phase-splits or task-level summaries exist)
 

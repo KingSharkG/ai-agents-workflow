@@ -28,10 +28,22 @@ The canonical map of stage transitions, their triggers, and the corresponding `e
 When a transition is a reopen, the orchestrator MUST also:
 
 - Increment `stage_reopen_count` by 1 in the same write that sets the new stage.
-- Snapshot the current normalized delivery-plan signature into `gates.p1_signature_at_stage_entry` if the reopen target is `planning` (so a subsequent re-entry to execution can decide whether P1 re-fires).
+- Snapshot the current normalized delivery-plan signature into `gates.p1_signature_at_stage_entry` on **every** entry to `planning` — initial intake → planning AND any execution → planning reopen — so a subsequent re-entry to execution can always decide whether P1 re-fires by comparing the new plan's signature against this baseline. (The earlier convention only snapshotted on reopens, which made the first execution-entry decision ambiguous; snapshotting on initial entry too keeps the comparison rule symmetric across the task's lifetime.)
 - Run the auto-diff procedure (below) before resuming subtask work.
 
-**Soft cap:** the cap check fires *before* incrementing — when `stage_reopen_count >= 3` and another reopen is about to happen (would-be 4th), the orchestrator emits a `blocker-escalation-report` AND surfaces a "Continue anyway / Abort task" P-gate via `AskUserQuestion`. User-overridden continuation increments the counter as normal and records `exit_reason: "overridden-continue"` for the prior stage.
+**Soft cap:** the cap check fires *before* incrementing — when `stage_reopen_count >= 3` and another reopen is about to happen (would-be 4th), the orchestrator emits a `blocker-escalation-report` AND surfaces a "Continue anyway / Abort task" P-gate via `AskUserQuestion`. The prompt MUST use the literal template below verbatim, substituting only the live `stage_reopen_count` value for `<N>`. Keeping the wording stable lets users recognize the cap on sight across tasks:
+
+```text
+question: "This task has already been reopened <N> times (soft cap = 3). Repeated reopens usually mean the plan needs a fundamental rethink rather than another revision cycle. How do you want to proceed?"
+header:   "Reopen cap"
+options:
+  - label:       "Continue anyway"
+    description: "Proceed with the reopen. Records exit_reason: overridden-continue for the prior stage. The counter still increments and this prompt re-fires on the next reopen."
+  - label:       "Abort task"
+    description: "Stop here. Task ends with the current state preserved."
+```
+
+User-overridden continuation increments the counter as normal and records `exit_reason: "overridden-continue"` for the prior stage.
 
 ### Auto-diff for affected subtasks
 

@@ -19,6 +19,8 @@ Run a narrow compatibility pass and emit an **Integration Check Report** artifac
 
 ## Output Template
 
+The template below is **appended inside** the parent `<!-- section:integration-check -->` block of the subtask's `ai-work.md` (orchestrator pre-creates the placeholder per `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:ai-work-skeleton -->`). It is NOT a standalone file. The `# Integration Check Report` heading is a sub-heading inside `ai-work.md`, not a document title. Per-marker writers and readers are tabulated in `${CLAUDE_PLUGIN_ROOT}/ai/core/SECTION_MARKERS.md` → "ai-work.md".
+
 ```markdown
 # Integration Check Report
 
@@ -44,7 +46,7 @@ Run a narrow compatibility pass and emit an **Integration Check Report** artifac
 
 <!-- section:integration-verdict -->
 ## Verdict
-compatible | mismatches_found
+verdict: ok | not-ok | insufficient-context
 <!-- /section:integration-verdict -->
 
 <!-- section:integration-findings -->
@@ -81,7 +83,9 @@ Totals: governance 0 | artifact 0 | source 0 | schema 0 | docs 0
 
 - Keep the pass narrow: compare only the changed contract surfaces relevant to the current cycle.
 - `fe_artifact` and `be_artifact` are optional audit traceability. The workflow-driving sections are FE Surface, BE Surface, Verdict, Findings, and Recommended Fixes.
-- If no mismatches are found, set `Verdict` to `compatible`, write `none` under `Findings`, and keep `Recommended Fixes` as `none`.
-- If one or more mismatches are found, set `Verdict` to `mismatches_found` and make each `recommended_fix` narrow and executable.
+- If no mismatches are found, emit `verdict: ok`, write `none` under `Findings`, and keep `Recommended Fixes` as `none`.
+- If one or more mismatches are found, emit `verdict: not-ok`, include a `fix_owner: fe | be | both` line with a one-sentence rationale (per `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:integration-trigger -->`), and make each `recommended_fix` narrow and executable.
+- If contracts can't be compared safely (missing artifacts, unreadable side), emit `verdict: insufficient-context` and a `blocker-escalation-report` with `route_to: user`.
+- The `validate-artifact-chain.js` hook enforces `verdict: ok` literally inside `<!-- section:integration-check -->`; any other spelling will block subtask approval.
 - Do not redesign architecture or reopen scope beyond the compared FE/BE surfaces.
 - Always include `## Context Manifest` with a totals line immediately before `## Telemetry`.

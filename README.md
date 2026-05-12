@@ -164,6 +164,15 @@ Or, if you prefer to edit by hand, the resulting JSON should look like:
 
 Replace `<project>` with your project folder name. After renaming, resume any in-flight task with `/ai-agents-workflow:continue`. The hooks detect the legacy folder and refuse to dispatch agents until the rename is performed, so missing this step is loud, not silent.
 
+### Migration from v2.2.x (Integration Check verdict enum)
+
+Starting in v2.3.0, the Integration Check verdict enum changes from `compatible | mismatches_found` to `verdict: ok | not-ok | insufficient-context`. The `validate-artifact-chain.js` hook now greps for `verdict: ok` literally and rejects any other spelling — including the old `compatible`. If you have in-flight tasks (a populated `<!-- section:integration-check -->` block) authored under v2.2.x, edit those blocks to use the new spelling before resuming:
+
+- `Verdict: compatible` → `verdict: ok`
+- `Verdict: mismatches_found` → `verdict: not-ok` (and add a `fix_owner: fe | be | both` line per `ai/governance/TRIGGER_RULES.md`)
+
+New tasks pick up the new enum automatically. See `skills/integration-check/SKILL.md` for the full output template.
+
 ### Paths used by the plugin
 
 This plugin reads and writes files under `<artifact-root>/` in the consumer repo. The main paths are:
@@ -213,14 +222,17 @@ The plugin enforces workflow discipline via Node.js hooks wired through [hooks/h
 
 | Hook | Event / Matcher | Blocks when… |
 | --- | --- | --- |
-| `pre-task-guard.js` | `PreToolUse(Task)` | Plan mode is active (Phase 0, chief only), subtask skeleton missing, P1 gate unmet, stage discipline violated, or trigger evaluation fails. |
+| `block-aiaw-task-in-plan-mode.js` | `UserPromptSubmit` | A `/ai-agents-workflow:*` slash command is submitted while plan mode is active. Backstop ahead of `pre-task-guard.js` Phase 0. |
+| `pre-task-guard.js` | `PreToolUse(Task)` | Plan mode is active (Phase 0, chief only — secondary check, after the `UserPromptSubmit` backstop above), subtask skeleton missing, P1 gate unmet, stage discipline violated, or trigger evaluation fails. |
 | `guard-agent-reads.js` | `PreToolUse(Read)` | Audit-only (non-blocking). |
 | `guard-main-thread-mutations.js` | `PreToolUse(Edit\|Write\|Bash)` | Main thread tries to mutate `<artifact-root>` outside dispatch. |
 | `guard-orchestrator-source-writes.js` | `PreToolUse(Edit\|Write\|Bash)` | Plugin source files are written from a non-orchestrator caller. |
+| `guard-orchestrator-step0.js` | `PreToolUse(Edit\|Write\|Task)` | Chief-orchestrator attempts to dispatch / mutate before completing Step 0 intake classification. |
 | `guard-main-thread-skills.js` | `PreToolUse(Skill)` | Main thread invokes a dispatched-only skill before chief-orchestrator handoff. |
 | `guard-chief-orchestrator-stop.js` | `SubagentStop` | Chief-orchestrator returns without satisfying the executor-required stop guard. |
 | `validate-artifact-chain.js` | `PostToolUse(Write\|Edit)` | Audit-only — verifies `<!-- section:* -->` markers. |
 | `validate-summary-telemetry.js` | `PostToolUse(Write\|Edit)` | Audit-only — verifies telemetry / context manifest. |
+| `validate-orchestration-state-write.js` | `PostToolUse(Write\|Edit)` | Audit-only — verifies `orchestration-state.json` JSON shape, enums, and `stage_history` transition graph. Appends to `<task>/hooks.log` on WARN. |
 
 ### Troubleshooting
 

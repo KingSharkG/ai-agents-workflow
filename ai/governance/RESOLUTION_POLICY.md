@@ -98,6 +98,8 @@ Intake rule: new rows with `source ∈ {consumer-marketplace, npx-skills-find}` 
 
 **Role model:** `lead` and `executor` are generic. The `allowed_roles` column lists hard assignments (e.g., `chief-orchestrator` owns `github` regardless of project). Per-domain plugin assignments for lead/executor are declared in `<artifact-root>/config/PROJECT_CONFIG.md#<!-- section:<domain> -->` → `plugins`. The merged allowlist for any subtask is `base_plugins ∪ PROJECT_CONFIG.<domain>.plugins`; invoking outside that union is a hard blocker.
 
+**Enforcement model.** `allowed_roles` is a **policy contract**, not a runtime-enforced firewall. No PreToolUse hook currently inspects `Skill` invocations against this matrix (the harness doesn't expose enough structured data per Skill call for a robust check). Enforcement happens at two levels: (a) agent contracts in `agents/<role>.md` explicitly list which plugins/skills the role may invoke, so any out-of-policy call is a visible protocol violation in the audit trail; (b) the Reviewer cross-checks dispatch-bundle audit lines in `summary.md → <!-- section:dispatch-bundles -->` against this matrix at review time and rejects subtasks whose audit shows a non-permitted invocation. If you need stricter enforcement on a specific plugin, document the constraint inline in its row's `notes` field — adding a runtime hook is a larger change and should be proposed via the `intake` procedure below.
+
 <!-- /section:registry -->
 
 <!-- section:fields -->
