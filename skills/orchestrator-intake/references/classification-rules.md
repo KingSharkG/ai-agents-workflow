@@ -40,6 +40,8 @@ Evaluate paths in priority order. The first path whose **MUST-pass** list fully 
 - Renames an exported identifier (multi-file blast radius).
 - Touches a config that drives runtime behavior (env var, feature flag, IaC, CI workflow).
 - Modifies a test in a way that changes the behavior under test (vs. fixing a typo in a test name).
+- Batch/repetitive mechanical operation: the request implies 2+ instances of the same transformation at non-contiguous sites (rename, replace, update, fix). Two or more separate Edit calls exceed "≤1 logical change" and are incompatible with trivial capacity. Reclassify as `execution-simple`.
+- Request contains quantifiers implying multiplicity: "all", "every", "each", explicit counts (e.g. "16 methods", "5 occurrences"), "throughout the file", "everywhere it appears". These signal multi-site edits incompatible with the "≤ 5 lines AND ≤ 1 logical change" MUST-pass.
 
 ### 4. `execution-simple`
 

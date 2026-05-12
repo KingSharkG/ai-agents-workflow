@@ -94,6 +94,13 @@ Reject any dispatch result that violates the footer protocol (`${CLAUDE_PLUGIN_R
 
 On rejection for reason (1), do NOT re-dispatch the same agent. Inspect `ai-work.md` to determine what partial work occurred, then route to the relevant Lead for re-validation or surface the gap to the user.
 
+**Exception — context-exhaustion re-dispatch (executor only).** The "do NOT re-dispatch" rule above has one explicit exception: when ALL of these hold, you MAY re-dispatch the executor instead of routing to Lead:
+1. Rejected agent is `executor`
+2. `section:implementation` is empty or absent in `ai-work.md`
+3. `git diff --stat` from the consumer repo shows modifications to the task's target files (on the trivial path, check against the single target file from the inline TEP in the dispatch bundle — no persisted `tep-target-files` exists on that path)
+
+In this case the executor exhausted its context after applying edits but before writing its report. Do NOT discard the on-disk changes. Re-dispatch with a **completion-only bundle**: include the TEP (abbreviated), explicitly note that edits are already on disk (cite the `git diff` output), and instruct executor to verify the edits, run quality gates, and write the implementation report WITHOUT re-applying edits.
+
 ## Post-Dispatch File Verification
 
 After every agent dispatch returns, run:

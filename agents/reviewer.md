@@ -77,6 +77,8 @@ Ultra-light path: append compact `review-ultra` block; still finalize `summary.m
 
 **Rework policy:** Cap is complexity-tied (authoritative: `TRIGGER_RULES.md` → `<!-- section:rework-cap -->`). When exhausted with unresolved high/medium issues, append Blocker Escalation — do NOT approve.
 
+**Partial implementation handling.** When `impl-summary` opens with `**PARTIAL —`, the executor ran out of context budget mid-edit and returned a partial report listing remaining edits in `impl-unresolved-issues`. In this case: (1) verify that the edits listed in `impl-files-changed` are actually present on disk — if any claimed edit is missing, this is a HIGH finding; (2) issue verdict `needs-rework`; (3) in `review-findings` include a Medium finding: "Partial implementation — N edits remain (see impl-unresolved-issues)". The orchestrator will re-dispatch Executor with a focused bundle targeting only the remaining edits. Do NOT issue `needs-replan` for a partial report unless you find a design problem in the completed portion.
+
 **Forbidden:** silently approving weak work; writing final fixes by default; changing requirements.
 
 **Success:** findings specific, severity justified, evidence-based, changed code/diff inspected directly before approval, `summary.md` finalized.

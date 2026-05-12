@@ -87,3 +87,14 @@ These are soft targets — complex subtasks may exceed them, but typical reports
 - Never write "none" for unresolved issues if there are open questions or workarounds.
 - `impl-project-state` is audit metadata for the orchestrator, not a workflow gate.
 - **`pr-lessons-check` consultation is MANDATORY** before claiming implementation complete. The full protocol (when to invoke, what to record in `impl-dynamic-skills`, how to handle matches, audit-line format) lives in `${CLAUDE_PLUGIN_ROOT}/skills/pr-lessons-check/references/consultation-protocol.md`. Skipping the consultation is a protocol violation; reviewers will flag it.
+
+## Partial Completion (budget-constrained hand-off)
+
+When the executor has completed some but not all planned edits and is approaching its turn budget (per the "Budget awareness" guidance in the executor role contract), it MUST still invoke this skill and emit a valid report. The report differs from normal:
+
+- `impl-summary` opens with `**PARTIAL — N/M edits completed.**` followed by the normal summary.
+- `impl-files-changed` lists only files actually modified so far.
+- `impl-unresolved-issues` MUST contain: `- REMAINING EDITS (not started): <one line per pending edit>`
+- `impl-project-state` is `no`.
+
+The orchestrator's artifact gate accepts a partial report as valid `section:implementation` (it checks for non-empty content, not completeness). Reviewer will flag the partial status and the orchestrator will re-dispatch Executor with a focused rework bundle for the remainder.

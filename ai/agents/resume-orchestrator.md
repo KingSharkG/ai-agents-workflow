@@ -123,6 +123,24 @@ Chief-orchestrator detects the `resume` keyword and enters the resume entry poin
 | `answered` | any | any | Direct-answer task; nothing to resume | `DONE` |
 | `complete` | any | any | Task done; show summary | `DONE` |
 
+### Orphaned trivial-path detection (pre-resume heuristic)
+
+Before applying the interrupted subtask stage detection table below, check for the orphaned trivial-path scenario:
+
+**Detection criteria (ALL must hold):**
+1. `orchestration-state.json` has `classification: "execution-trivial"`
+2. `phase: "execution"` AND `current_subtask` is non-null
+3. The current subtask's `ai-work.md` has an EMPTY `<!-- section:implementation -->` (no content between open/close markers)
+
+**When detected,** present recovery options via `AskUserQuestion` before dispatching chief:
+
+- **"Resume executor"** — dispatch chief with `resume_point=RESUME_SUBTASK`, `interrupted_subtask_stage=executor`. Executor will verify what has been done, continue any remaining edits, then write the implementation report.
+- **"Upgrade to execution-simple and replan"** — dispatch chief with `resume_point=REPLAN`. Chief transitions `classification` to `execution-simple` and re-enters the normal flow at Step 3 (Delivery PM + P1).
+- **"Mark complete (edits already on disk)"** — dispatch chief with `resume_point=RESUME_SUBTASK`, `interrupted_subtask_stage=executor`, and a note that the user has already confirmed all edits are present on disk. Executor will NOT apply new edits — it only verifies via `git diff`, runs quality gates, and writes the implementation report (per the context-exhaustion exception in the `orchestrator-dispatch` skill).
+- **"Abort task"** — exit without dispatch.
+
+This heuristic fires ONLY for `execution-trivial` tasks matching the above three-condition pattern. Non-trivial tasks with interrupted executors follow the normal `RESUME_SUBTASK` path.
+
 ### Interrupted subtask stage detection (`RESUME_SUBTASK`)
 
 Use Grep on `ai-work.md` to detect populated section markers. A section is considered populated when content exists between its opening tag and the next section tag (i.e., the section is not just the tag itself). Additionally, grep `summary.md` for the string `verdict:` — if found, the summary is finalized; if absent or the file doesn't exist, it is not.
