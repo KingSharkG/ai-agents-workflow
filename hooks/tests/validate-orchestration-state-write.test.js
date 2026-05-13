@@ -3,7 +3,11 @@
  * Tests for hooks/validate-orchestration-state-write.js (PostToolUse, non-blocking).
  *
  * Contract:
- *   - Always exits 0 (informational warnings only).
+ *   - Exits 0 for structural/schema WARNs (informational).
+ *   - Exits 2 with stderr "BLOCKING" when closure invariants are violated:
+ *       phase=complete must pair with stage=closure + empty pending arrays +
+ *       null current_subtask + matching last_completed_seq parity.
+ *       workflow_state must agree with phase.
  *   - No-op when:
  *       * argv[2] missing or file doesn't exist
  *       * file basename is not "orchestration-state.json"
@@ -415,6 +419,273 @@ test('v2 state (no stage fields required) → no warning', () => {
   const r = runHook(f, proj);
   assert.strictEqual(r.status, 0, `stderr=${r.stderr}`);
   assert.strictEqual(r.stderr, '');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+// =========================================================================
+// Closure invariants (BLOCKING — exit 2)
+// =========================================================================
+
+function closureV3State(overrides) {
+  return Object.assign(validV3State(), {
+    phase: 'complete',
+    stage: 'closure',
+    previous_stage: 'execution',
+    current_subtask: null,
+    pending_subtasks: [],
+    blocked_gates: [],
+    pending_user_actions: [],
+    workflow_state: 'complete',
+    last_completed_seq: 1,
+    stage_history: [
+      {
+        stage: 'intake',
+        entered_at: '2026-05-11T10:00:00Z',
+        exited_at: '2026-05-11T10:05:00Z',
+        exit_reason: 'classified',
+      },
+      {
+        stage: 'planning',
+        entered_at: '2026-05-11T10:05:00Z',
+        exited_at: '2026-05-11T10:10:00Z',
+        exit_reason: 'p1-approved-execute',
+      },
+      {
+        stage: 'execution',
+        entered_at: '2026-05-11T10:10:00Z',
+        exited_at: '2026-05-11T10:20:00Z',
+        exit_reason: 'all-subtasks-approved',
+      },
+      {
+        stage: 'closure',
+        entered_at: '2026-05-11T10:20:00Z',
+        exited_at: '2026-05-11T10:25:00Z',
+        exit_reason: 'completed-without-p4',
+      },
+    ],
+  }, overrides || {});
+}
+
+test('phase=complete + stage=execution → BLOCK with Step 12.5 hint', () => {
+  const { proj, tasksDir, root } = makeProject('cl-stage-execution');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  fs.writeFileSync(f, JSON.stringify(closureV3State({ stage: 'execution' })));
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2, `expected block, got ${r.status}: ${r.stderr}`);
+  assert.match(r.stderr, /BLOCKING/);
+  assert.match(r.stderr, /Step 12\.5/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=complete + non-empty pending_subtasks → BLOCK', () => {
+  const { proj, tasksDir, root } = makeProject('cl-pending-subtasks');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  fs.writeFileSync(
+    f,
+    JSON.stringify(closureV3State({ pending_subtasks: ['TP-001-A2'] })),
+  );
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /pending_subtasks.*not an empty array/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=complete + non-null current_subtask → BLOCK', () => {
+  const { proj, tasksDir, root } = makeProject('cl-current-subtask');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  fs.writeFileSync(
+    f,
+    JSON.stringify(closureV3State({ current_subtask: 'TP-001-A1' })),
+  );
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /current_subtask/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=complete + history seq mismatch → BLOCK', () => {
+  const { proj, tasksDir, root } = makeProject('cl-seq-mismatch');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  fs.writeFileSync(f, JSON.stringify(closureV3State({ last_completed_seq: 5 })));
+  fs.writeFileSync(
+    path.join(tasksDir, 'orchestration-history.json'),
+    JSON.stringify({ task_id: 'TP-001', completed_subtasks: [{ subtask_id: 'A1' }] }),
+  );
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /last_completed_seq.*disagrees/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('workflow_state=complete + phase=execution → BLOCK (cannot substitute)', () => {
+  const { proj, tasksDir, root } = makeProject('cl-ws-substitute');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  fs.writeFileSync(
+    f,
+    JSON.stringify(validV3State({ phase: 'execution', workflow_state: 'complete' })),
+  );
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /workflow_state.*cannot substitute/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('workflow_state=blocked + phase=execution → BLOCK', () => {
+  const { proj, tasksDir, root } = makeProject('cl-ws-blocked');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  fs.writeFileSync(
+    f,
+    JSON.stringify(validV3State({ phase: 'execution', workflow_state: 'blocked' })),
+  );
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /workflow_state="blocked".*MUST agree/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=complete + closure stage_history entry still open → BLOCK', () => {
+  const { proj, tasksDir, root } = makeProject('cl-entry-open');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  const s = closureV3State();
+  // Re-open the terminal closure entry by clearing exited_at + exit_reason.
+  s.stage_history[s.stage_history.length - 1] = {
+    stage: 'closure',
+    entered_at: '2026-05-11T10:20:00Z',
+    exited_at: null,
+    exit_reason: null,
+  };
+  fs.writeFileSync(f, JSON.stringify(s));
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /closure stage_history entry is still open/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=complete + closure entry closed with invalid exit_reason → BLOCK', () => {
+  const { proj, tasksDir, root } = makeProject('cl-entry-bad-reason');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  const s = closureV3State();
+  s.stage_history[s.stage_history.length - 1] = {
+    stage: 'closure',
+    entered_at: '2026-05-11T10:20:00Z',
+    exited_at: '2026-05-11T10:25:00Z',
+    exit_reason: 'all-subtasks-approved', // valid enum value but not for closure terminal
+  };
+  fs.writeFileSync(f, JSON.stringify(s));
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /closure stage_history entry has exit_reason/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=complete + last stage_history entry has stage=execution → BLOCK', () => {
+  const { proj, tasksDir, root } = makeProject('cl-entry-wrong-stage');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  const s = closureV3State();
+  // Drop the closure entry — last entry is now the execution one (open).
+  s.stage_history = s.stage_history.slice(0, -1);
+  s.stage_history[s.stage_history.length - 1] = {
+    stage: 'execution',
+    entered_at: '2026-05-11T10:10:00Z',
+    exited_at: null,
+    exit_reason: null,
+  };
+  fs.writeFileSync(f, JSON.stringify(s));
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /last stage_history entry has stage="execution"/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=complete + closure entry with exit_reason=p4-approved → exit 0', () => {
+  const { proj, tasksDir, root } = makeProject('cl-entry-p4');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  const s = closureV3State();
+  s.stage_history[s.stage_history.length - 1] = {
+    stage: 'closure',
+    entered_at: '2026-05-11T10:20:00Z',
+    exited_at: '2026-05-11T10:25:00Z',
+    exit_reason: 'p4-approved',
+  };
+  fs.writeFileSync(f, JSON.stringify(s));
+  fs.writeFileSync(
+    path.join(tasksDir, 'orchestration-history.json'),
+    JSON.stringify({ task_id: 'TP-001', completed_subtasks: [{ subtask_id: 'A1' }] }),
+  );
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 0, `unexpected block: ${r.stderr}`);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=complete + empty stage_history (v3) → BLOCK (cannot verify closure)', () => {
+  const { proj, tasksDir, root } = makeProject('cl-empty-history');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  const s = closureV3State();
+  s.stage_history = [];
+  fs.writeFileSync(f, JSON.stringify(s));
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2, `expected block, got ${r.status}; stderr=${r.stderr}`);
+  assert.match(r.stderr, /stage_history is empty\/missing/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=complete + non-empty pending_subtasks_needing_rereview → BLOCK', () => {
+  const { proj, tasksDir, root } = makeProject('cl-rereview-pending');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  const s = closureV3State({ pending_subtasks_needing_rereview: ['TP-001-A1'] });
+  fs.writeFileSync(f, JSON.stringify(s));
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2, `expected block, got ${r.status}; stderr=${r.stderr}`);
+  assert.match(r.stderr, /pending_subtasks_needing_rereview/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=planned + stage=planning (C6) → BLOCK (plan-only requires stage=closure)', () => {
+  const { proj, tasksDir, root } = makeProject('c6-planned-wrong-stage');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  const s = validV3State({
+    phase: 'planned',
+    stage: 'planning',
+    gates: { p1_approved: true, p1_revise_count: 0, p1_approved_signature: 'abc' },
+  });
+  fs.writeFileSync(f, JSON.stringify(s));
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 2, `expected block, got ${r.status}; stderr=${r.stderr}`);
+  assert.match(r.stderr, /phase="planned" but stage="planning"/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('phase=planned + stage=closure (C6 satisfied) → exit 0', () => {
+  const { proj, tasksDir, root } = makeProject('c6-planned-closure');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  const s = validV3State({
+    phase: 'planned',
+    stage: 'closure',
+    previous_stage: 'planning',
+    gates: { p1_approved: true, p1_revise_count: 0, p1_approved_signature: 'abc' },
+    stage_history: [
+      { stage: 'intake', entered_at: '2026-05-11T10:00:00Z', exited_at: '2026-05-11T10:05:00Z', exit_reason: 'classified' },
+      { stage: 'planning', entered_at: '2026-05-11T10:05:00Z', exited_at: '2026-05-11T10:10:00Z', exit_reason: 'p1-approved-stop' },
+      { stage: 'closure', entered_at: '2026-05-11T10:10:00Z', exited_at: null, exit_reason: null },
+    ],
+  });
+  fs.writeFileSync(f, JSON.stringify(s));
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 0, `unexpected block: ${r.stderr}`);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('valid closure state (all invariants satisfied) → exit 0', () => {
+  const { proj, tasksDir, root } = makeProject('cl-valid');
+  const f = path.join(tasksDir, 'orchestration-state.json');
+  fs.writeFileSync(f, JSON.stringify(closureV3State()));
+  // Sibling history with matching seq so the parity check passes.
+  fs.writeFileSync(
+    path.join(tasksDir, 'orchestration-history.json'),
+    JSON.stringify({ task_id: 'TP-001', completed_subtasks: [{ subtask_id: 'A1' }] }),
+  );
+  const r = runHook(f, proj);
+  assert.strictEqual(r.status, 0, `unexpected block: ${r.stderr}`);
   fs.rmSync(root, { recursive: true, force: true });
 });
 

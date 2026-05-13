@@ -17,8 +17,8 @@
  *     summary (newlines stripped to keep the log greppable).
  *
  * Why a shared lib instead of per-hook ad-hoc writes:
- *   Several hooks (validate-summary-telemetry, validate-artifact-chain, the
- *   new validate-orchestration-state-write) emit WARN lines to stderr. Stderr
+ *   Several hooks (validate-artifact-chain, validate-orchestration-state-write)
+ *   emit WARN / BLOCK lines to stderr. Stderr
  *   is fine for the harness's live diagnostics view but is not persisted in
  *   the artifact tree, so retrospectives and resume runs lose the signal. A
  *   single shared appender lets any hook opt into durable logging in two
@@ -49,7 +49,7 @@ function taskIdFromFilePath(filePath) {
   // Canonicalize BOTH sides — macOS resolves /var → /private/var via realpath,
   // and a startsWith check between a canonicalized root and a non-canonicalized
   // path would silently fail. Mirror the pattern used by the main hook in
-  // validate-orchestration-state-write.js + validate-summary-telemetry.js.
+  // validate-orchestration-state-write.js.
   const tasksRoot = canonicalize(path.join(ARTIFACT.root, 'tasks'));
   const canonicalTarget = canonicalize(path.resolve(filePath));
   if (!canonicalTarget.startsWith(tasksRoot + path.sep)) return null;

@@ -40,4 +40,4 @@ When the user resumes via `/continue`, the orchestrator re-tests dispatch availa
 
 ## Hard constraint
 
-`degraded-inline` mode is strictly for dispatch/tooling failures. It MUST NOT be used for `direct-answer` or `plan-only` classification paths (see `orchestrator-intake` skill → Hard Constraints).
+`degraded-inline` mode is strictly for dispatch/tooling failures. It MUST NOT be used for `direct-answer`, `plan-only`, or `execution-trivial` classification paths (see `orchestrator-intake` skill → Hard Constraints). The first two never dispatch subagents that could fail; the trivial path's compressed flow assumes a single Executor dispatch and a successful return — falling back to degraded-inline there would produce a contradictory state where the trivial-path auto-approval is recorded but no execution actually ran.

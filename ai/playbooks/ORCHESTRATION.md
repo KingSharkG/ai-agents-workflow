@@ -10,7 +10,7 @@ This file groups the steps by stage. Step numbers are preserved as cross-referen
 
 ```
 direct-answer:        intake ─(classified)─▶ (terminal — no state)
-plan-only:            intake ─(classified)─▶ planning ─(p1-approved-stop)─▶ closure ─(terminal: phase=complete)
+plan-only:            intake ─(classified)─▶ planning ─(p1-approved-stop)─▶ closure ─(terminal: phase=planned, resumable via /continue EXECUTE_PLAN)
 execution-trivial:    intake ─(classified)─▶ execution ─(all-subtasks-approved)─▶ closure ─(terminal)
 execution-simple:     intake ─(classified)─▶ planning ─(p1-approved-execute)─▶ execution ─(all-subtasks-approved)─▶ closure ─(p4-approved)─▶ complete
 execution-full:       intake ─(classified)─▶ planning ─(p1-approved-execute)─▶ execution ─(all-subtasks-approved)─▶ closure ─(p4-approved)─▶ complete
@@ -106,9 +106,17 @@ Close the planning `stage_history` entry, append next, set `previous_stage: "pla
 
 **Step 12 — P2 — Phase Boundary Checkpoint** (`orchestrator-user-gates`). Skip if plan has only one phase. P2 menu may also elect a replan — same protocol as needs-replan, with `exit_reason: "p2-replan"`.
 
+**Step 12.5 — Stage transition `execution → closure` (MANDATORY before any closure step).** When `pending_subtasks` empty AND last Reviewer verdict was `approved` AND `blocked_gates` empty AND `pending_user_actions` empty, write `orchestration-state.json` in a single transition write:
+
+- Set `stage: "closure"`, `previous_stage: "execution"`.
+- Close the open execution `stage_history` entry with `exited_at` (ISO-8601 UTC) and `exit_reason: "all-subtasks-approved"`.
+- Append a new `stage_history` entry with `stage: "closure"`, `entered_at` (same timestamp), `exited_at: null`.
+
+This is the **only** legitimate way to enter the closure stage on a normal completion. Reopen exits (`needs-replan`, `p2-replan`) transition target = `planning` and do NOT pass through Step 12.5. The `validate-orchestration-state-write.js` hook blocks any subsequent `phase: "complete"` write when `stage !== "closure"` — treat that hook denial as your own protocol violation.
+
 ### Stage exit
 
-When `pending_subtasks` empty AND last Reviewer verdict was `approved` AND `blocked_gates` empty AND `pending_user_actions` empty → close the execution `stage_history` entry with `exit_reason: "all-subtasks-approved"` and transition to `closure`. Reopen exits (`needs-replan`, `p2-replan`) transition target = `planning`.
+Stage exit is the write performed in Step 12.5 above. The companion `closure` stage entry is what subsequent closure-stage steps (Step 13 onward) operate on.
 
 ---
 
@@ -120,27 +128,37 @@ When `pending_subtasks` empty AND last Reviewer verdict was `approved` AND `bloc
 
 ### Steps
 
-**Step 13 — Post-approval state cleanup.** Orchestrator clears `current_subtask`, ensures `pending_subtasks`, `blocked_gates`, and `pending_user_actions` are all empty. Owned by `orchestrator-state` skill → "Post-Approval Closure".
+**Step 13 — Post-approval state cleanup.** Prerequisite: Step 12.5 has already flipped `stage` to `closure`. Orchestrator clears `current_subtask`, ensures `pending_subtasks`, `blocked_gates`, and `pending_user_actions` are all empty. Owned by `orchestrator-state` skill → "Post-Approval Closure".
 
 **Step 13b — Task-level summary finalization.** `telemetry-summary` aggregates per-subtask `summary.md` files into `<artifact-root>/tasks/<task_id>/summary.md`.
 
 **Step 14 — P4 — Task Completion Review** (`orchestrator-user-gates`): user picks Approve / Reopen subtask / Add follow-up / Run retrospective. Optionally **P5 — Post-Task Retrospective** via `post-task-review` skill.
 
-**Step 15 — Final state transition.** Task is `complete` only when the task summary exists, `workflow_state: complete`, `open_gates` empty, `pending_user_actions` empty. **Before writing `phase: "complete"`, the task-level `summary.md` MUST already have a populated `## Status` section, an aggregate `## Changes by Phase` block, and per-subtask telemetry totals.** The `validate-artifact-chain` hook blocks `phase: "complete"` when the task-level summary is missing or has an empty `## Status`.
+**Step 15 — Final state transition.** Task is `complete` only when ALL of the following hold (hook-enforced — `validate-orchestration-state-write.js` + `validate-artifact-chain.js` + `guard-chief-orchestrator-stop.js`):
+
+1. `stage: "closure"` (Step 12.5 already ran).
+2. The LAST `stage_history` entry has `stage: "closure"` AND is closed: `exited_at` set, `exit_reason ∈ {"p4-approved", "completed-without-p4"}`.
+3. `phase: "complete"`. (`workflow_state` on hot state is OPTIONAL with enum `complete | done | blocked`; when present, validator C4 enforces phase agreement. Do NOT use `workflow_state` as a substitute for `phase`. The per-subtask `summary.md` `workflow_state` uses a different enum — `in-progress | approved | blocked-on-user | pending-integration-check | needs-replan` — and is namespaced to the subtask, not the task.)
+4. `pending_subtasks: []`, `blocked_gates: []`, `pending_user_actions: []`, `current_subtask: null`.
+5. `last_completed_seq` equals `orchestration-history.json.completed_subtasks.length`.
+6. Task-level `<artifact-root>/tasks/<task_id>/summary.md` exists with **populated body content** under the canonical `telemetry-summary` template headings: `## Task Status`, `## Changes by Phase`, `## Detail`, `## Totals`, `## Dispatch Bundles`, `## Context Breakdown`. Empty headings (heading present, body whitespace-only) fail the check. The trivial path is relaxed to require only `## Task Status` (matches `validateRequiredHeadings`'s trivial relaxation).
+
+Treat any hook denial as your own protocol violation, never as an obstacle to bypass.
 
 ### Per-path closure variations
 
 | Path | Closure activities |
 |---|---|
-| `plan-only` | `telemetry-summary` non-execution schema (records the approved plan). No P4. No P5. |
-| `execution-trivial` | Steps 13, 13b, 15. **Skip P4 by default** (one-line completion message; user can request a full P4). **Skip P5.** |
-| `execution-simple` | Full sequence (13 → 15). P5 optional based on user choice at P4. |
-| `execution-full` | Full sequence. P5 strongly suggested at P4 if task had rework cycles or ≥3 subtasks. |
+| `plan-only` | Closure stage is entered directly from `planning` at the P1 gate (`planning → closure` with `exit_reason: "p1-approved-stop"`) — this is **not** Step 12.5, which is `execution → closure`. The closure `stage_history` entry stays **OPEN** (`exited_at: null`, `exit_reason: null`) and the state's `phase` is set to `"planned"` — terminal-but-resumable via `/continue EXECUTE_PLAN`. Then `telemetry-summary` runs in its non-execution schema (records the approved plan). No P4. No P5. The task is NOT marked `phase: "complete"` — that only happens if a future `/continue` chooses to skip execution (a path not currently surfaced in the resume menu; if the user wants to discard a planned task, they delete it manually). |
+| `execution-trivial` | Steps 12.5 → 13 → 13b → 15. **Skip P4 by default** (one-line completion message; user can request a full P4). **Skip P5.** |
+| `execution-simple` | Full sequence (12.5 → 13 → 13b → 14 → 15). P5 optional based on user choice at P4. |
+| `execution-full` | Full sequence (12.5 → 13 → 13b → 14 → 15). P5 strongly suggested at P4 if task had rework cycles or ≥3 subtasks. |
 
 ### Stage exit (terminal closure entry shape)
 
 - **P4 fired and approved** → entry has `exited_at` set and `exit_reason: p4-approved`. Task is `complete`.
-- **P4 skipped** (plan-only, trivial-default) → close the closure entry with `exited_at` set to the closure-completion timestamp and `exit_reason: completed-without-p4`. Task completion is signaled by both `phase: complete` AND the closed terminal entry — readers no longer need to special-case open terminal entries.
+- **P4 skipped — trivial-default** → close the closure entry with `exited_at` set to the closure-completion timestamp and `exit_reason: completed-without-p4`, AND set `phase: "complete"`. Task completion is signaled by both `phase: complete` AND the closed terminal entry.
+- **P4 skipped — plan-only** (different from trivial): the closure entry is left **OPEN** (`exited_at: null`) and `phase: "planned"` (not `complete`). The task is terminal-but-resumable; the `guard-chief-orchestrator-stop.js` hook accepts this as a legitimate stop when `classification: "plan-only"`. Readers MUST special-case `phase: "planned"` — it is NOT a stale open entry.
 - **Reversal** (non-terminal exit from closure) → entry has `exited_at` set and `exit_reason: reversal`, then a fresh `execution` entry is appended with `previous_stage: "closure"`, `stage_reopen_count++`. See `orchestrator-dispatch` SKILL → "Reopen detection".
 
 <!-- /section:default-flow -->
@@ -161,10 +179,17 @@ The trivial path bypasses Delivery PM, the P1 gate, and Lead. It is reserved for
    - `gates.p1_approved_at`: ISO-8601 UTC of write time
    - `phase: "execution"`
    - `pending_subtasks: ["<single-subtask-id>"]`
+   - `mode: "normal"` — required by `validate-artifact-chain.js` whenever `stage !== "intake"`. Trivial skips Step 5 (where non-trivial paths compute mode via the degraded-inline check), so the value is hardcoded.
+   - `task_summary_path: "<artifact-root>/tasks/<task_id>/summary.md"` — also required by `validate-artifact-chain.js` for non-intake stages.
+   - `last_completed_seq: 0` — required for `schema_version >= 2` on non-intake writes; incremented to `1` after the single subtask closes.
+   - `current_subtask: null`, `blocked_gates: []`, `pending_user_actions: []`, `pending_subtasks_needing_rereview: []`, `stage_reopen_count: 0`, `previous_stage: "intake"`.
+   - `stage_history[]` with TWO entries on this initial write: the closed `intake` entry (`exited_at` set, `exit_reason: "classified"`) and the open `execution` entry (`exited_at: null`).
 3. **Step 6** — Create the single subtask directory + `ai-work.md` skeleton + `summary.md` skeleton. Compose the dispatch bundle via `context-minimizer` and embed it inline in the Executor Task prompt (no role-bundle files are written for any classification).
+
+   **Context guard (trivial path).** Between Step 6 (skeleton) and Step 9 (executor dispatch), do NOT re-invoke `orchestrator-state` or `orchestrator-telemetry` (or any other skill). State is already fresh from Step 2 and telemetry formatting happens post-dispatch. Compose the dispatch bundle via `context-minimizer` and dispatch immediately. This keeps context consumption minimal so the executor has maximum budget.
 4. **Step 9** — Dispatch Executor with the full TEP carried inline in the Task `prompt` parameter. The TEP must include: spec (verbatim user request), target_files (single path), context_bundle (only if non-trivial signatures are involved), acceptance_signals. Lead is not invoked. Executor still consults `pr-lessons-check` before claiming complete. **Executor MUST invoke the `implementation-report` skill and append its output to `<!-- section:implementation -->` in `ai-work.md` before returning** — an empty section is a contract violation that `guard-chief-orchestrator-stop` will block. This applies to the trivial path identically to simple/full; the trivial compression skips the *upstream* stages, not the artifact write.
 5. **Step 11** — Reviewer reads `ai-work.md` directly and appends `### Cycle 1` to `<!-- section:review -->`. If pass, finalize `summary.md`. If fail, normal Cycle N rework loop applies. Reviewer also consults `pr-lessons-check`.
-6. **Closure** — Steps 13 + 13b + 15. **Skip P2** (single phase) and **skip P4** by default — present a one-line completion message instead. The user can request a full P4 review by replying with "review" / "run P4" in the same turn; if they do, fire P4 normally. The closure `stage_history` entry closes with `exited_at` set and `exit_reason: completed-without-p4` (the previously-documented "leave open with null" behavior is superseded by this exit reason).
+6. **Closure** — Steps **12.5** → 13 → 13b → 15. **Step 12.5 is mandatory even on the trivial path** — chief MUST flip `stage` to `closure` before writing `phase: "complete"`, or the `validate-orchestration-state-write` hook will block. **Skip P2** (single phase) and **skip P4** by default — present a one-line completion message instead. The user can request a full P4 review by replying with "review" / "run P4" in the same turn; if they do, fire P4 normally. The closure `stage_history` entry closes with `exited_at` set and `exit_reason: completed-without-p4` (the previously-documented "leave open with null" behavior is superseded by this exit reason).
 7. **`orchestration-history.json` is not written** for trivial tasks — there is exactly one completed subtask and the hot state captures it.
 
 Hook behavior on the trivial path:

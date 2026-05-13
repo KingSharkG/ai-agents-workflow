@@ -47,12 +47,13 @@ Both files use JSON. The exact schemas (hot state, history state, the `task_id` 
 - **`completed_subtasks[].verdict`** captures the review outcome for that subtask. Does NOT by itself imply the task is complete.
 - **`blocked_gates`** tracks mandatory workflow gates that are still open (`integration-check`, missing reviewer summary, etc.).
 - **`pending_user_actions`** tracks required external actions (dependency install, device QA run, credentials, approvals).
-- **`phase: complete`** is valid only when `pending_subtasks`, `blocked_gates`, and `pending_user_actions` are all empty.
+- **`phase: complete`** is valid only when ALL of: `stage === "closure"`; the last `stage_history` entry is a closed closure entry (`exit_reason ∈ {"p4-approved", "completed-without-p4"}`); `pending_subtasks`, `blocked_gates`, `pending_user_actions` all empty; `current_subtask === null`; `last_completed_seq` matches `orchestration-history.json.completed_subtasks.length`; sibling task-level `summary.md` is populated per the canonical telemetry-summary template. See "Post-Approval Closure" → "Blocking invariants for the final completion write" for the hook-enforced contract.
+- **`phase: blocked`** is the terminal state for legitimate hand-offs — required when chief stops while at least one `pending_user_action` or `blocked_gate` is open. Chief MUST NOT stop with `phase: "execution"`; the SubagentStop hook rejects it.
 - **`current_subtask`** is set to the active subtask ID when the **first** agent for that subtask is dispatched (Design Agent, Lead, or Executor — whichever runs first). It persists through the entire subtask agent chain (Design Agent → Lead → Executor → Reviewer, including rework cycles) and is cleared to `null` only after the subtask reaches `approved` or `needs-replan` verdict. This field is the primary signal for `RESUME_SUBTASK` detection by the resume-orchestrator.
   - **Example lifecycle**: `null` → set to `"TP-042-E2"` when Lead is dispatched → remains `"TP-042-E2"` through Executor dispatch → remains through Reviewer cycle 1 → remains through Executor rework → remains through Reviewer cycle 2 (approved) → cleared to `null`.
 - **`classification`** records the intake classification determined at Step 0. Set once during classification, immutable unless the user explicitly overrides it at a P1 gate (e.g., `plan-only` → "Approve plan and execute" promotes to `execution-simple` or `execution-full`).
 - **`gates.p1_approved`** is the runtime-enforced "Delivery Plan approved" flag. Set to `true` only after the user picks `Approve plan` at the P1 gate; any `Revise plan` resets it to `false` along with `p1_approved_at` (cleared) and `p1_approved_signature` (cleared) before re-presenting the revised plan. The `hooks/pre-task-guard.js` blocking PreToolUse hook (Phase 3 — P1 gate) reads this field on every `Task` dispatch and refuses to allow `lead`, `executor`, `reviewer`, `design-agent`, or `integration-checker` invocations when it is not `true`. `delivery-pm`, `chief-orchestrator`, and `init` are explicitly allowed regardless. Tasks with `classification: "execution-trivial"` also bypass this gate (the orchestrator auto-records `p1_approved: true` with `signature: "trivial-path-auto"` when initializing state).
-- **`gates.p1_approved_signature`** is a sha256 hex digest of the bytes the user actually saw and approved (the rendered Block 1 classification line + Block 2 subtasks table + Block 3 files-likely-to-change list, normalized). Recompute on every dispatch to detect "the plan changed since approval" — mismatch forces re-presenting the gate.
+- **`gates.p1_approved_signature`** is overloaded. In production user-approved flows it is a sha256 hex digest of the bytes the user actually saw and approved (the rendered Block 1 classification line + Block 2 subtasks table + Block 3 files-likely-to-change list, normalized) — recompute on every dispatch to detect "the plan changed since approval" and mismatch forces re-presenting the gate. In auto-paths it stores a sentinel string instead: `"trivial-path-auto"` for `execution-trivial` (no P1 was ever shown) and `"e2e-auto-approve"` for the `[E2E_AUTO_APPROVE_MODE]` test path. The hash-recompute rule applies ONLY when the stored value looks like a hex digest; sentinel values short-circuit the recompute (they never need re-presentation since there was no human-rendered surface to drift from). NOTE: the recompute is currently an orchestrator-side discipline — no hook enforces it.
 - **`gates.p1_revise_count`** is the cumulative count of `Revise plan` selections at P1 across the task's lifetime (resume-safe — incremented in state, not in memory). The `orchestrator-user-gates` skill enforces the 5-iteration revise cap from this field. Increment on every `Revise plan`; never reset on `Approve plan`. At `>= 5`, surface a continue-or-abort prompt before re-presenting.
 - **`schema_version`** marks the state-file format version (currently `3`). v3 introduces the lifecycle stage fields (`stage`, `previous_stage`, `stage_history[]`, `stage_reopen_count`, `pending_subtasks_needing_rereview[]`, `gates.p1_signature_at_stage_entry`). There is **no migration path from v2 to v3** — see `references/state-schemas.md` → "Migration" → "v2 → v3" for the wipe-and-restart policy. The runtime hook (Phase 3.5 stage guard, landed in commit B) silently no-ops on state files lacking `stage`, so stale v2 files do not crash the hook but will misbehave under v3 orchestrator logic that assumes the new fields. Files lacking `schema_version` entirely are legacy v1 — see "v1 → v2" migration in the schemas reference.
 - **`stage`** is the coarse-grained lifecycle tag of the task. One of `intake | planning | execution | closure`. It is set on initial state write and updated whenever the task transitions between lifecycle stages — see "Stage Discipline" below. `stage` and `phase` are independent but related: `phase` describes the execution cursor *inside* a stage; `stage` describes which stage the task is in.
@@ -75,13 +76,13 @@ The contract between `orchestration-state.json` and `orchestration-history.json`
 
 A failure on any invariant is a real bug — the orchestrator either skipped a `subtask_complete` write, wrote partially, or duplicated. The `orchestrator-user-gates` P4 step does not silently fall back to per-subtask grep for tasks created under `schema_version >= 2`; it surfaces a recovery prompt with three explicit options (`Repair history from ai-work.md` re-derives the missing `sections` arrays by re-grepping surviving subtask files; `Reopen the unfinished subtask <id>` re-enters the execution loop; `Abort task` leaves the inconsistency for manual cleanup — see `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-user-gates/SKILL.md` → "P4 — Task Completion Review" → "History consistency check"). Legacy tasks (no `last_completed_seq` field at all) are the one exception — one-shot grep fallback is allowed and the migration debt is logged.
 
-## Stage Discipline + Phase Transition Table
+## Stage Discipline + Stage / Phase Transition Tables
 
 Stages: `intake | planning | execution | closure` — orthogonal to `phase` (stage = lifecycle position; phase = execution cursor inside that stage).
 
 **Hard rule for every state write:** always carry `stage`; on transition close the prior `stage_history` entry (`exited_at`, `exit_reason`) and append a new entry with `entered_at`, `exited_at: null`. Set `previous_stage` only on transition.
 
-The full procedure — reopen accounting (soft cap at `stage_reopen_count >= 3`), auto-diff for `pending_subtasks_needing_rereview[]` after a `needs-replan` / `p2-replan` reopen, and the complete Phase Transition Table with all valid edges and forbidden transitions — lives in `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/references/stage-discipline.md`. Read once per session before evaluating any reopen or stage transition.
+The full procedure — reopen accounting (soft cap at `stage_reopen_count >= 3`), auto-diff for `pending_subtasks_needing_rereview[]` after a `needs-replan` / `p2-replan` reopen, the complete Stage Transition Table with all valid edges and forbidden transitions, and the separate Phase Transition Table covering phase-value invariants — lives in `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/references/stage-discipline.md`. Read once per session before evaluating any reopen or stage transition.
 
 ## Post-Approval Closure
 
@@ -93,11 +94,33 @@ When the Reviewer returns a closed review outcome (signalled by `<subtask_id>/su
 4. Extend task-level `summary.md` with the subtask row using the `telemetry-summary` skill.
 5. Emit the task/subtask completion signal.
 6. For **task-level completion** (all subtasks done and no pending gates / user actions remain):
-   a. Read `orchestration-history.json` plus EVERY `<subtask_id>/summary.md` file to populate the task-level summary. Do NOT reconstruct subtask descriptions from conversation context — always source from the written artifacts.
-   b. Finalize `<artifact-root>/tasks/<task_id>/summary.md` with aggregate totals and `Changes by Phase`.
-   c. Execute the **P4 — Task Completion Review** gate (see `orchestrator-user-gates` skill) before setting `workflow_state: complete`.
-   d. After P4 approval, optionally execute **P5 — Post-Task Retrospective** (see `orchestrator-user-gates` skill).
+   a. **Step 12.5 — Stage transition `execution → closure`.** In a single `orchestration-state.json` write, set `stage: "closure"`, `previous_stage: "execution"`, close the open execution `stage_history` entry with `exit_reason: "all-subtasks-approved"`, append a fresh `closure` entry (`entered_at`, `exited_at: null`). This MUST happen before any of the steps below. The `validate-orchestration-state-write` hook blocks any later `phase: "complete"` write when `stage !== "closure"`.
+   b. Read `orchestration-history.json` plus EVERY `<subtask_id>/summary.md` file to populate the task-level summary. Do NOT reconstruct subtask descriptions from conversation context — always source from the written artifacts.
+   c. Finalize `<artifact-root>/tasks/<task_id>/summary.md` with **populated body content** under the canonical `telemetry-summary` template headings: `## Task Status`, `## Changes by Phase`, `## Detail`, `## Totals`, `## Dispatch Bundles`, `## Context Breakdown`. Empty headings (body whitespace-only) fail the `validate-artifact-chain` blocking check. Trivial path: only `## Task Status` is required. (Per-subtask `summary.md` files have a different schema and are checked separately — they need populated `## Telemetry`, `## Dispatch Bundles`, `## Context Manifest`.)
+   d. Execute the **P4 — Task Completion Review** gate (see `orchestrator-user-gates` skill) before writing `phase: "complete"`. (`workflow_state` is a per-subtask-summary field; the task-level completion signal is `phase: "complete"`.)
+   e. After P4 approval, optionally execute **P5 — Post-Task Retrospective** (see `orchestrator-user-gates` skill).
 7. Do NOT spawn a separate Summary Agent. This step replaces it.
+
+### Blocking invariants for the final completion write
+
+When you write `phase: "complete"` to `orchestration-state.json`, **all** of the following must hold simultaneously — each is enforced by at least one blocking hook. Where two hooks list the same invariant, either one will reject the write; defense-in-depth, not contradiction.
+
+| # | Invariant | Enforced by (authoritative gate **bolded**) |
+|---|---|---|
+| 1 | `stage === "closure"` (Step 12.5 ran) | **`validate-orchestration-state-write`** (rejects the state-file write itself) + `validate-artifact-chain` (secondary check on the same write) |
+| 2 | Last `stage_history` entry has `stage="closure"`, populated `exited_at`, and `exit_reason ∈ {"p4-approved", "completed-without-p4"}` | **`validate-orchestration-state-write`** |
+| 3 | `pending_subtasks`, `blocked_gates`, `pending_user_actions` all `[]`; `current_subtask: null` | **`validate-orchestration-state-write`** + `validate-artifact-chain` |
+| 4 | `last_completed_seq === orchestration-history.json.completed_subtasks.length` | **`validate-orchestration-state-write`** |
+| 5 | `workflow_state` is either absent or `"complete"` (must agree with phase; never substitutes for it) | **`validate-orchestration-state-write`** |
+| 6 | Task-level `summary.md` exists with populated body under every required heading (see step 6c) | **`validate-artifact-chain`** (state-write hook doesn't read summary.md) |
+| 7 | `phase: "planned"` (plan-only terminal) implies `stage: "closure"` (C6 — added alongside C5 to make the plan-only terminal as unforgeable as the execute-path terminal) | **`validate-orchestration-state-write`** |
+| 8 | `stage_history` is non-empty at `phase: "complete"` (otherwise the closure protocol cannot be verified) | **`validate-orchestration-state-write`** |
+
+A final backstop runs at chief's SubagentStop: `guard-chief-orchestrator-stop` re-verifies invariants 1, 3, and 6 (it doesn't re-check 2, 4, or 5 — those are state-write concerns). If chief somehow never wrote `phase: "complete"` at all, the stop hook still refuses to let chief release control with `phase: "execution"`.
+
+### Hand-off variant — phase=blocked
+
+If the task is parking for the user (non-empty `pending_user_actions` or `blocked_gates`), set `phase: "blocked"` instead of `"complete"`. The `guard-chief-orchestrator-stop` SubagentStop hook **rejects** any chief stop with `phase: "execution"` — `phase` must be either `"complete"` (with all 5 invariants above) or `"blocked"` (with at least one populated hand-off marker). `workflow_state` cannot substitute for `phase`; the two MUST agree.
 
 ## Related skills
 

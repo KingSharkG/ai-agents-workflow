@@ -1,6 +1,6 @@
 ---
 name: orchestrator-user-gates
-description: Pauses for user input at four orchestration gates via AskUserQuestion. **P1** — fires after Delivery PM appends `<!-- section:delivery-plan -->` and before any subtask agent dispatch (hard-blocked by `pre-task-guard.js`). **P2** — fires when phase-N subtasks are all closed and phase-N+1 has pending work. **P4** — fires when all subtasks closed, gates empty, before setting `workflow_state: complete`. **P5** — fires after completion for retrospective (skipped for ≤2-subtask all-first-cycle tasks). Use when reaching any of these checkpoints.
+description: Pauses for user input at four orchestration gates via AskUserQuestion. **P1** — fires after Delivery PM appends `<!-- section:delivery-plan -->` and before any subtask agent dispatch (hard-blocked by `pre-task-guard.js`). **P2** — fires when phase-N subtasks are all closed and phase-N+1 has pending work. **P4** — fires when all subtasks closed, gates empty, before setting `phase: complete`. **P5** — fires after completion for retrospective (skipped for ≤2-subtask all-first-cycle tasks). Use when reaching any of these checkpoints.
 stage: shared
 ---
 
@@ -18,7 +18,7 @@ For each gate that fires under auto-approve mode:
 |---|---|---|---|
 | **P1** | `Approve plan and execute` | `gates.p1_approved: true`, `gates.p1_approved_signature: "e2e-auto-approve"`, `gates.p1_approved_at: <ISO-8601>`, `gates.p1_approved_by: "e2e-auto"` | `<!-- e2e-gate-reached: P1 -->` appended to `<artifact-root>/tasks/<task_id>/task-data.md` |
 | **P2** | `Continue to Phase <N+1>` | record decision in stage history; do NOT run integration verification, scope adjustment, or pause | `<!-- e2e-gate-reached: P2-phase-<N>-to-<N+1> -->` appended to `<artifact-root>/tasks/<task_id>/summary.md` |
-| **P4** | `Approve completion` | proceed to `workflow_state: complete`; honor the artifact-chain + history-consistency checks (do not bypass them) | `<!-- e2e-gate-reached: P4 -->` appended to `<artifact-root>/tasks/<task_id>/summary.md` |
+| **P4** | `Approve completion` | proceed to `phase: complete`; honor the artifact-chain + history-consistency checks (do not bypass them) | `<!-- e2e-gate-reached: P4 -->` appended to `<artifact-root>/tasks/<task_id>/summary.md` |
 | **P5** | `No feedback` | skip retrospective free-text collection but still run `post-task-review` skill if it would normally run | `<!-- e2e-gate-reached: P5 -->` appended to `<artifact-root>/tasks/<task_id>/summary.md` |
 
 **Discipline:**
@@ -79,14 +79,15 @@ Pull from each subtask's `target_files` field in the delivery plan and de-duplic
 1. `Continue to Phase <N+1>` — proceed normally
 2. `Run contract verification before continuing` — dispatch Integration Checker in "contract-only" mode against the foundation established in phase N, then re-present the checkpoint with IC results
 3. `Adjust scope (add/remove/reorder subtasks)` — collect changes via follow-up `AskUserQuestion`, update delivery plan, re-present
-4. `Pause and review artifacts` — halt orchestration; user reviews manually and resumes via `/ai-agents-workflow:continue`
-5. `Abort task` — mark task as aborted
+4. `Replan from this phase boundary` — rewind to `stage: "planning"` (close the open execution `stage_history` entry with `exit_reason: "p2-replan"`, append a fresh planning entry, increment `stage_reopen_count`), re-run Delivery PM, re-present P1 with the revised plan, then re-enter execution per the auto-diff procedure in `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-state/references/stage-discipline.md`
+5. `Pause and review artifacts` — halt orchestration; user reviews manually and resumes via `/ai-agents-workflow:continue`
+6. `Abort task` — mark task as aborted
 
 **Skip condition:** If the delivery plan has only one phase (no explicit phase boundaries), skip P2.
 
 ## P4 — Task Completion Review
 
-**When:** All subtasks are closed, `blocked_gates` and `pending_user_actions` are empty, and the orchestrator is about to set `workflow_state: complete`.
+**When:** All subtasks are closed, `blocked_gates` and `pending_user_actions` are empty, and the orchestrator is about to set `phase: complete`.
 
 **Artifact-chain validation.** Before presenting the summary, confirm each subtask's artifact chain is complete. Read `orchestration-history.json` once and for each `completed_subtasks[]` entry inspect its `sections[]` list. Compute the expected section set from the subtask's path:
 
@@ -113,13 +114,14 @@ Legacy pre-F5 history (no `last_completed_seq` in state, no `sections` arrays in
 
 **Action:** Present the full task summary (subtask outcomes table, open items, blockers carried forward, deferred items) and ask via `AskUserQuestion`:
 
-- `Approve completion` — set `workflow_state: complete`
-- `Reopen subtask <id>` — collect the subtask ID and reason, create a reversal packet (via `reversal-packet` skill), re-enter the execution loop
-- `Add follow-up task` — collect a brief description; note it in the task summary's `## Notes` section for future intake
+- `Approve completion` — write `phase: "complete"` and close the closure `stage_history` entry with `exit_reason: "p4-approved"`. (`workflow_state` is a per-subtask-summary field with its own enum — do not write it on task-level state to mean "task done"; `phase: "complete"` is the canonical signal.)
+- `Reopen subtask <id>` — collect the subtask ID and reason, create a reversal packet (via `reversal-packet` skill), follow the State Rewrite Recipe in `${CLAUDE_PLUGIN_ROOT}/skills/reversal-packet/SKILL.md` → "State Rewrite Recipe", re-enter the execution loop.
+- `Add follow-up task` — collect a brief description; note it in the task summary's `## Notes` section for future intake. Then re-present this gate.
+- `Abort task` — task did not produce acceptable outcomes and the user does not want to keep iterating. Close the closure `stage_history` entry with `exit_reason: "completed-without-p4"` and set `phase: "blocked"` with a populated `pending_user_actions` entry naming the abort reason. This preserves the artifact chain while making it clear the task did not reach approval. (Hard abort with `phase: "complete"` is intentionally NOT offered — `phase: complete` is reserved for approved work.)
 
 ## P5 — Post-Task Retrospective
 
-**When:** After `workflow_state: complete` is set and the task summary is finalized.
+**When:** After `phase: complete` is set and the task summary is finalized.
 
 - **Always run** for tasks with ≥3 subtasks or any subtask that hit a rework cycle.
 - **Skip** for tasks with ≤2 subtasks where all subtasks were approved on the first review cycle (no rework).

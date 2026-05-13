@@ -258,6 +258,41 @@ const validateSummaryPlaceholderDrift = () => {
     );
     process.exit(1);
   }
+
+  // When Reviewer marks the subtask approved, the summary MUST be populated —
+  // not just headed. Telemetry / Dispatch Bundles / Context Manifest are the
+  // sections the orchestrator aggregates at closure; if they're empty here,
+  // the task-level summary.md (Step 13b) will end up empty too.
+  // Telemetry line shape mirrors the regex previously in validate-summary-telemetry.js:
+  //   `<agent> | <n>/<n> turns | …`
+  if (reviewVerdict === 'approved') {
+    const populationIssues = [];
+    const telemetryBlock = getHeadingBlock('Telemetry').trim();
+    if (!telemetryBlock) {
+      populationIssues.push('## Telemetry has no body');
+    } else if (!/\S+\s*\|\s*\d+\/\d+\s+turns\s*\|/.test(telemetryBlock)) {
+      populationIssues.push('## Telemetry has no telemetry line in the form "agent | N/N turns | …"');
+    }
+    const dispatchBlock = getHeadingBlock('Dispatch Bundles').trim();
+    if (!dispatchBlock) {
+      populationIssues.push('## Dispatch Bundles has no audit rows');
+    }
+    const ctxBlock = getHeadingBlock('Context Manifest').trim();
+    if (!ctxBlock) {
+      populationIssues.push('## Context Manifest has no subsections');
+    } else if (!/^###\s+/m.test(ctxBlock)) {
+      populationIssues.push('## Context Manifest is missing per-source `### ` subsections');
+    }
+    if (populationIssues.length > 0) {
+      console.error(
+        `[validate-artifact-chain] INVALID ${matched.name}: review_verdict=approved but summary is not populated: ${populationIssues.join('; ')}.\n` +
+          `Resolution: Reviewer must finalize summary.md with real telemetry, dispatch-bundle audit rows, and context-manifest subsections — ` +
+          `empty headings are not acceptable for an approved subtask.\n` +
+          `File: ${filePath}\n`,
+      );
+      process.exit(1);
+    }
+  }
 };
 
 const validateAcceptanceSignalsTable = () => {
@@ -594,32 +629,90 @@ if (matched.jsonValidation) {
     process.exit(1);
   }
 
-  // Task-level summary precondition: when state is being written with
-  // phase: complete, the sibling <task_id>/summary.md must exist with a
-  // populated `## Status` heading. Per-subtask summary.md presence is NOT
-  // checked here (acceptable to skip on execution-simple).
+  // Task-level summary + stage precondition for completion writes:
+  //
+  // When state is being written with phase: complete, ALL of these must hold:
+  //   - stage === "closure" (Step 12.5 already ran)
+  //   - sibling task-level summary.md exists with populated body content under
+  //     every required heading (## Status, ## Changes by Phase, ## Telemetry,
+  //     ## Dispatch Bundles, ## Context Manifest). "Populated" means non-empty
+  //     content between the heading and the next ## heading. Heading-only is
+  //     treated as un-populated and rejected.
+  //
+  // The trivial-flow relaxation in validateRequiredHeadings (which only
+  // requires Status for execution-trivial) still applies for HEADING presence
+  // — but for trivial classification, we additionally only check Status
+  // body population since the other headings legitimately don't exist.
   if (parsed.phase === 'complete') {
+    if (parsed.stage !== undefined && parsed.stage !== 'closure') {
+      console.error(
+        `[validate-artifact-chain] INVALID ${matched.name}: cannot write phase="complete" while stage=${JSON.stringify(parsed.stage)}. ` +
+          `Step 12.5 (execution→closure stage transition) MUST run first — write stage="closure" with a closed execution stage_history entry ` +
+          `(exit_reason="all-subtasks-approved") and an open closure entry BEFORE setting phase="complete".\n` +
+          `File: ${filePath}\n`,
+      );
+      process.exit(1);
+    }
     const taskDir = path.dirname(filePath);
     const taskSummaryPath = path.join(taskDir, 'summary.md');
     let summaryContent = null;
     try {
       summaryContent = fs.readFileSync(taskSummaryPath, 'utf8');
     } catch (_) {
-      // missing or unreadable
+      // missing or unreadable — handled below
     }
-    let statusBlock = null;
-    if (summaryContent !== null) {
-      const m = summaryContent.match(/^##\s+(?:Task\s+)?Status\b[^\n]*\n([\s\S]*?)(?=^##\s+|$(?![\r\n]))/im);
-      statusBlock = m ? m[1].trim() : null;
-    }
-    if (!statusBlock) {
+    if (summaryContent === null) {
       console.error(
         `[validate-artifact-chain] INVALID ${matched.name}: cannot mark task complete — ` +
-          `task-level summary is missing or has empty ## Status section.\n` +
+          `task-level summary.md is missing.\n` +
           `Expected: ${taskSummaryPath}\n` +
-          `Resolution: invoke the telemetry-summary skill to finalize the task summary ` +
-          `(populated ## Status, ## Changes by Phase, per-subtask totals) BEFORE writing ` +
-          `phase: "complete" to ${path.basename(filePath)}.\n` +
+          `Resolution (in order): (1) Step 12.5 — write stage="closure" with a closed execution stage_history entry; (2) invoke telemetry-summary to finalize summary.md with populated body content; (3) THEN write phase="complete".\n` +
+          `File: ${filePath}\n`,
+      );
+      process.exit(1);
+    }
+    // Heading set mirrors the canonical task-level template emitted by the
+    // `telemetry-summary` skill (skills/telemetry-summary/SKILL.md → "Output
+    // Template"). Trivial-flow tasks legitimately omit the multi-phase
+    // pipeline data, so we only require "Task Status" there — matching the
+    // existing trivial relaxation in `validateRequiredHeadings`.
+    const isTrivial = isTrivialClassification(parsed);
+    const requiredPopulated = isTrivial
+      ? ['Task Status']
+      : [
+          'Task Status',
+          'Changes by Phase',
+          'Detail',
+          'Totals',
+          'Dispatch Bundles',
+          'Context Breakdown',
+        ];
+    const headingBlock = (heading) => {
+      const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Tolerate the bare "Status" variant in case a writer (or trivial-flow
+      // template) drops the "Task " prefix. The canonical template emits
+      // "Task Status".
+      const prefixed = heading === 'Task Status' ? `(?:Task\\s+)?Status` : escaped;
+      const re = new RegExp(`^##\\s+${prefixed}\\b[^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$(?![\\r\\n]))`, 'im');
+      const m = summaryContent.match(re);
+      return m ? m[1].trim() : null;
+    };
+    const populationIssues = [];
+    for (const heading of requiredPopulated) {
+      const body = headingBlock(heading);
+      if (body === null) {
+        populationIssues.push(`missing heading "## ${heading}"`);
+      } else if (body.length === 0) {
+        populationIssues.push(`empty body under "## ${heading}"`);
+      }
+    }
+    if (populationIssues.length > 0) {
+      console.error(
+        `[validate-artifact-chain] INVALID ${matched.name}: cannot mark task complete — ` +
+          `task-level summary.md fails the populated-content check: ${populationIssues.join('; ')}.\n` +
+          `Expected: ${taskSummaryPath}\n` +
+          `Resolution (in order): (1) confirm Step 12.5 already ran (stage="closure"); (2) invoke telemetry-summary to refresh the task-level summary with populated bodies under Task Status, Changes by Phase, Detail, Totals, Dispatch Bundles, and Context Breakdown; (3) THEN write phase="complete". ` +
+          `Empty headings (heading present but body whitespace-only) fail this check by design.\n` +
           `File: ${filePath}\n`,
       );
       process.exit(1);

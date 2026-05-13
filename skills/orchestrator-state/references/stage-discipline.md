@@ -21,7 +21,7 @@ Failing rule (1) means the runtime hook will silently no-op on the state file an
 
 ### Stage entry/exit triggers
 
-The canonical map of stage transitions, their triggers, and the corresponding `exit_reason` values lives in the `Phase Transition Table` below.
+The canonical map of stage transitions, their triggers, and the corresponding `exit_reason` values lives in the `Stage Transition Table` below. (A separate `Phase Transition Table` documents phase-value invariants that co-occur with stage transitions.)
 
 ### Reopen accounting
 
@@ -59,27 +59,45 @@ After a `delivery-pm` re-dispatch on a `needs-replan` or `p2-replan` reopen, the
 
 The auto-diff procedure produces only the *list*. The actual re-review is driven by the normal subtask cycle — when the orchestrator picks the next subtask to dispatch, it consults `pending_subtasks_needing_rereview[]` first, dispatches Lead/Executor/Reviewer for each entry in the list, and then continues with the rest of `pending_subtasks` from the revised plan.
 
+## Stage Transition Table
+
+`stage` and `phase` are orthogonal fields in `orchestration-state.json` (see `state-schemas.md`). This section covers **stage transitions only**. Phase transitions are tracked separately in the next section.
+
+Only the following stage transitions are valid. They mirror the `VALID_STAGE_TRANSITIONS` set in `hooks/validate-orchestration-state-write.js` — out-of-band edits that produce any other pair are rejected at write time.
+
+| From stage | To stage | Trigger | `exit_reason` on the closing entry |
+|------------|----------|---------|------------------------------------|
+| `intake` | `planning` | Classification ∈ {`plan-only`, `execution-simple`, `execution-full`} | `classified` |
+| `intake` | `execution` | Classification = `execution-trivial` (skips planning) | `classified` |
+| `planning` | `execution` | P1 gate: user picks "Approve plan and execute". Sets `gates.p1_approved: true`, records `p1_approved_at` + `p1_approved_signature`. | `p1-approved-execute` (or `p1-signature-unchanged` on a silent reopen re-entry) |
+| `planning` | `closure` | P1 gate: user picks "Approve plan and stop" (plan-only). | `p1-approved-stop` |
+| `execution` | `closure` | All subtasks approved, `blocked_gates` and `pending_user_actions` empty (Step 12.5). | `all-subtasks-approved` |
+| `execution` | `planning` | **Soft reopen** (schema_version 3+). Reviewer `needs-replan` verdict on a subtask, OR P2 phase-boundary user-elected replan. The orchestrator MUST set `previous_stage="execution"`, increment `stage_reopen_count`, snapshot the current normalized delivery-plan signature into `gates.p1_signature_at_stage_entry`, and re-dispatch `delivery-pm`. Subject to the soft cap (≥ 3 reopens trigger a `blocker-escalation-report` plus a "Continue / Abort" override gate). See "Reopen accounting" above. | `needs-replan` or `p2-replan` |
+| `closure` | `execution` | **Reversal** (schema_version 3+). Triggered by `reversal-packet` to reopen approved work after task closure. The orchestrator MUST set `previous_stage="closure"`, increment `stage_reopen_count`, and resume execution from the targeted subtask (no `delivery-pm` re-dispatch — `reversal-packet` itself carries the plan delta). Reset `phase` from `complete` back to `execution`, clear `current_subtask`, and repopulate `pending_subtasks[]` with the reopened subtask IDs. Subject to the same soft cap. | `reversal` |
+
+**Invalid stage transitions** (rejected by `validate-orchestration-state-write.js`):
+
+- Anything from/to a stage value not in `{intake, planning, execution, closure}`.
+- `closure` → `planning` — use the reversal transition above to reopen execution; planning is not re-entered for reversals.
+- `intake` → `closure` — direct-answer terminates without persisting state, so there is no in-disk transition.
+
 ## Phase Transition Table
 
-Only the following transitions are valid. Any transition not listed here is a protocol violation.
+`phase` is the execution cursor within a stage. Values: `planning | planned | execution | blocked | complete`. (`answered` is conceptual for direct-answer and never persists — direct-answer tasks write no state file.)
 
-| From | To | Trigger |
-|------|----|---------|
-| `planning` | `planned` | P1 gate: user selects "Approve plan and stop" (plan-only tasks). Sets `gates.p1_approved: true`. |
-| `planning` | `execution` | P1 gate: user approves plan for execution. Sets `gates.p1_approved: true` and records `p1_approved_at` + `p1_approved_signature`. |
-| `planned` | `execution` | `/continue` with `EXECUTE_PLAN`: user chooses to execute a previously planned task |
-| `execution` | `execution` | Subtask completes, next subtask begins (no phase change needed) |
-| `execution` | `blocked` | `blocked_gates` or `pending_user_actions` becomes non-empty |
-| `execution` | `complete` | All subtasks approved, all gates closed, P4 approved |
-| `execution` | `planning` | **Soft reopen** (schema_version 3+). Reviewer `needs-replan` verdict on a subtask, OR P2 phase-boundary user-elected replan. The orchestrator MUST set `previous_stage="execution"`, increment `stage_reopen_count`, snapshot the current normalized delivery-plan signature into `gates.p1_signature_at_stage_entry`, and re-dispatch `delivery-pm`. Subject to the soft cap (≥ 3 reopens trigger a `blocker-escalation-report` plus a "Continue / Abort" override gate). See "Reopen accounting" above. |
-| `blocked` | `execution` | All blocking conditions resolved (gates closed, user actions confirmed) |
-| `blocked` | `complete` | Blocking condition was the last gate; resolution completes the task |
-| `closure` | `execution` | **Reversal** (schema_version 3+). Triggered by `reversal-packet` to reopen approved work after task closure. The orchestrator MUST set `previous_stage="closure"`, increment `stage_reopen_count`, and resume execution from the targeted subtask (no `delivery-pm` re-dispatch — `reversal-packet` itself carries the plan delta). Subject to the same soft cap. Note: `closure` is the *stage* value; the corresponding *phase* is `complete`, but stage and phase are orthogonal — this row triggers off the stage transition, not the phase value. |
+The validator's `PHASE_ENUM` accepts any of the above; the closure-invariant gates (C1–C5 in `validate-orchestration-state-write.js`) enforce that `phase: complete` co-occurs with `stage: closure` and a closed terminal closure entry. There is no global "valid phase transition" graph — phase changes are state-dependent (e.g., `execution` → `complete` only when Step 12.5 + 13 have run).
 
-**Invalid transitions** (never allowed):
+| Phase | When set | Co-required stage |
+|-------|----------|-------------------|
+| `planning` | After Step 1/2 (Delivery PM has not yet returned, or P1 not yet decided) | `planning` |
+| `planned` | After P1 "Approve plan and stop" on a plan-only task — terminal-but-resumable. The closure stage entry stays OPEN (`exited_at: null`). Resumable via `/continue EXECUTE_PLAN` (transitions to `execution`). There is currently no menu option that closes a planned task without resuming — if the user no longer wants the plan, they delete the artifact-root task directory manually. | `closure` |
+| `execution` | After Step 12.5 has not yet run AND the orchestrator is dispatching subtask agents | `execution` |
+| `blocked` | Chief is parking the task on a populated `pending_user_actions` or `blocked_gates` entry | `execution` (or `closure` if the block surfaces during finalization) |
+| `complete` | Terminal: all subtasks approved, P4 approved (or `completed-without-p4` for paths that skip P4), terminal closure entry closed | `closure` |
 
-- `execution` → `planned` (cannot revert to pre-execution state — `planned` is the plan-only terminal phase)
-- `closure` → `planning` (use the reversal transition above to reopen execution; planning is not re-entered for reversals)
-- `planned` → `planning` (plan was approved; to revise, use `/continue` then re-dispatch Delivery PM via `REPLAN`)
+**Invalid phase combinations** (rejected by closure invariants):
 
-**Note:** `answered` is a conceptual phase for `direct-answer` tasks. It never appears in a persisted `orchestration-state.json` because `direct-answer` tasks create zero artifacts.
+- `phase: complete` without `stage: closure` (C1).
+- `phase: complete` with non-empty `pending_subtasks`, `blocked_gates`, `pending_user_actions`, or `pending_subtasks_needing_rereview`, or non-null `current_subtask` (C2).
+- `phase: complete` with a terminal closure `stage_history` entry that is still open or has `exit_reason ∉ {p4-approved, completed-without-p4}` (C5).
+- `workflow_state ∈ {complete, done}` while `phase ≠ complete` or `stage ≠ closure` (C4).

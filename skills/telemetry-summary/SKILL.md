@@ -24,7 +24,7 @@ After each subtask completes, read these sections from `<subtask_id>/summary.md`
 4. `## Notes` — completion one-liner for Changes by Phase.
 5. `## Dispatch Bundles` — bundle audit data.
 
-Then append rows to Detail, update Context Breakdown, and recalculate Totals. At task completion, populate Changes by Phase and set `workflow_state: complete` (status-driven, not file-presence-driven).
+Then append rows to Detail, update Context Breakdown, and recalculate Totals. At task completion, populate Changes by Phase and set the task-level `summary.md` field `workflow_state: complete` (status-driven, not file-presence-driven). **Scope clarification — three distinct `workflow_state` namespaces exist; do not conflate them:** (1) **this file** (task-level `summary.md`) uses enum `active | blocked-on-user | pending-integration-check | complete`; (2) **per-subtask `summary.md`** uses enum `in-progress | approved | blocked-on-user | pending-integration-check | needs-replan`; (3) **hot state `orchestration-state.json`** uses enum `complete | done | blocked` and is OPTIONAL — the canonical task-completion signal on hot state is `phase: complete`, NOT `workflow_state`.
 
 ## Output Template
 

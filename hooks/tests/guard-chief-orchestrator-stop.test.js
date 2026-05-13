@@ -265,6 +265,45 @@ function makeProject(label, opts = {}) {
       path.join(taskDir, 'orchestration-state.json'),
       JSON.stringify(opts.state),
     );
+    // When the fixture represents a completed task, also drop a populated
+    // task-level summary.md alongside the state file — the SubagentStop hook
+    // now verifies summary.md exists with non-empty bodies under the canonical
+    // `telemetry-summary` template headings (Task Status, Changes by Phase,
+    // Detail, Totals, Dispatch Bundles, Context Breakdown) before allowing a
+    // phase=complete stop.
+    if (opts.state.phase === 'complete') {
+      fs.writeFileSync(
+        path.join(taskDir, 'summary.md'),
+        [
+          `# Task Summary — ${taskId}`,
+          '',
+          '## Metadata',
+          `- **task_id**: ${taskId}`,
+          '',
+          '## Task Status',
+          '- **workflow_state**: complete',
+          '- **open_gate_count**: 0',
+          '',
+          '## Changes by Phase',
+          '### Phase A',
+          `- ${subtaskId}: did the thing`,
+          '',
+          '## Detail',
+          `| 1 | executor | claude | ${subtaskId} | 1/2 | ~100/~200 | low | low | ok |`,
+          '',
+          '## Totals',
+          '- **Total turns**: 1/2',
+          '- **Total tokens**: ~100 in / ~200 out',
+          '',
+          '## Dispatch Bundles',
+          `- executor for ${subtaskId} (cycle 1): 1200 tokens; sections: spec,tep; cache_misses: none`,
+          '',
+          '## Context Breakdown',
+          '| executor | 100 | 200 | 300 | 400 | 500 | 1500 |',
+          '',
+        ].join('\n'),
+      );
+    }
   }
   const subDir = path.join(taskDir, subtaskId);
   fs.mkdirSync(subDir, { recursive: true });
@@ -784,7 +823,9 @@ test('execute-trivial + reviewer + state phase=complete but impl section empty �
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('execute-trivial + executor only + pending_user_actions non-empty → ALLOW (legitimate hand-off)', () => {
+test('execute-trivial + executor only + phase=blocked with pending_user_actions → ALLOW (legitimate hand-off)', () => {
+  // Hand-offs are now explicit: chief MUST set phase=blocked when parking the
+  // task for the user. phase=execution is never a legitimate stop state.
   const { root, proj, taskDir, subtaskId } = makeProject('handoff', {
     implContent: 'impl-summary: paused awaiting user\n',
     state: {
@@ -792,7 +833,7 @@ test('execute-trivial + executor only + pending_user_actions non-empty → ALLOW
       task_id: 'AI-1',
       classification: 'execution-trivial',
       stage: 'execution',
-      phase: 'execution',
+      phase: 'blocked',
       current_subtask: 'AI-1-A1',
       pending_subtasks: ['AI-1-A1'],
       blocked_gates: [],
@@ -806,6 +847,36 @@ test('execute-trivial + executor only + pending_user_actions non-empty → ALLOW
   );
   const out = runHook(file, { cwd: proj });
   assert.strictEqual(out.status, 0, out.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('execute-trivial + phase=blocked but empty handoff markers → BLOCK (malformed hand-off)', () => {
+  // A "blocked" task must name what the user is expected to act on. Empty
+  // pending_user_actions AND empty blocked_gates with phase=blocked is a
+  // malformed terminal state — the SubagentStop hook must reject it.
+  const { root, proj, taskDir, subtaskId } = makeProject('blocked-empty', {
+    implContent: 'impl-summary: paused but no action recorded\n',
+    state: {
+      schema_version: 3,
+      task_id: 'AI-1',
+      classification: 'execution-trivial',
+      stage: 'execution',
+      phase: 'blocked',
+      current_subtask: 'AI-1-A1',
+      pending_subtasks: ['AI-1-A1'],
+      blocked_gates: [],
+      pending_user_actions: [],
+      last_completed_seq: 0,
+    },
+  });
+  const { dir, file } = writeTranscript(
+    'blocked-empty',
+    executeTurn({ taskDir, subtaskId, dispatchReviewer: false }),
+  );
+  const out = runHook(file, { cwd: proj });
+  assert.strictEqual(out.status, 2, `expected block, got ${out.status}: ${out.stderr}`);
+  assert.match(out.stderr, /phase="blocked".*pending_user_actions.*blocked_gates/);
   fs.rmSync(dir, { recursive: true, force: true });
   fs.rmSync(root, { recursive: true, force: true });
 });

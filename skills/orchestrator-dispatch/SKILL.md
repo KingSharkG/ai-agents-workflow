@@ -68,7 +68,7 @@ An empty `<!-- section:tep-clarifying-questions -->` block, or its absence entir
 
 Every agent dispatch must terminate in one of exactly two valid outcomes:
 
-- The agent has appended the expected section to `ai-work.md` (and written `summary.md` if the agent is the Reviewer), OR
+- The agent has appended the expected section to `ai-work.md` (and **finalized** `summary.md` if the agent is the Reviewer — the orchestrator creates the `summary.md` skeleton during pre-dispatch; the Reviewer fills in the body fields), OR
 - A **Blocker Escalation Report** appended to `<!-- section:escalation-N -->` in `ai-work.md` via the `blocker-escalation-report` skill.
 
 Reject any dispatch result that violates the footer protocol (`${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-telemetry/references/artifact-footer-protocol.md`). Specifically, reject if the result:

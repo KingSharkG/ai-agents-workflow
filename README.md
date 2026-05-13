@@ -230,9 +230,8 @@ The plugin enforces workflow discipline via Node.js hooks wired through [hooks/h
 | `guard-orchestrator-step0.js` | `PreToolUse(Edit\|Write\|Task)` | Chief-orchestrator attempts to dispatch / mutate before completing Step 0 intake classification. |
 | `guard-main-thread-skills.js` | `PreToolUse(Skill)` | Main thread invokes a dispatched-only skill before chief-orchestrator handoff. |
 | `guard-chief-orchestrator-stop.js` | `SubagentStop` | Chief-orchestrator returns without satisfying the executor-required stop guard. |
-| `validate-artifact-chain.js` | `PostToolUse(Write\|Edit)` | Audit-only — verifies `<!-- section:* -->` markers. |
-| `validate-summary-telemetry.js` | `PostToolUse(Write\|Edit)` | Audit-only — verifies telemetry / context manifest. |
-| `validate-orchestration-state-write.js` | `PostToolUse(Write\|Edit)` | Audit-only — verifies `orchestration-state.json` JSON shape, enums, and `stage_history` transition graph. Appends to `<task>/hooks.log` on WARN. |
+| `validate-artifact-chain.js` | `PostToolUse(Write\|Edit)` | Blocking — verifies `<!-- section:* -->` markers, required headings, and populated body content under `## Telemetry` / `## Dispatch Bundles` / `## Context Manifest` for approved subtasks. Blocks `phase: complete` writes that lack `stage: closure` or a populated task-level summary. (The retired `validate-summary-telemetry.js` hook's telemetry-line regex folded in here.) |
+| `validate-orchestration-state-write.js` | `PostToolUse(Write\|Edit)` | Hybrid — structural/schema issues are non-blocking WARNs; closure invariants (phase=complete ⇒ stage=closure, empty pending arrays, history seq parity, workflow_state/phase agreement) are blocking. Appends to `<task>/hooks.log`. |
 
 ### Troubleshooting
 

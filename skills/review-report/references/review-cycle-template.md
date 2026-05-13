@@ -16,7 +16,7 @@ Append a `### Cycle <N>` block inside `<!-- section:review -->` in the subtask's
 
 <!-- section:review-verdict -->
 #### Verdict
-approved | changes_requested
+approved | changes_requested | needs-replan
 <!-- /section:review-verdict -->
 
 <!-- section:review-findings -->

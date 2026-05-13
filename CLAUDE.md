@@ -29,8 +29,10 @@ Portable multi-agent governance layer. Packages the orchestration, lead/executor
     - `guard-agent-reads` — Read guard.
   - **SubagentStop / blocking:**
     - `guard-chief-orchestrator-stop` — structural backstop on chief stop.
-  - **PostToolUse / non-blocking warnings:**
-    - `validate-artifact-chain`, `validate-summary-telemetry`, `validate-orchestration-state-write`.
+  - **PostToolUse / blocking (full):**
+    - `validate-artifact-chain` — markdown/JSON artifact schema. Approved **subtask** summaries: populated `## Telemetry` (≥1 line `<agent> | N/N turns | …`) / `## Dispatch Bundles` / `## Context Manifest`. **Task-level** completion (`phase: complete`): `stage: closure`, populated `## Task Status` / `## Changes by Phase` / `## Detail` / `## Totals` / `## Dispatch Bundles` / `## Context Breakdown` (trivial relaxation: `## Task Status` only).
+  - **PostToolUse / blocking (partial — structural warnings non-blocking, closure invariants blocking):**
+    - `validate-orchestration-state-write` — structural/schema issues remain non-blocking WARNs (exit 0). Closure invariants are BLOCKING (exit 2): C1 (`phase=complete` ⇒ `stage=closure`), C2 (empty `pending_subtasks` / `blocked_gates` / `pending_user_actions` / `pending_subtasks_needing_rereview` + `current_subtask=null`), C3 (history seq parity), C4 (`workflow_state`/`phase` agreement), C5 (terminal closure `stage_history` entry shape **including non-empty `stage_history` array**), C6 (`phase=planned` ⇒ `stage=closure` — plan-only terminal). The retired `validate-summary-telemetry` hook's telemetry-line check folded into `validate-artifact-chain`.
   - **Shared `hooks/lib/`:** `plan-mode-check.js` (banner detector), `plan-mode-message.js` (canonical "press Shift+Tab" message), `hook-log.js` (shared append-only writer for `<artifact-root>/tasks/<task_id>/hooks.log`).
 - `ai/core/PROJECT_CONSTITUTION.md` — workflow rules, Definition of Done
 - `ai/governance/` — trigger rules, review checklist, artifact discipline, resolution policy (helper plugins/skills)

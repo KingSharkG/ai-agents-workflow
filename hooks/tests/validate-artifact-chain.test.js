@@ -305,6 +305,7 @@ function buildSubtaskSummary(overrides = {}) {
     acceptance,
     '## Files Changed',
     '## Dispatch Bundles',
+    '- executor for TP-001-A1 (cycle 1): 1200 tokens; sections: spec,tep; cache_misses: none',
     '## Telemetry',
     'agent | 1/2 turns | foo',
     '## Context Manifest',
@@ -345,6 +346,7 @@ test('Subtask Summary missing verdict field is rejected', () => {
     '|---|---|---|---|',
     '## Files Changed',
     '## Dispatch Bundles',
+    '- executor for TP-001-A1 (cycle 1): 1200 tokens; sections: spec,tep; cache_misses: none',
     '## Telemetry',
     'agent | 1/2 turns | foo',
     '## Context Manifest',
@@ -451,6 +453,56 @@ test('Subtask Summary approved with IC verdict ok in sibling ai-work.md passes',
 // orchestration-state.json
 // =========================================================================
 
+// Canonical task-level summary template, mirroring the `telemetry-summary`
+// skill's "Output Template" section. Populated minimally — one row per data
+// section is enough to satisfy the validator's body-non-empty requirement.
+function populatedTaskSummary(opts = {}) {
+  const taskId = opts.taskId || 'TP-001';
+  const subtaskId = opts.subtaskId || 'TP-001-A1';
+  return [
+    `# Task Summary — ${taskId}`,
+    '',
+    '## Metadata',
+    `- **task_id**: ${taskId}`,
+    '- **created_at**: 2026-05-11T10:00:00Z',
+    '- **updated_at**: 2026-05-11T10:30:00Z',
+    '',
+    '## Task Status',
+    '- **workflow_state**: complete',
+    '- **open_gate_count**: 0',
+    '- **pending_user_action_count**: 0',
+    '',
+    '## Changes by Phase',
+    '### Phase A',
+    `- ${subtaskId}: did the thing`,
+    '',
+    '## Open Gates',
+    '- none',
+    '',
+    '## Pending User Actions',
+    '- none',
+    '',
+    '## Pipeline',
+    'executor 1t ~100tok',
+    '',
+    '## Detail',
+    `| 1 | executor | claude | ${subtaskId} | 1/2 | ~100/~200 | low | low | ok |`,
+    '',
+    '## Totals',
+    '- **Total turns**: 1/2',
+    '- **Total tokens**: ~100 in / ~200 out',
+    '- **Rework cycles**: 0',
+    '',
+    '## Context Breakdown',
+    '| executor | 100 | 200 | 300 | 400 | 500 | 1500 |',
+    '- **Task totals**: governance 100 | artifact 200 | source 300 | schema 400 | docs 500',
+    '',
+    '## Dispatch Bundles',
+    `- executor for ${subtaskId} (cycle 1): 1200 tokens; sections: spec,tep; cache_misses: none`,
+    '',
+  ].join('\n');
+}
+
 function validState(overrides = {}) {
   return Object.assign(
     {
@@ -548,7 +600,7 @@ test('orchestration-state.json phase=complete without sibling task summary is re
   const out = runHook(file);
   assert.strictEqual(out.status, 1);
   assert.match(out.stderr, /cannot mark task complete/);
-  assert.match(out.stderr, /telemetry-summary skill/);
+  assert.match(out.stderr, /telemetry-summary/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -556,14 +608,14 @@ test('orchestration-state.json phase=complete with sibling summary having empty 
   const dir = tmpDir('state-complete-empty-status');
   const file = path.join(dir, 'orchestration-state.json');
   fs.writeFileSync(file, JSON.stringify(validState({ phase: 'complete', pending_subtasks: [] })));
-  // summary.md exists but its Status section is empty.
+  // summary.md exists but its Status section (and every required heading) is empty.
   fs.writeFileSync(
     path.join(dir, 'summary.md'),
     '# Task Summary\n\n## Status\n\n## Next\n',
   );
   const out = runHook(file);
   assert.strictEqual(out.status, 1);
-  assert.match(out.stderr, /empty ## Status section/);
+  assert.match(out.stderr, /empty body under "## Task Status"/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -573,10 +625,35 @@ test('orchestration-state.json phase=complete with populated task summary passes
   fs.writeFileSync(file, JSON.stringify(validState({ phase: 'complete', pending_subtasks: [] })));
   fs.writeFileSync(
     path.join(dir, 'summary.md'),
-    '# Task Summary\n\n## Status\n\n- workflow_state: complete\n- review_verdict: approved\n\n## Changes by Phase\n\n- A: 1 subtask\n',
+    populatedTaskSummary({ taskId: 'TP-001', subtaskId: 'TP-001-A1' }),
   );
   const out = runHook(file);
   assert.strictEqual(out.status, 0, out.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('orchestration-state.json phase=complete with stage=execution is rejected (Step 12.5 skipped)', () => {
+  const dir = tmpDir('state-complete-stage-execution');
+  const file = path.join(dir, 'orchestration-state.json');
+  fs.writeFileSync(
+    file,
+    JSON.stringify(
+      validState({
+        phase: 'complete',
+        pending_subtasks: [],
+        schema_version: 3,
+        stage: 'execution',
+        last_completed_seq: 1,
+      }),
+    ),
+  );
+  fs.writeFileSync(
+    path.join(dir, 'summary.md'),
+    populatedTaskSummary({ taskId: 'TP-001', subtaskId: 'TP-001-A1' }),
+  );
+  const out = runHook(file);
+  assert.strictEqual(out.status, 1);
+  assert.match(out.stderr, /Step 12\.5/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

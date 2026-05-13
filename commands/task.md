@@ -41,7 +41,25 @@ Pre-flight:
 
 Then dispatch via the Task tool with `subagent_type: ai-agents-workflow:chief-orchestrator`, passing the task description verbatim as a new task. The orchestrator will:
 
-1. **Classify the request** (Step 0) into one of: `direct-answer`, `plan-only`, `execution-trivial`, `execution-simple`, or `execution-full`. The orchestrator runs checklist-based heuristics, then ALWAYS shows you a radio-button popup with four options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`); its recommendation is pre-selected and you can override before any pipeline work starts. See `${CLAUDE_PLUGIN_ROOT}/ai/agents/chief-orchestrator.md` → Intake Classification Protocol and `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-intake/SKILL.md` for the full rules and risk-keyword sets.
+1. **Classify the request** (Step 0) into one of: `direct-answer`, `plan-only`, `execution-trivial`, `execution-simple`, or `execution-full`. The orchestrator runs checklist-based heuristics, then ALWAYS shows you a radio-button popup with four options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`); its recommendation is pre-selected and you can override before any pipeline work starts. The 4-option popup maps to the 5 internal paths as: `Direct answer → direct-answer`, `Plan only → plan-only`, `Execute (lightweight) → execution-trivial` (when the heuristic verdict was trivial) or `execution-simple` (otherwise), `Execute (full pipeline) → execution-full`. See `${CLAUDE_PLUGIN_ROOT}/ai/agents/chief-orchestrator.md` → Intake Classification Protocol and `${CLAUDE_PLUGIN_ROOT}/skills/orchestrator-intake/SKILL.md` for the full rules and risk-keyword sets.
 2. For execution paths: produce a Task Packet via the `task-packet` skill at `<artifact-root>/tasks/<task_id>/task-data.md`.
 3. Hand off to Delivery PM, Lead, Executor, Reviewer, and Integration Checker per `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:default-flow -->`.
 4. Finalize `<artifact-root>/tasks/<task_id>/summary.md` when all subtasks complete.
+
+## Post-dispatch check
+
+After `Task(chief-orchestrator)` returns, run a lightweight state check so silent stalls (chief exhausting context mid-run, especially on the trivial path) become visible to the user:
+
+1. Find the most recently modified `orchestration-state.json` under `${ARTIFACT_ROOT}/tasks/` (e.g. via `Bash(node:*)` one-liner or by listing the directory).
+2. Read `phase` from it.
+3. If `phase` is NOT one of `complete`, `planned`, `blocked`: surface a one-line message to the user:
+
+   > Task did not reach a terminal state (phase: `<phase>`). Run `/ai-agents-workflow:continue` to resume.
+
+4. If `phase` IS terminal (`complete` / `planned` / `blocked`), or the file is unreadable, or no state file exists yet: no message.
+
+This check is **best-effort and non-blocking**. Skip silently if `${ARTIFACT_ROOT}` is unresolved, `tasks/` is empty, or any I/O error occurs. The `Task()` tool does not expose the subagent's exit code or hook-block message to the calling agent, so the state file is the only reliable signal.
+
+Known edge cases (acknowledged, not fully fixed):
+- **Pre-Step-2 stall.** If chief exhausts context before `orchestration-state.json` is written, no file exists and the check no-ops. The user sees the same silent stall — surface a softer hint if you want: "Chief did not initialize task state — likely intake aborted; re-run with more specific scope."
+- **Concurrent `/task` invocations.** "Most recently modified" can race with a prior in-flight task. Future hardening: capture a `dispatch_start` timestamp before `Task()` returns and only consider state files with `mtime >= dispatch_start`.

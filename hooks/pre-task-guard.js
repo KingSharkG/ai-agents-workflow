@@ -309,12 +309,20 @@ if (taskIdFromPrompt) {
     const summaryExists = summaryPath ? fs.existsSync(summaryPath) : false;
 
     if (!subtaskDir || !aiWorkExists) {
-      const expectedRel =
-        path.relative(CWD, path.join(taskDir, 'phase-X', subtaskIdFromPrompt, 'ai-work.md')) ||
-        path.join(taskDir, 'phase-X', subtaskIdFromPrompt, 'ai-work.md');
+      // Suggestion path: multi-phase tasks use `phase-N/<id>/`; trivial / single-phase
+      // tasks place the subtask directly under the task root. Show both forms so the
+      // orchestrator picks the right one for its classification.
+      const multiPhaseHint =
+        path.relative(CWD, path.join(taskDir, 'phase-<N>', subtaskIdFromPrompt, 'ai-work.md')) ||
+        path.join(taskDir, 'phase-<N>', subtaskIdFromPrompt, 'ai-work.md');
+      const flatHint =
+        path.relative(CWD, path.join(taskDir, subtaskIdFromPrompt, 'ai-work.md')) ||
+        path.join(taskDir, subtaskIdFromPrompt, 'ai-work.md');
       console.error(
         `[pre-task-guard] BLOCKED: ai-work.md skeleton not found for ${subtaskIdFromPrompt}.\n` +
-          `Chief Orchestrator must write ${expectedRel}\n` +
+          `Chief Orchestrator must write the skeleton at one of:\n` +
+          `  - ${flatHint}            (trivial / single-phase)\n` +
+          `  - ${multiPhaseHint}  (multi-phase: pick the correct phase folder)\n` +
           `using the template from ${PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md → section:ai-work-skeleton\n` +
           `before dispatching ${subagentType}.\n`,
       );
@@ -433,12 +441,10 @@ if (taskIdFromPrompt) {
 
 // ---------- Phase 3: P1 gate check (blocking) ----------
 
-// `init` is intentionally absent: it is a side-flow agent (owned by
-// /ai-agents-workflow:init), never dispatched during the task pipeline. The
-// Phase 3.5 stage gate would already block it on a v3 state file (no
-// `intake`-stage allowance); leaving it in this set was dead code that drifted
-// from the canonical chief-orchestrator contract.
-const ALLOWED_BEFORE_P1 = new Set(['chief-orchestrator', 'delivery-pm']);
+// Gated roles are subject to the P1 (Delivery Plan Approval) gate. Non-gated
+// dispatches (chief-orchestrator, delivery-pm, init) bypass this phase. The
+// previously-defined ALLOWED_BEFORE_P1 was unused (only GATED_ROLES is
+// consulted at runtime) and has been removed.
 const GATED_ROLES = new Set([
   'lead',
   'executor',
@@ -678,6 +684,7 @@ let cacheWriteWarned = false;
 function saveCachedRules(cache) {
   if (!CACHE_PATH) return;
   try {
+    fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
     fs.writeFileSync(CACHE_PATH, JSON.stringify(cache), 'utf8');
   } catch (e) {
     // Don't block on cache write failure (cold cache just means slightly

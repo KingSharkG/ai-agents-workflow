@@ -15,9 +15,8 @@ hooks/
 ├── guard-orchestrator-source-writes.js         # PreToolUse Edit|Write|Bash — blocking
 ├── guard-orchestrator-step0.js                 # PreToolUse Edit|Write|Task — blocking
 ├── guard-chief-orchestrator-stop.js            # SubagentStop — blocking
-├── validate-artifact-chain.js                  # PostToolUse Write|Edit — blocking on schema violations
-├── validate-summary-telemetry.js               # PostToolUse Write|Edit — non-blocking warning
-├── validate-orchestration-state-write.js       # PostToolUse Write|Edit — non-blocking warning
+├── validate-artifact-chain.js                  # PostToolUse Write|Edit — blocking on schema violations + populated-summary checks
+├── validate-orchestration-state-write.js       # PostToolUse Write|Edit — non-blocking on structural warnings; blocking on closure invariants
 ├── lib/
 │   ├── artifact-root.js                        # resolver: probes for the project's artifact root
 │   ├── plugin-root.js                          # resolver: locates the plugin install dir
@@ -48,8 +47,7 @@ hooks/
     ├── pre-task-guard.stage.test.js
     ├── validate-artifact-chain.test.js
     ├── validate-artifact-chain.intake.test.js
-    ├── validate-orchestration-state-write.test.js
-    └── validate-summary-telemetry.test.js
+    └── validate-orchestration-state-write.test.js
 ```
 
 ## Hook contracts
@@ -59,9 +57,8 @@ hooks/
 | `pre-task-guard.js` | `Task` | yes | (0) Plan-mode block on `Task(chief-orchestrator)` while Claude Code's native plan mode is active (folded in from the former `check-plan-mode.js`); (1) Caller is exempt (chief-orchestrator) or task scaffolding exists; (2) ai-work.md skeleton present for the dispatched subtask; (3) `gates.p1_approved === true` for gated roles; (4) stage-discipline check for v3 state files; (5) legacy `./ai-workflow-data/` blocks all non-orchestrator/non-init dispatches; (6) emits trigger-keyword assessment to stdout (non-blocking). Kill switch for Phase 0 only: `AIAW_DISABLE_PLAN_MODE_GUARD=1`. | `pre-task-guard.test.js`, `pre-task-guard.stage.test.js`, `pre-task-guard.plan-mode.test.js`, `pre-task-guard.defer-tightening.test.js` |
 | `guard-agent-reads.js` | `Read` | no | Warns when an agent reads governance files, canonical role contracts, `PROJECT_CONFIG.md`, or the derived domain-contexts cache directly instead of via dispatch bundle. | `guard-agent-reads.test.js` |
 | `guard-orchestrator-source-writes.js` | `Edit \| Write \| Bash` | yes | The chief-orchestrator may only Edit/Write inside the resolved artifact root. Bash output redirection and mutators (`rm`, `mv`, `cp`, `sed -i`, `touch`, etc.) targeting paths outside the artifact root are denied. A list of forbidden command prefixes (`git commit`, `npm install`, etc.) is always denied. Non-orchestrator callers and the top-level user are exempt. | `guard-orchestrator-source-writes.test.js` |
-| `validate-artifact-chain.js` | `Write \| Edit` | yes | Per-artifact schema checks: required fields, required headings, required section markers, paired open/close markers, JSON shape for `orchestration-state.json`, integration-check verdict gating, telemetry-belongs-in-summary, etc. | `validate-artifact-chain.test.js` |
-| `validate-summary-telemetry.js` | `Write \| Edit` | no | Warns when a subtask `summary.md` has a verdict but the `## Telemetry` or `## Context Manifest` section is empty/missing. | `validate-summary-telemetry.test.js` |
-| `validate-orchestration-state-write.js` | `Write \| Edit` | no | Warns when an `orchestration-state.json` write is malformed: not valid JSON, missing required fields per `schema_version`, bad `phase` / `stage` enum, half-open `stage_history` entries, or a consecutive-entry transition not in the Phase Transition Table. Appends a durable line to `<artifact-root>/tasks/<task_id>/hooks.log` on every WARN via `lib/hook-log.js`. | `validate-orchestration-state-write.test.js` |
+| `validate-artifact-chain.js` | `Write \| Edit` | yes | Per-artifact schema checks: required fields, required headings, required section markers, paired open/close markers, JSON shape for `orchestration-state.json`, integration-check verdict gating. Closure invariants: blocks `phase: complete` writes lacking `stage: closure` or a populated task-level summary (canonical `telemetry-summary` headings: `## Task Status`, `## Changes by Phase`, `## Detail`, `## Totals`, `## Dispatch Bundles`, `## Context Breakdown`); blocks approved subtask summaries with empty `## Telemetry` / `## Dispatch Bundles` / `## Context Manifest` bodies. (Telemetry-line check folded in from the retired `validate-summary-telemetry.js`.) | `validate-artifact-chain.test.js` |
+| `validate-orchestration-state-write.js` | `Write \| Edit` | partial | Structural/schema issues are non-blocking WARNs (exit 0) appended to `<artifact-root>/tasks/<task_id>/hooks.log`. Closure invariants are BLOCKING (exit 2): `phase=complete` ⇒ `stage=closure`, terminal closure stage_history entry closed with `exit_reason ∈ {p4-approved, completed-without-p4}`, empty `pending_subtasks` / `blocked_gates` / `pending_user_actions`, `current_subtask=null`, `last_completed_seq` parity with `orchestration-history.json`, and `workflow_state`/`phase` agreement. | `validate-orchestration-state-write.test.js` |
 | `block-aiaw-task-in-plan-mode.js` | UserPromptSubmit (event, not Tool matcher) | yes | Backstop for the slash-command path: blocks `/ai-agents-workflow:{task,continue,init,add,update,remove,pr-lessons,review}` while the harness reports `permission_mode === "plan"`. Catches the case where plan mode would otherwise steer the model into writing a plan document instead of dispatching, so `pre-task-guard.js` Phase 0 (PreToolUse on `Task`) never fires. Exits 2 with the canonical message on stderr (surfaced to the user before any model turn runs). Kill switch: `AIAW_DISABLE_PLAN_MODE_GUARD=1`. | `block-aiaw-task-in-plan-mode.test.js` |
 | `guard-chief-orchestrator-stop.js` | SubagentStop | yes | Structural backstop on chief-orchestrator stop: detects intake skipped/errored/popup-skipped, missing executor/reviewer dispatch on execute paths, missing terminal state, out-of-artifact chief writes, empty `<!-- section:implementation -->`. Exits 2 with a specific reason naming each missing invariant. | `guard-chief-orchestrator-stop.test.js` |
 
@@ -111,6 +108,6 @@ Each suite is a self-contained Node script using only `assert`, `fs`, `os`, `pat
 | Script kind | Timeout | Rationale |
 |---|---|---|
 | PreToolUse / SubagentStop guards | 5000 ms | Each guard reads at most a handful of small JSON / Markdown files (orchestration-state, plugin manifest, single ai-work / summary). The 5 s cap fails fast on a wedged hook without slowing healthy dispatches. |
-| PostToolUse validators (`validate-artifact-chain`, `validate-summary-telemetry`) | 10000 ms | Validators re-scan the just-written artifact (plus its sibling `summary.md` for telemetry). On large summary files (long-running tasks with deep `<!-- section:dispatch-bundles -->` audit logs) the regex sweep can approach 5 s on cold disk caches. 10 s gives headroom without becoming a usability problem. |
+| PostToolUse validators (`validate-artifact-chain`, `validate-orchestration-state-write`) | 10000 ms | Validators re-scan the just-written artifact (plus its sibling `summary.md` and/or `orchestration-history.json` for parity checks). On large summary files (long-running tasks with deep `<!-- section:dispatch-bundles -->` audit logs) the regex sweep can approach 5 s on cold disk caches. 10 s gives headroom without becoming a usability problem. |
 
 If a hook still times out under this policy, that is a real bug — fix the hook (stream / chunk / exit early), don't raise the budget further.

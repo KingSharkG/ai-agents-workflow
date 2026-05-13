@@ -16,7 +16,8 @@ Produce a structured Retrospective Report after a task reaches `phase: complete`
 
 ## Input
 
-- `<artifact-root>/tasks/<task_id>/orchestration-state.json` — subtask ledger
+- `<artifact-root>/tasks/<task_id>/orchestration-state.json` — hot state (cursor + gates)
+- `<artifact-root>/tasks/<task_id>/orchestration-history.json` — `completed_subtasks[]` (with `cycles`, `verdict`, `sections`) and `trigger_decisions{}`. **Required** for the Rework Heat-Map and Dispatch Bundle Coverage sections — those facts live in history, not hot state. Tolerate a missing history file the same way `resume-orchestrator` does (legacy pre-split tasks); when absent, derive completion counts from per-subtask `summary.md` files and emit a `legacy-history` note in the Recommendations section.
 - `<artifact-root>/tasks/<task_id>/summary.md` — task-level telemetry
 - Each `<subtask_id>/summary.md` — per-subtask telemetry, context manifest, and `<!-- section:dispatch-bundles -->` audit lines (one per dispatch — bundles themselves are inline in the Task prompt and not persisted)
 

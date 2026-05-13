@@ -31,7 +31,7 @@ Sub-sections are listed under their parent block as indented rows (parent must b
 | ↳ `task-known-blockers` | `task-packet` skill | `delivery-pm` | O | intake | |
 | ↳ `task-assumptions` | `task-packet` skill | all subagents | O | intake | |
 | ↳ `task-telemetry` | `task-packet` skill | `telemetry-summary` | Y | intake | turn/token budget for intake |
-| `intake-classification` | `orchestrator-intake` skill | `chief-orchestrator`, `pre-task-guard.js` | Y | intake | Records `final_path`, `heuristic_verdict`, user choice. |
+| `intake-classification` | `orchestrator-intake` skill | `chief-orchestrator`, `guard-chief-orchestrator-stop.js` | Y | intake | Records `final_path`, `heuristic_verdict`, user choice. (`pre-task-guard.js` reads `state.classification` from `orchestration-state.json`, not this marker.) |
 | `delivery-plan` | `delivery-plan` skill (delivery-pm) | `chief-orchestrator`, `lead`, `validate-artifact-chain.js` | Y | planning | Lives in `task-data.md` (task-level) when phase split, otherwise here. |
 | `spec` | `chief-orchestrator` (subtask init) | `lead`, `design-agent`, `executor`, `reviewer`, `resume-orchestrator`, `validate-artifact-chain.js` | Y | planning | Per-subtask copy of `delivery-subtask-<id>` content; written when chief creates the `ai-work.md` skeleton. See `ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:ai-work-skeleton -->`. |
 | ↳ `delivery-metadata` | `delivery-plan` skill | `chief-orchestrator` | Y | planning | |
@@ -84,7 +84,7 @@ Sub-sections are listed under their parent block as indented rows (parent must b
 | ↳ `review-findings` | `review-report` skill | `executor` | Y | execution | severity-tagged |
 | ↳ `review-low-confidence` | `review-report` skill | `executor` | O | execution | |
 | ↳ `review-resolved` | `review-report` skill | `chief-orchestrator` | C | execution | rework cycles |
-| ↳ `review-verdict` | `review-report` skill | `chief-orchestrator`, `pre-task-guard.js` | Y | execution | `approved`/`needs-rework`/`needs-replan` |
+| ↳ `review-verdict` | `review-report` skill | `chief-orchestrator`, `guard-chief-orchestrator-stop.js` | Y | execution | `approved` / `changes_requested` / `needs-replan` (canonical enum; see `${CLAUDE_PLUGIN_ROOT}/ai/governance/ARTIFACT_DISCIPLINE.md` → `<!-- section:verdict-taxonomy -->`) |
 | ↳ `review-completion-summary` | `review-report` skill | `chief-orchestrator` | C | closure | written on final approval |
 | `integration-check` | `integration-check` skill (integration-checker) | `chief-orchestrator`, `validate-artifact-chain.js` | C | execution | Required when subtask flags integration concern. |
 | ↳ `integration-metadata` | `integration-check` skill | `context-minimizer` | C | execution | |
@@ -103,15 +103,15 @@ Sub-sections are listed under their parent block as indented rows (parent must b
 | ↳ `blocker-what-was-tried` | `blocker-escalation-report` skill | `chief-orchestrator` | C | any | |
 | ↳ `blocker-required-input` | `blocker-escalation-report` skill | `chief-orchestrator` | C | any | |
 | ↳ `blocker-suggested-rerouting` | `blocker-escalation-report` skill | `chief-orchestrator` | O | any | `route_to:` enum |
-| `pr-lessons` | `context-minimizer` (injected into bundles) | `executor`, `reviewer` | C | execution | Injected when `<artifact-root>/knowledge/pr-lessons.md` is non-empty. |
+| `pr-lessons` | `context-minimizer` (inline in dispatch bundle ONLY — not written to any artifact file) | `executor`, `reviewer` (consumed at dispatch time from the inline bundle) | C | execution | Injected into the inline dispatch bundle when `<artifact-root>/knowledge/pr-lessons.md` is non-empty. No on-disk artifact carries this marker; it appears only between `<!-- dispatch-bundle:start ... -->` and `<!-- dispatch-bundle:end -->` markers in Task `prompt` payloads. |
 
 ## summary.md (per-subtask diagnostics + audit)
 
 | marker | writer | readers | required? | stage(s) | notes |
 |---|---|---|---|---|---|
 | `dispatch-bundles` | `orchestrator-dispatch` skill (chief-orchestrator) | audit only | Y | any | One line per dispatch: `- <role> for <subtask_id> (cycle <n>): <tokens> tokens; sections: <list>; cache_misses: <list-or-none>`. |
-| `context-manifest` | every dispatched agent | `validate-summary-telemetry.js` | Y | any | files/skills/plugins the agent actually loaded |
-| `telemetry` | every dispatched agent | `validate-summary-telemetry.js`, `telemetry-summary` skill | Y | any | turns_used, tokens_in, tokens_out |
+| `context-manifest` | every dispatched agent | `validate-artifact-chain.js` | Y | any | files/skills/plugins the agent actually loaded. Body must contain ≥1 `### ` subsection when the parent summary's `review_verdict=approved`. |
+| `telemetry` | every dispatched agent | `validate-artifact-chain.js`, `telemetry-summary` skill | Y | any | turns_used, tokens_in, tokens_out. Body must contain ≥1 line matching `<agent> \| N/N turns \| …` when the parent summary's `review_verdict=approved`. |
 | `domain-status-checks` | `reviewer` | `chief-orchestrator` | O | execution | per-domain pass/fail |
 | `domain-role-checks` | `reviewer` | `chief-orchestrator` | O | execution | |
 | `domain-validation-note` | `reviewer` | `chief-orchestrator` | O | execution | |
@@ -173,14 +173,14 @@ If a marker name appears in both a governance doc (as anchor) AND an artifact te
 
 ## Authority and inline references
 
-**This markdown table is the single source of truth.** Hooks (`validate-artifact-chain.js`, `validate-summary-telemetry.js`) and skills reference marker names by literal string; this file is the human-readable index. There is no companion machine-readable JSON. (Earlier iterations carried a `section-markers.json` stub plus a four-step migration checklist; both were retired in favour of keeping the markdown table authoritative. If a tooling layer ever needs the data in JSON form, generate it from this table on demand rather than maintaining a second source.)
+**This markdown table is the single source of truth.** Hooks (`validate-artifact-chain.js`) and skills reference marker names by literal string; this file is the human-readable index. There is no companion machine-readable JSON. (Earlier iterations carried a `section-markers.json` stub plus a four-step migration checklist; both were retired in favour of keeping the markdown table authoritative. If a tooling layer ever needs the data in JSON form, generate it from this table on demand rather than maintaining a second source.)
 
 **Known inline-reference sites to keep in sync when adding/renaming a marker.** Audit with `grep -rn '<!-- section:' .` (or `git grep` from a clone). The list below names the categories the sweep will encounter, not every individual hit:
 
 - [`agents/chief-orchestrator.md`](../../agents/chief-orchestrator.md) hard-rule 10 → `<!-- section:role-boundaries -->` pointer at the constitution
 - [`ai/core/PROJECT_CONSTITUTION.md`](PROJECT_CONSTITUTION.md) → contains the `<!-- section:role-boundaries -->` and `<!-- section:definition-of-done -->` blocks themselves
 - [`ai/playbooks/ORCHESTRATION.md`](../playbooks/ORCHESTRATION.md) → `<!-- section:default-flow -->`, `<!-- section:trivial-flow -->` (and other doc-only anchors)
-- [`hooks/pre-task-guard.js`](../../hooks/pre-task-guard.js), [`hooks/validate-artifact-chain.js`](../../hooks/validate-artifact-chain.js), [`hooks/validate-summary-telemetry.js`](../../hooks/validate-summary-telemetry.js) → hard-coded marker regexes
+- [`hooks/pre-task-guard.js`](../../hooks/pre-task-guard.js), [`hooks/validate-artifact-chain.js`](../../hooks/validate-artifact-chain.js) → hard-coded marker regexes
 - Per-skill `SKILL.md` and `references/*.md` files under [`skills/`](../../skills/) → marker-name strings embedded in templates and section-extraction logic (most artifact-writing skills carry at least one inline reference)
 
 When adding a new marker, either consume an anchor into this file or add the new reference site to this list so the migration sweep knows it exists.

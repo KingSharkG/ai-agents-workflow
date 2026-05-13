@@ -61,9 +61,9 @@ Instead of a full review section, the Reviewer appends a compact verdict inside 
 
 ```
 <!-- review-ultra: <subtask_id> -->
-- verdict: approved | changes-requested
+- verdict: approved | changes_requested
 - cycle: <N>
-- note: <one-line rationale if changes-requested, or "ok" if approved>
+- note: <one-line rationale if changes_requested, or "ok" if approved>
 <!-- /review-ultra -->
 ```
 
@@ -253,7 +253,7 @@ When the Reviewer finalizes `<subtask_id>/summary.md`, ALL of the following fiel
 | Findings taxonomy | `## Notes` | Summary of findings by severity: `H:<n> M:<n> L:<n> N:<n> I:<n>` (may be `H:0 M:0 L:0 N:0 I:0` for clean passes) |
 | Next steps | `## Notes` | One-liner describing what this subtask unblocks, or `- none (terminal subtask)` |
 
-The `validate-summary-telemetry` hook provides non-blocking warnings when telemetry or context manifest is missing at verdict time. The orchestrator's artifact gate (chief-orchestrator step 13) enforces the full schema.
+The `validate-artifact-chain` hook BLOCKS subtask `summary.md` writes whose `review_verdict=approved` lacks a populated `## Telemetry` line, a non-empty `## Dispatch Bundles` body, or a `## Context Manifest` with at least one `### ` subsection. (The previously non-blocking `validate-summary-telemetry` hook was retired; its checks live here, now blocking.) The orchestrator's artifact gate (chief-orchestrator step 13) enforces the full schema on top of the hook.
 
 <!-- /section:summary-minimum-schema -->
 

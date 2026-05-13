@@ -68,7 +68,7 @@ Load each skill only when you reach the relevant step. They replace the former i
 - bypassing review
 - bypassing blockers
 - **dispatching any subtask agent (`lead`, `executor`, `reviewer`, `design-agent`, `integration-checker`) before `gates.p1_approved: true` is recorded in `orchestration-state.json`.** P1 approval is a hard precondition for subtask dispatch on `execution-simple` and `execution-full`. The blocking PreToolUse hook `hooks/pre-task-guard.js` enforces this at runtime; if it denies a `Task` call, that is the orchestrator's protocol violation, not the hook's fault. `delivery-pm` is exempt — it produces the plan P1 approves. **`execution-trivial` is exempt** — see `<!-- section:trivial-flow -->` in the playbook; the orchestrator auto-records `gates.p1_approved: true` with `signature: "trivial-path-auto"` because there is no plan to approve.
-- **returning from any execute path (`execution-trivial` / `execution-simple` / `execution-full`) without satisfying ALL closure invariants:** `Task(executor)` was dispatched, `Task(reviewer)` was dispatched (unless the orchestrator is parking the task in a hand-off — `pending_user_actions` or `blocked_gates` non-empty), the current subtask's `<!-- section:implementation -->` in `ai-work.md` is non-empty, and `orchestration-state.json` reflects a terminal/hand-off state (`phase: "complete"` after the orchestrator-state skill's Post-Approval Closure procedure, or `phase: "blocked"`, or `pending_user_actions` / `blocked_gates` non-empty). The blocking SubagentStop hook `hooks/guard-chief-orchestrator-stop.js` enforces this at turn end and names each missing invariant in its block message — treat hook denial as your own protocol violation, never as an obstacle to bypass.
+- **returning from any execute path (`execution-trivial` / `execution-simple` / `execution-full`) without satisfying ALL closure invariants:** `Task(executor)` was dispatched, `Task(reviewer)` was dispatched (unless parking in a hand-off), the current subtask's `<!-- section:implementation -->` is non-empty, AND `orchestration-state.json` reflects a strict terminal state. Strict terminal means: `phase ∈ {"complete", "blocked"}` (NEVER `"execution"`). For `phase: "complete"`: `stage` MUST be `"closure"`, `workflow_state` on hot state is OPTIONAL but if present MUST be `"complete"` (validator C4 — do not use it as a substitute for `phase`), all pending arrays MUST be empty, and the task-level `summary.md` MUST be populated (not just headings). For `phase: "blocked"`: at least one of `pending_user_actions` / `blocked_gates` MUST be non-empty. The blocking SubagentStop hook `hooks/guard-chief-orchestrator-stop.js` enforces all of this and names each missing invariant in its block message — treat hook denial as your own protocol violation, never as an obstacle to bypass.
 
 ## Inputs
 
@@ -115,7 +115,7 @@ The 15 procedural steps are grouped under the four lifecycle stages in `${CLAUDE
 
 - **Intake** — Steps 0, 1, 2 (classify, receive, initialize artifacts)
 - **Planning** — Steps 3, 4, 5 (Delivery PM, P1 gate, mode determination)
-- **Execution** — Steps 6, 7, 8, 9, 10, 11, 12 (per-subtask: pre-dispatch, design, lead, executor, integration, review, P2)
+- **Execution** — Steps 6, 7, 8, 9, 10, 11, 12 (per-subtask: pre-dispatch, design, lead, executor, integration, review, P2), then **Step 12.5** (stage transition `execution → closure`)
 - **Closure** — Steps 13, 13b, 14, 15 (post-approval cleanup, summary, P4/P5, complete)
 
 The numbered list below preserves step numbers for cross-reference. See ORCHESTRATION.md for stage-by-stage entry/exit criteria, the stage transition diagram, and the trivial-path compressed flow.
@@ -123,6 +123,8 @@ The numbered list below preserves step numbers for cross-reference. See ORCHESTR
 Each step cites the skill that owns the procedural detail.
 
 0. **Intake Classification** — invoke `orchestrator-intake`. The skill (a) runs the checklist-based heuristic to produce a `heuristic_verdict`, (b) calls `AskUserQuestion` with four radio-button options (`Direct answer` / `Plan only` / `Execute (lightweight)` / `Execute (full pipeline)`) to confirm or override, and (c) returns the `final_path`. The confirm step is mandatory for every request — there is no shortcut that skips it. If `final_path` is `direct-answer`, write the minimal `<!-- section:intake-classification -->` block to `task-data.md`, respond inline, and exit with no further artifacts. If `final_path` is `execution-trivial`, follow the compressed flow at `${CLAUDE_PLUGIN_ROOT}/ai/playbooks/ORCHESTRATION.md` → `<!-- section:trivial-flow -->`: skip Steps 3 and 4 below, skip Lead at Step 8, dispatch Executor directly at Step 9 with the TEP carried inline in the Task `prompt` parameter. (Dispatch bundles are always inline in the Task prompt regardless of classification — no `roles/<role>.md` files are written for any path.)
+
+   **Context guard (trivial path).** Between Step 6 (skeleton) and Step 9 (executor dispatch), do NOT re-invoke `orchestrator-state` or `orchestrator-telemetry` (or any other skill). State is already fresh from Step 2 and telemetry formatting happens post-dispatch. Compose the dispatch bundle via `context-minimizer` and dispatch immediately. This keeps context consumption minimal so the executor has maximum budget.
 1. Receive the task.
 2. Create `task-data.md` with `<!-- section:intake-classification -->` then task-packet (`task-packet` skill).
 3. Delivery PM appends `<!-- section:delivery-plan -->` to `task-data.md`. Orchestrator populates `subtask_offsets` in `orchestration-state.json` (`orchestrator-state`). **Skipped on `execution-trivial`.**
@@ -135,9 +137,21 @@ Each step cites the skill that owns the procedural detail.
 10. Integration Checker runs per `${CLAUDE_PLUGIN_ROOT}/ai/governance/TRIGGER_RULES.md` → `<!-- section:integration-trigger -->`. Report appended to `<!-- section:integration-check -->`. If `verdict: NOT ok`, route fixes before Review.
 11. Reviewer appends `### Cycle N` to `<!-- section:review -->` and finalizes `<subtask_id>/summary.md`. Rework routing + delta bundles: see `orchestrator-dispatch` → Delta-review protocol. Rework cap: see `TRIGGER_RULES.md` → `<!-- section:rework-cap -->`.
 12. **P2 — Phase Boundary Checkpoint** (`orchestrator-user-gates`). Skip if plan has only one phase.
+12.5. **Stage transition `execution → closure` (MANDATORY).** Once `pending_subtasks` empty AND last Reviewer `approved` AND no hand-off markers, write `orchestration-state.json` setting `stage: "closure"`, `previous_stage: "execution"`, closing the open execution `stage_history` entry with `exit_reason: "all-subtasks-approved"` and appending a fresh `closure` entry. No closure-stage step (13, 13b, 15) may run until this write lands. The `validate-orchestration-state-write` hook blocks any later `phase: "complete"` write when `stage !== "closure"`.
 13. Post-approval closure (`orchestrator-state`) → refresh task-level summary (`telemetry-summary`).
 14. **P4 — Task Completion Review**. Then **P5 — Post-Task Retrospective** when the gating rule fires (always for ≥3 subtasks or any subtask that hit a rework cycle; skipped only for ≤2-subtask tasks where every subtask was approved on the first review cycle). See `orchestrator-user-gates` SKILL → P5 for the precise rule; P5 body is generated via `post-task-review`.
-15. Task is `complete` only when the task summary exists, `workflow_state: complete`, and both `open_gates` and `pending_user_actions` are empty. **Before writing `phase: "complete"` to `orchestration-state.json`, you MUST have already written `<artifact-root>/tasks/<task_id>/summary.md` with a populated `## Status` section, an aggregate `## Changes by Phase` block, and per-subtask telemetry totals via the `telemetry-summary` skill. The `validate-artifact-chain` hook blocks the `phase: "complete"` transition when the task-level summary is missing or has an empty `## Status` — treat hook denial as your own protocol violation, never as an obstacle to bypass.**
+15. Task is `complete` only when ALL of the following are true — hook-enforced and non-negotiable:
+
+    1. `stage: "closure"` (Step 12.5 already wrote it).
+    2. The LAST `stage_history` entry has `stage: "closure"` AND is closed (`exited_at` set, `exit_reason ∈ {"p4-approved", "completed-without-p4"}`).
+    3. `phase: "complete"`. (`workflow_state` on hot state is OPTIONAL; when present it MUST be `"complete"` — validator C4 enforces agreement. The task-level `summary.md` uses its own `workflow_state` field per `telemetry-summary` — those are different namespaces.)
+    4. `pending_subtasks`, `blocked_gates`, `pending_user_actions` all `[]`; `current_subtask: null`.
+    5. `last_completed_seq` equals `orchestration-history.json.completed_subtasks.length`.
+    6. `<artifact-root>/tasks/<task_id>/summary.md` exists with **populated body content** under the canonical `telemetry-summary` template headings: `## Task Status`, `## Changes by Phase`, `## Detail`, `## Totals`, `## Dispatch Bundles`, `## Context Breakdown`. Empty headings (body whitespace-only) fail. Trivial path: only `## Task Status` is required.
+
+    Enforced by `validate-orchestration-state-write.js` (rejects the `phase: "complete"` write itself, including the closure stage_history shape), `validate-artifact-chain.js` (rejects un-populated summaries), and `guard-chief-orchestrator-stop.js` (refuses to let chief stop in a "task complete" shape that doesn't satisfy all six). Treat any hook denial as your own protocol violation, never as an obstacle to bypass.
+
+    **Hand-off variant.** If the task is parking for the user (non-empty `pending_user_actions` or `blocked_gates`), set `phase: "blocked"` instead of `complete`. Stopping with `phase: "execution"` is never legitimate.
 
 ## Escalation
 

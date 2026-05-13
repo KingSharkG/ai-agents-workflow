@@ -35,7 +35,9 @@
  *           require ALL of:
  *             • Task(executor) was dispatched in this turn.
  *             • orchestration-state.json reflects a terminal/hand-off state:
- *               phase ∈ {"complete","blocked"}, OR workflow_state="complete",
+ *               phase ∈ {"complete","blocked","planned"}; `workflow_state`
+ *               on hot state is OPTIONAL and (per validator C4) CANNOT
+ *               substitute for `phase` — when present it must agree.
  *               OR pending_user_actions / blocked_gates non-empty.
  *             • The current subtask's <!-- section:implementation --> in
  *               ai-work.md contains non-whitespace content.
@@ -481,14 +483,149 @@ function nonEmptyArrayOrObject(v) {
   return false;
 }
 
-function isLegitimateTerminalState(s) {
-  if (!s) return false;
-  if (s.phase === 'complete' || s.phase === 'blocked' || s.workflow_state === 'complete') {
-    return true;
+// ---------- Terminal-state predicate (strict) ----------
+//
+// Chief may only stop with `phase ∈ {"complete", "blocked"}`. Stopping with
+// `phase: "execution"` is never legitimate — `workflow_state` cannot
+// substitute for `phase`; the two MUST agree.
+//
+//   phase=complete requires:
+//     - stage="closure" (Step 12.5 ran)
+//     - workflow_state="complete" (when present — must agree with phase)
+//     - all pending arrays empty, current_subtask null
+//     - sibling task-level summary.md exists and is populated (heading bodies
+//       non-empty under Telemetry / Dispatch Bundles / Context Manifest)
+//
+//   phase=blocked requires:
+//     - at least one of pending_user_actions / blocked_gates is non-empty
+//       (otherwise it's a malformed hand-off — a "blocked" task with nothing
+//        the user is supposed to act on).
+//
+// Returns { ok: boolean, reasons: string[] }. `reasons` is non-empty when
+// !ok and names each missing invariant in order so the caller can compose a
+// precise block message.
+
+function summaryPopulationIssues(taskDir) {
+  if (!taskDir) return ['task directory could not be resolved'];
+  const summaryPath = path.join(taskDir, 'summary.md');
+  if (!fs.existsSync(summaryPath)) {
+    return [`task-level summary.md does not exist at ${path.relative(HOOK_CWD, summaryPath) || summaryPath}`];
   }
-  if (nonEmptyArrayOrObject(s.pending_user_actions)) return true;
-  if (nonEmptyArrayOrObject(s.blocked_gates)) return true;
-  return false;
+  let text;
+  try {
+    text = fs.readFileSync(summaryPath, 'utf8');
+  } catch (_) {
+    return [`task-level summary.md could not be read`];
+  }
+  const issues = [];
+  // Heading set mirrors the canonical task-level template emitted by the
+  // `telemetry-summary` skill — NOT the per-subtask summary template (which
+  // uses different headings like ## Telemetry, ## Context Manifest). End-of-
+  // string is matched via `$(?![\r\n])` since JS regex has no `\Z`.
+  // Tolerate the bare "Status" variant for the trivial-flow template.
+  // Order mirrors `validate-artifact-chain.js` so the two hooks reject the
+  // exact same finalized-summary defects.
+  const REQUIRED_HEADINGS = [
+    '## Task Status',
+    '## Changes by Phase',
+    '## Detail',
+    '## Totals',
+    '## Dispatch Bundles',
+    '## Context Breakdown',
+  ];
+  for (const heading of REQUIRED_HEADINGS) {
+    const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern =
+      heading === '## Task Status'
+        ? '^##\\s+(?:Task\\s+)?Status\\b[^\\n]*\\n([\\s\\S]*?)(?=^## |$(?![\\r\\n]))'
+        : `^${escaped}\\b[^\\n]*\\n([\\s\\S]*?)(?=^## |$(?![\\r\\n]))`;
+    const re = new RegExp(pattern, 'im');
+    const m = text.match(re);
+    if (!m) {
+      issues.push(`task-level summary.md is missing heading "${heading}"`);
+      continue;
+    }
+    const body = m[1].trim();
+    if (body.length === 0) {
+      issues.push(`task-level summary.md has empty body under "${heading}"`);
+    }
+  }
+  return issues;
+}
+
+function isLegitimateTerminalState(s, taskDir) {
+  const reasons = [];
+  if (!s) {
+    reasons.push('orchestration-state.json is missing or unreadable');
+    return { ok: false, reasons };
+  }
+  // Three legitimate stop phases:
+  //   - "complete" — normal termination (requires the full closure invariant set)
+  //   - "blocked" — hand-off (requires at least one populated pending marker)
+  //   - "planned" — plan-only terminal-but-resumable (requires stage="closure"
+  //     with the planning→closure transition closed by exit_reason="p1-approved-stop",
+  //     and classification="plan-only" to confirm this isn't an accidental write
+  //     on an execute path)
+  if (s.phase !== 'complete' && s.phase !== 'blocked' && s.phase !== 'planned') {
+    reasons.push(
+      `phase=${JSON.stringify(s.phase)} — chief may only stop with phase="complete", phase="blocked", or phase="planned" (plan-only). ` +
+        `workflow_state cannot substitute for phase; the two MUST agree.`,
+    );
+    return { ok: false, reasons };
+  }
+  if (s.phase === 'planned') {
+    if (s.classification !== 'plan-only') {
+      reasons.push(
+        `phase="planned" but classification=${JSON.stringify(s.classification)} — only plan-only tasks may terminate at phase="planned". An execute path that reaches phase="planned" is a protocol violation.`,
+      );
+    }
+    // schema_version 3+ state files MUST carry `stage`; v2 files may omit it.
+    // For phase=planned (only used by plan-only which is always written under
+    // v3), require stage="closure" explicitly; treat missing stage as a
+    // violation on v3 files. v2 files (legacy) are tolerated for backwards
+    // compatibility.
+    const isV3 = typeof s.schema_version === 'number' && s.schema_version >= 3;
+    if (isV3 && s.stage === undefined) {
+      reasons.push(
+        `phase="planned" on schema_version=${s.schema_version} state but stage field is missing — v3 state files MUST carry stage. Expected stage="closure".`,
+      );
+    } else if (s.stage !== undefined && s.stage !== 'closure') {
+      reasons.push(
+        `phase="planned" but stage=${JSON.stringify(s.stage)} — plan-only terminates by transitioning planning→closure via the P1 "Approve plan and stop" choice. The closure entry stays open (resumable via /continue EXECUTE_PLAN) but stage MUST be "closure".`,
+      );
+    }
+    return { ok: reasons.length === 0, reasons };
+  }
+  if (s.phase === 'complete') {
+    if (s.stage !== 'closure') {
+      reasons.push(
+        `phase="complete" but stage=${JSON.stringify(s.stage)} — Step 12.5 (execution→closure transition) was skipped.`,
+      );
+    }
+    if (s.workflow_state !== undefined && s.workflow_state !== 'complete') {
+      reasons.push(
+        `phase="complete" but workflow_state=${JSON.stringify(s.workflow_state)} disagrees with phase.`,
+      );
+    }
+    if (s.current_subtask !== null && s.current_subtask !== undefined) {
+      reasons.push(`phase="complete" but current_subtask=${JSON.stringify(s.current_subtask)} is non-null`);
+    }
+    for (const field of ['pending_subtasks', 'blocked_gates', 'pending_user_actions']) {
+      if (Array.isArray(s[field]) && s[field].length > 0) {
+        reasons.push(`phase="complete" but ${field} is non-empty`);
+      }
+    }
+    const summaryIssues = summaryPopulationIssues(taskDir);
+    for (const i of summaryIssues) reasons.push(i);
+  } else if (s.phase === 'blocked') {
+    if (!nonEmptyArrayOrObject(s.pending_user_actions) && !nonEmptyArrayOrObject(s.blocked_gates)) {
+      reasons.push(
+        `phase="blocked" but both pending_user_actions and blocked_gates are empty — ` +
+          `a blocked task must name what the user is expected to act on.`,
+      );
+    }
+  }
+  return { ok: reasons.length === 0, reasons };
 }
 
 // -------- Implementation-section non-empty check (Defect 3 backstop) --------
@@ -555,7 +692,8 @@ const aiWorkPath = taskDir && subtaskForCheck ? findAiWorkPath(taskDir, subtaskF
 const implSectionEmpty = aiWorkPath ? implementationSectionEmpty(aiWorkPath) : false;
 
 const dispatchedReviewer = dispatchedRoles.has('reviewer');
-const stateLooksTerminal = isLegitimateTerminalState(state);
+const terminalCheck = isLegitimateTerminalState(state, taskDir);
+const stateLooksTerminal = terminalCheck.ok;
 // outOfArtifactWrites is computed earlier (before the isStopPath early-exit).
 
 // On execute paths, require ALL of:
@@ -670,28 +808,37 @@ if (outOfArtifactWrites.length > 0) {
     `repeats, surface the diagnostic from the Skill invocation directly per the ` +
     `"Abort on missing skill" hard rule rather than continuing silently.`;
 } else if (isExecutePath && !dispatchedExecutor) {
+  const isTrivial = recordedFinalPath === 'execution-trivial';
   reason =
     `final_path is "${recordedFinalPath}" but no Task(executor) dispatch ` +
     `was found in this turn (dispatched roles: ` +
     `${[...dispatchedRoles].join(', ') || 'none'}). Execute paths require ` +
     `Executor to run so ai-work.md and summary.md are produced and ` +
-    `Reviewer can finalize the cycle.`;
+    `Reviewer can finalize the cycle.` +
+    (isTrivial
+      ? ` This is an execution-trivial task — if context budget is exhausted, ` +
+        `the user can recover via /ai-agents-workflow:continue ` +
+        `(orphaned-trivial detection in resume-orchestrator).`
+      : '');
 } else if (isExecutePath && dispatchedExecutor) {
   // Compose a precise block reason naming each missing piece.
   const missing = [];
   if (!stateLooksTerminal) {
-    const phaseStr = state ? `phase=${JSON.stringify(state.phase)}` : 'no readable state';
-    const wfStr =
-      state && 'workflow_state' in state
-        ? `, workflow_state=${JSON.stringify(state.workflow_state)}`
-        : '';
-    missing.push(
-      `orchestration-state.json does not reflect a terminal/hand-off state ` +
-        `(${phaseStr}${wfStr}; pending_user_actions and blocked_gates both empty). ` +
-        `Run the orchestrator-state skill's Post-Approval Closure procedure to set ` +
-        `phase: "complete" — or record an entry in pending_user_actions / ` +
-        `blocked_gates if this is a legitimate hand-off.`,
-    );
+    // Each reason is already a complete, actionable sentence — emit them
+    // verbatim so chief sees the exact invariant(s) it failed.
+    for (const r of terminalCheck.reasons) {
+      missing.push(r);
+    }
+    if (terminalCheck.reasons.length === 0) {
+      // Defensive fallback — should never happen, but if reasons is empty
+      // while ok is false, surface something rather than silently drop.
+      missing.push(
+        `orchestration-state.json does not reflect a legitimate terminal state. ` +
+          `Run Step 12.5 (execution→closure stage flip) then Step 13/15 of the orchestrator-state ` +
+          `closure procedure — or set phase="blocked" with a populated pending_user_actions/blocked_gates ` +
+          `entry if this is a hand-off.`,
+      );
+    }
   }
   if (implSectionEmpty) {
     missing.push(
@@ -730,6 +877,21 @@ if (outOfArtifactWrites.length > 0) {
     `complete artifact chain. final_path=${recordedFinalPath || '<unset>'}, ` +
     `dispatched=[${[...dispatchedRoles].join(', ') || 'none'}].`;
 }
+
+// Best-effort persistence: mirror the skip-path log so block events are
+// machine-readable after the session ends. Stderr alone is lost once the
+// harness tears down the subagent.
+try {
+  const hookLog = require('./lib/hook-log');
+  if (resolvedTaskId) {
+    hookLog.append({
+      taskId: resolvedTaskId,
+      hook: 'guard-chief-orchestrator-stop',
+      decision: 'block',
+      reason: reason.split('\n')[0],
+    });
+  }
+} catch (_e) {}
 
 process.stderr.write(
   `[guard-chief-orchestrator-stop] BLOCKED: ${reason}\n` +
