@@ -11,6 +11,7 @@ Append a `### Cycle <N>` block inside `<!-- section:review -->` in the subtask's
 - **subtask_id**: <from implementation section>
 - **reviewer**: reviewer
 - **cycle_count**: <N>
+- **cycle_kind**: rework | continuation  <!-- "continuation" iff this cycle is reviewing a PARTIAL Executor return (context-budget split, not rework). Continuation cycles are excluded from the rework cap by the orchestrator. Default: rework. -->
 - **created_at**: <ISO 8601 UTC>
 <!-- /section:review-metadata -->
 

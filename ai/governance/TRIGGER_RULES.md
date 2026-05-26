@@ -230,7 +230,20 @@ Maximum review/rework cycles per subtask are tied to complexity:
 | medium     | 2          |
 | hard       | 3          |
 
-Exceeding the cap does **not** trigger another executor turn. The subtask auto-downgrades to `status: needs-replan` and is routed to Delivery PM (via Blocker Escalation Report) for scope / approach revision. The orchestrator tracks the cycle count by counting `### Cycle N` headings in `<!-- section:review -->` of `ai-work.md` before each rework dispatch — never rely on in-memory state for the count.
+Exceeding the cap does **not** trigger another executor turn. The subtask auto-downgrades to `status: needs-replan` and is routed to Delivery PM (via Blocker Escalation Report) for scope / approach revision.
+
+**Counting authority — orchestrator only.** The orchestrator is the sole cycle counter. Before each rework dispatch it:
+
+1. Greps `### Cycle N` headings in `<!-- section:review -->` of `ai-work.md`.
+2. Subtracts cycles whose `review-metadata` carries `cycle_kind: continuation` (see "Continuation cycles" below).
+3. Compares the result against the complexity-tied cap above.
+4. If the next cycle would exceed the cap AND the most recent verdict is `changes_requested`, the orchestrator auto-converts the verdict to `needs-replan`, emits a Blocker Escalation Report, and routes to Delivery PM — without re-dispatching Executor.
+
+Reviewers MUST NOT preemptively downgrade their own verdict to `needs-replan` based on cycle count. They report findings; the orchestrator decides when the cap is hit. A reviewer-issued `needs-replan` is reserved for design / approach concerns (a Lead-level signal), not for cap exhaustion.
+
+Never rely on in-memory state for the count — always re-grep `ai-work.md` before each rework decision.
+
+**Continuation cycles (excluded from the cap).** When the Executor returns `**PARTIAL —` (context budget exhausted mid-edit), the Reviewer issues `changes_requested` AND marks `cycle_kind: continuation` in `review-metadata`. Continuation cycles consume turn budget but do NOT count toward the rework cap — they are not rework, they are completion of the originally planned work. Without this exclusion, a medium-complexity subtask (cap=2) that splits into two PARTIAL cycles would be cap-exhausted before the first true rework round is even attempted. Cycles missing `cycle_kind` default to `cycle_kind: rework` and DO count.
 
 Only **confidence-filtered findings** (those inside `<!-- section:review-findings -->`, not `<!-- section:review-low-confidence -->`) count toward rework. A cycle whose only remaining items are low-confidence observations resolves as `approved` without re-dispatching Executor.
 

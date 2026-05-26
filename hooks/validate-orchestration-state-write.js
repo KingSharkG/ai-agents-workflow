@@ -66,6 +66,19 @@
  *       terminal state lives in closure with an OPEN closure entry; without
  *       this check, a write of phase=planned with stage != closure is only
  *       caught at SubagentStop time.
+ *   C7. needs-replan follow-through (v3+): when `current_subtask`'s
+ *       `summary.md` carries `review_verdict: needs-replan`, the state file
+ *       MUST acknowledge it on this write — either by transitioning to
+ *       `stage="planning"` (the soft reopen path) or by recording a
+ *       `pending_user_actions` / `blocked_gates` entry referencing the
+ *       replan / reopen decision (the soft-cap escalation path). Without
+ *       this, the orchestrator can leave a needs-replan verdict dangling in
+ *       `stage="execution"`; the next dispatch then trips Phase 3.5 of
+ *       `pre-task-guard.js` with a cryptic stage-mismatch error far from
+ *       the actual cause. Cleared once `previous_stage === "execution"` and
+ *       `stage === "planning"` (the reopen happened) — re-greps `summary.md`
+ *       on every subsequent write are skipped because the post-reopen
+ *       Reviewer cycle will rewrite the verdict anyway.
  *
  * Out of scope (deferred to other hooks/skills):
  *   - Agent-whitelist per stage at dispatch time (`pre-task-guard.js` Phase 3.5).
@@ -82,6 +95,7 @@ const fs = require('fs');
 const path = require('path');
 const { resolveArtifactRoot, canonicalize, posixize } = require('./lib/artifact-root');
 const hookLog = require('./lib/hook-log');
+const { findSubtaskSummary } = require('./lib/find-subtask-summary');
 
 const filePath = process.argv[2] || '';
 
@@ -384,6 +398,70 @@ if (state.phase === 'complete') {
       ) {
         blockingErrors.push(
           `phase="complete" but last_completed_seq=${state.last_completed_seq} disagrees with orchestration-history.json.completed_subtasks.length=${history.completed_subtasks.length} — hot state and history file are desynced.`,
+        );
+      }
+    }
+  }
+}
+
+// C7 — needs-replan follow-through. Re-grep the current subtask's summary.md
+// to surface a stale needs-replan verdict that the orchestrator hasn't
+// honored yet. We tolerate three legitimate write shapes:
+//   1. stage transition to "planning" — the soft execution→planning reopen.
+//   2. pending_user_actions entry mentioning replan/reopen — soft-cap
+//      escalation path (≥ 3 reopens, awaiting user decision).
+//   3. blocked_gates entry mentioning replan/reopen — same as (2) but
+//      modeled as a gate.
+// Skipped when the reopen has already happened in this write (previous_stage
+// would be "execution" and stage would be "planning") — the post-reopen
+// Reviewer cycle will rewrite the verdict, so re-checking it would be
+// chasing a value about to change.
+
+function extractReviewVerdictFromSummary(summaryPath) {
+  let text;
+  try {
+    text = fs.readFileSync(summaryPath, 'utf8');
+  } catch (_e) {
+    return null;
+  }
+  // Match `- **review_verdict**: <value>` (canonical Status field shape used
+  // in Subtask Summary). Tolerate optional trailing whitespace / parenthetical.
+  const m = text.match(/^[ \t]*-\s*\*\*review_verdict\*\*:\s*([A-Za-z0-9_-]+)/im);
+  return m ? m[1].toLowerCase() : null;
+}
+
+if (
+  schemaVersion >= 3 &&
+  typeof state.current_subtask === 'string' &&
+  state.current_subtask.length > 0 &&
+  // Skip ONLY when the soft reopen happens on this exact write
+  // (previous_stage="execution" + stage="planning"). Earlier drafts also
+  // gated on `state.stage !== 'planning'`, but that outer guard subsumed
+  // the inner predicate and silently widened the skip window — any write
+  // landing in stage="planning" (e.g. an initial intake→planning) was
+  // exempted even though it had nothing to do with a needs-replan reopen.
+  !(state.previous_stage === 'execution' && state.stage === 'planning')
+) {
+  const summaryPath = findSubtaskSummary(path.dirname(filePath), state.current_subtask);
+  if (summaryPath) {
+    const verdict = extractReviewVerdictFromSummary(summaryPath);
+    if (verdict === 'needs-replan' || verdict === 'needs_replan') {
+      // Tight match: "reopen" alone is too generic — it can land in
+      // unrelated pending-action text (e.g. "Reopen the GitHub issue once
+      // deployed") and falsely satisfy the invariant. Require explicit
+      // replan / stage-reopen language.
+      const replanRe = /needs[-_ ]?replan|stage[-_ ]?reopen|execution.*?planning/i;
+      const blob = JSON.stringify({
+        pending_user_actions: state.pending_user_actions,
+        blocked_gates: state.blocked_gates,
+      });
+      const acknowledged = replanRe.test(blob);
+      if (!acknowledged) {
+        blockingErrors.push(
+          `current_subtask ${JSON.stringify(state.current_subtask)} has review_verdict="needs-replan" in ${path.relative(process.cwd(), summaryPath) || summaryPath}, ` +
+            `but this state write has stage=${JSON.stringify(state.stage)} and no pending_user_actions / blocked_gates entry referencing the replan or reopen decision. ` +
+            `A needs-replan verdict requires either (a) a soft execution→planning reopen on this write — set stage="planning", increment stage_reopen_count, append a stage_history entry — or (b) a pending_user_actions / blocked_gates entry recording the soft-cap escalation (≥ 3 reopens awaiting user decision). ` +
+            `Without acknowledgement, the next dispatch trips pre-task-guard.js Phase 3.5 with a cryptic stage-mismatch error far from the actual cause.`,
         );
       }
     }

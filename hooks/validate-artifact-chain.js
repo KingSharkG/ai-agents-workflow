@@ -108,6 +108,127 @@ const validateOptionalSectionSchema = () => {
   }
 };
 
+// Finding-ID stability validator. The delta-rework protocol relies on
+// reviewers reusing the same `F-NNN` ID for the same defect across cycles
+// so the orchestrator can compose focused rework bundles. Without this
+// check, a silently renumbered ID makes the next Executor receive a delta
+// pointing at the wrong defect. Rules (per
+// skills/review-report/references/review-cycle-template.md):
+//   - Cycle 1: all IDs allowed; status field optional / "new".
+//   - Cycle N > 1: every ID must either
+//       (a) appear in some prior cycle's findings AND carry
+//           status ∈ {persisted, regressed} in this cycle, OR
+//       (b) be a fresh ID strictly greater than the max numeric ID seen in
+//           any prior cycle (the "next unused ID" rule); fresh IDs may omit
+//           status or carry status="new".
+// IDs not matching `^F-\d+$` are tolerated (e.g. project-prefixed IDs);
+// the validator only enforces ordering on the canonical F-NNN shape so
+// projects that adopt a different ID scheme aren't broken.
+const validateFindingIdStability = () => {
+  if (matched.name !== 'ai-work.md') {
+    return;
+  }
+  const reviewBlockMatch = content.match(
+    /<!--\s*section:review\s*-->([\s\S]*?)<!--\s*\/section:review\s*-->/i,
+  );
+  if (!reviewBlockMatch) return;
+  const reviewBlock = reviewBlockMatch[1];
+
+  // Split into cycle blocks. Each block runs from one `### Cycle N` heading
+  // to the next (or to the end of the review section). Cycle numbers are
+  // captured for error messages.
+  const cycleHeader = /^###\s+Cycle\s+(\d+)\b[^\n]*$/gim;
+  const cycleStarts = [];
+  let cm;
+  while ((cm = cycleHeader.exec(reviewBlock)) !== null) {
+    cycleStarts.push({ n: parseInt(cm[1], 10), index: cm.index });
+  }
+  if (cycleStarts.length < 2) return; // Stability rules only apply to N > 1.
+
+  const cycles = cycleStarts.map((cs, i) => {
+    const end = i + 1 < cycleStarts.length ? cycleStarts[i + 1].index : reviewBlock.length;
+    return { n: cs.n, body: reviewBlock.slice(cs.index, end) };
+  });
+
+  // Per cycle, parse the findings section (ignore review-low-confidence —
+  // those carry their own ID space, e.g. OBSERVATION-NNN). Findings appear
+  // as `##### <ID> — <title>` per the template; capture the ID and the
+  // following key-value lines until the next `#####` or section close.
+  const parseCycle = (body) => {
+    const findingsMatch = body.match(
+      /<!--\s*section:review-findings\s*-->([\s\S]*?)<!--\s*\/section:review-findings\s*-->/i,
+    );
+    if (!findingsMatch) return [];
+    const findingsBody = findingsMatch[1];
+    const findingHeader = /^#####\s+([A-Za-z0-9_-]+)\b[^\n]*$/gim;
+    const headers = [];
+    let fm;
+    while ((fm = findingHeader.exec(findingsBody)) !== null) {
+      headers.push({ id: fm[1], index: fm.index });
+    }
+    return headers.map((h, i) => {
+      const end = i + 1 < headers.length ? headers[i + 1].index : findingsBody.length;
+      const block = findingsBody.slice(h.index, end);
+      const statusMatch = block.match(/^[ \t]*-\s*\*\*status\*\*:\s*([A-Za-z0-9_-]+)/im);
+      return { id: h.id, status: statusMatch ? statusMatch[1].toLowerCase() : null };
+    });
+  };
+
+  const parsed = cycles.map((c) => ({ n: c.n, findings: parseCycle(c.body) }));
+  const numericId = (id) => {
+    const m = id.match(/^F-(\d+)$/i);
+    return m ? parseInt(m[1], 10) : null;
+  };
+
+  const issues = [];
+  for (let i = 1; i < parsed.length; i++) {
+    const cur = parsed[i];
+    const priorIds = new Set();
+    let priorMaxNumeric = 0;
+    for (let j = 0; j < i; j++) {
+      for (const f of parsed[j].findings) {
+        priorIds.add(f.id);
+        const n = numericId(f.id);
+        if (n !== null && n > priorMaxNumeric) priorMaxNumeric = n;
+      }
+    }
+    for (const f of cur.findings) {
+      const inPrior = priorIds.has(f.id);
+      if (inPrior) {
+        // Reused ID — must carry persisted | regressed status in this cycle.
+        if (f.status !== 'persisted' && f.status !== 'regressed') {
+          issues.push(
+            `Cycle ${cur.n} finding ${f.id} reuses an ID from an earlier cycle but has status=${JSON.stringify(f.status)} — reused IDs MUST carry status="persisted" or status="regressed".`,
+          );
+        }
+      } else {
+        // Fresh ID — for canonical F-NNN shape, must be strictly greater
+        // than max prior numeric ID. Non-canonical IDs are tolerated.
+        const n = numericId(f.id);
+        if (n !== null && n <= priorMaxNumeric) {
+          issues.push(
+            `Cycle ${cur.n} finding ${f.id} is a fresh ID (not in any prior cycle) but its number ${n} is not strictly greater than the max prior ID number ${priorMaxNumeric} — fresh IDs MUST extend the sequence (next unused ID is F-${String(priorMaxNumeric + 1).padStart(3, '0')}). A renumbered defect breaks the delta-rework bundle protocol.`,
+          );
+        }
+        if (f.status === 'persisted' || f.status === 'regressed') {
+          issues.push(
+            `Cycle ${cur.n} finding ${f.id} carries status=${JSON.stringify(f.status)} but the ID does not appear in any prior cycle — status="persisted"/"regressed" requires a matching prior-cycle ID.`,
+          );
+        }
+      }
+    }
+  }
+
+  if (issues.length > 0) {
+    console.error(
+      `[validate-artifact-chain] INVALID ai-work.md: finding-ID stability violations (review-report SKILL → "Stable Finding IDs"):\n` +
+        issues.map((s, i) => `  ${i + 1}. ${s}`).join('\n') +
+        `\nFile: ${filePath}\n`,
+    );
+    process.exit(1);
+  }
+};
+
 const validateReviewerSummaryExists = () => {
   // When the review section of ai-work.md has content (not an empty skeleton),
   // the Reviewer must also have written a sibling summary.md in the same directory.
@@ -768,6 +889,7 @@ if (missing.length > 0) {
 validateReviewerSummaryExists();
 validateOptionalSectionSchema();
 validateAiWorkDiagnosticsLocation();
+validateFindingIdStability();
 validateRequiredHeadings();
 validateSummaryPlaceholderDrift();
 validateAcceptanceSignalsTable();
